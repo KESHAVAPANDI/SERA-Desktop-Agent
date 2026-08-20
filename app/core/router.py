@@ -50,6 +50,16 @@ class ModelRouter:
                 )
                 self.role_chains[r_name] = [candidate]
 
+    @property
+    def providers(self) -> dict[str, Any]:
+        """Returns map of provider_name to provider instance across all candidate chains."""
+        result = dict(self.legacy_providers)
+        for chain in self.role_chains.values():
+            for cand in chain:
+                if cand.provider:
+                    result[cand.provider_name] = cand.provider
+        return result
+
     def has_role(self, role: str) -> bool:
         """Returns True if at least one candidate is registered for this role."""
         return role in self.role_chains and len(self.role_chains[role]) > 0

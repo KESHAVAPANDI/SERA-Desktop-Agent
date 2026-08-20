@@ -19,7 +19,7 @@ class SERAApp {
 
   init() {
     // 1. Initialize Views
-    this.views.workflow = new WorkflowView();
+    this.views.workflow = new WorkflowView(msg => this.sendMessage(msg));
     this.views.live = new LiveView(msg => this.sendMessage(msg));
     this.views.agents = new AgentsView();
     this.views.memory = new MemoryView();
@@ -114,11 +114,15 @@ class SERAApp {
 
   handleEvent(eventType, data) {
     this.views.debug?.logEvent(eventType, data);
+    this.views.workflow?.handleRuntimeEvent(eventType, data);
 
     if (eventType === "SNAPSHOT") {
       this.updateRuntimeState(data.status, data.active_task);
       if (data.providers) {
         this.views.providers?.update(data.providers);
+      }
+      if (data.workflow) {
+        this.views.workflow?.updateGraphData(data.workflow);
       }
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);

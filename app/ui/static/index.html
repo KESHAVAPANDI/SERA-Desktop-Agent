@@ -76,18 +76,36 @@
     <!-- 2. MAIN VIEWPORT CONTAINERS -->
     <main id="main-viewport">
       
-      <!-- VIEW 1: WORKFLOW GRAPH -->
+      <!-- VIEW 1: WORKFLOW GRAPH (TEMPORAL AURA WORKFLOW & EDITOR) -->
       <section id="view-workflow" class="view-container active">
         <div class="workflow-toolbar">
-          <button class="btn-action" id="btn-zoom-in">+</button>
-          <button class="btn-action" id="btn-zoom-out">-</button>
-          <button class="btn-action" id="btn-reset-view">Reset View</button>
-          <span style="color: var(--text-muted); font-size: 0.75rem;">Horizontal Temporal Graph</span>
+          <button class="btn-action" id="btn-toggle-mode" style="font-weight: 700;">
+            <span style="color: var(--accent-cyan);">●</span> RUNTIME MODE
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="btn-action" id="btn-zoom-in" title="Zoom In">+</button>
+          <button class="btn-action" id="btn-zoom-out" title="Zoom Out">-</button>
+          <button class="btn-action" id="btn-reset-view" title="Reset Pan/Zoom">Reset</button>
+          <button class="btn-action" id="btn-center-active" title="Center on Active Step">Center Active</button>
+          <div class="toolbar-divider"></div>
+          <span id="workflow-mode-desc" style="color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono);">
+            Live Execution Observer
+          </span>
         </div>
+
         <div id="workflow-canvas" class="workflow-canvas">
           <svg id="workflow-svg" class="workflow-svg-layer"></svg>
           <div id="workflow-nodes-container"></div>
         </div>
+
+        <!-- Sliding Inspector Drawer for Candidates & Nodes -->
+        <aside id="workflow-inspector-drawer" class="inspector-drawer">
+          <div class="drawer-header">
+            <div id="drawer-title" class="drawer-title">ROLE INSPECTOR</div>
+            <button id="drawer-close-btn" class="btn-close-drawer" title="Close Drawer (Esc)">✕</button>
+          </div>
+          <div id="drawer-content" class="drawer-body"></div>
+        </aside>
       </section>
 
       <!-- VIEW 2: LIVE VIEW -->

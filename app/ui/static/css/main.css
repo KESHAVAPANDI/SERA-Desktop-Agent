@@ -229,12 +229,12 @@ body::before {
 }
 
 /* ===================================================================
-   3. VIEW 1: WORKFLOW GRAPH (TEMPORAL CANVAS)
+   3. VIEW 1: WORKFLOW GRAPH (TEMPORAL CANVAS & INSPECTOR DRAWER)
    =================================================================== */
 #view-workflow {
   padding: 0;
   overflow: hidden;
-  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.03) 0%, transparent 70%);
+  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.04) 0%, transparent 75%);
 }
 
 .workflow-toolbar {
@@ -244,11 +244,25 @@ body::before {
   align-items: center;
   gap: 10px;
   background: var(--bg-surface-glass);
-  backdrop-filter: blur(12px);
-  padding: 6px 12px;
-  border-radius: 8px;
+  backdrop-filter: blur(14px);
+  padding: 8px 16px;
+  border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.btn-action.design-mode-active {
+  color: var(--accent-amber);
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 14px var(--accent-amber-dim);
 }
 
 .workflow-canvas {
@@ -269,33 +283,53 @@ body::before {
   pointer-events: none;
 }
 
+.active-particle-edge {
+  stroke-dasharray: 8,8;
+  animation: particle-dash 1.5s linear infinite;
+}
+
+@keyframes particle-dash {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
 .temporal-node {
   position: absolute;
-  min-width: 180px;
+  min-width: 200px;
   padding: 14px 18px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
-  transition: all var(--transition-smooth);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   cursor: pointer;
 }
 
 .temporal-node:hover {
   border-color: var(--accent-cyan);
   box-shadow: var(--glow-cyan);
-  transform: translateY(-2px);
 }
 
 .temporal-node.node-active {
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 24px rgba(0, 240, 255, 0.35);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.4);
   background: var(--bg-card-hover);
 }
 
 .temporal-node.node-fallback {
+  border-color: rgba(255, 184, 0, 0.35);
+  background: rgba(255, 184, 0, 0.04);
+}
+
+.temporal-node.node-ratelimited {
   border-color: var(--accent-amber);
-  box-shadow: 0 0 20px rgba(255, 184, 0, 0.25);
+  box-shadow: 0 0 16px var(--accent-amber-dim);
+}
+
+.temporal-node.node-selected {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px var(--accent-cyan), 0 0 24px rgba(0, 240, 255, 0.45);
 }
 
 .node-header {
@@ -314,6 +348,30 @@ body::before {
   color: var(--accent-cyan);
 }
 
+.fallback-rank-tag {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  background: rgba(255, 184, 0, 0.2);
+  color: var(--accent-amber);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.node-status-pip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
 .node-title {
   font-size: 0.95rem;
   font-weight: 600;
@@ -321,10 +379,169 @@ body::before {
 }
 
 .node-meta {
+  display: flex;
+  gap: 6px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-secondary);
   margin-top: 4px;
+}
+
+.design-edit-hint {
+  font-size: 0.7rem;
+  color: var(--accent-amber);
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* ===================================================================
+   SLIDING ROLE INSPECTOR DRAWER
+   =================================================================== */
+.inspector-drawer {
+  position: absolute;
+  top: 0; right: 0;
+  width: 440px;
+  height: 100%;
+  background: var(--bg-surface-glass);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.6);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--transition-smooth);
+}
+
+.inspector-drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.drawer-title {
+  font-family: var(--font-brand);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-close-drawer {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.btn-close-drawer:hover {
+  color: var(--accent-crimson);
+}
+
+.drawer-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.candidate-item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  transition: all var(--transition-fast);
+}
+
+.candidate-item-card:hover {
+  border-color: var(--accent-cyan);
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.badge-primary {
+  font-family: var(--font-brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  background: var(--accent-cyan-dim);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.badge-fallback {
+  font-family: var(--font-brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-amber);
+  background: var(--accent-amber-dim);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.btn-group-reorder {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-mini {
+  padding: 3px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-mini:hover:not(:disabled) {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.btn-mini:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.cap-pill {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.cap-pill.health-healthy {
+  color: var(--accent-emerald);
+  background: var(--accent-emerald-dim);
+}
+
+.btn-apply-chain {
+  background: var(--accent-cyan-dim);
+  border-color: var(--border-active);
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+
+.btn-apply-chain:hover {
+  background: var(--accent-cyan);
+  color: #000;
+  box-shadow: 0 0 16px var(--accent-cyan);
 }
 
 /* ===================================================================
