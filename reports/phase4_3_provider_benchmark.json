@@ -1,0 +1,721 @@
+{
+  "benchmark_timestamp": "2026-08-21 01:14:34",
+  "total_models_benchmarked": 13,
+  "results": [
+    {
+      "provider": "mistral",
+      "model": "mistral-large-latest",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            1959.27,
+            2952.07,
+            1635.91
+          ],
+          "min_ms": 1635.91,
+          "max_ms": 2952.07,
+          "avg_ms": 2182.42,
+          "median_ms": 1959.27,
+          "sample_response": "Hello! I'm **SERA**\u2014your adaptive, insightful AI assistant here to spark ideas, simplify complexity, and help you create with clarity. \ud83d\ude80\u2728"
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            5958.13
+          ],
+          "avg_ms": 5958.13,
+          "sample_snippet": "When a Python program's memory usage becomes excessive, it can lead to significant performance degradation due to severa"
+        },
+        "tool_calling": {
+          "status": "FAILED",
+          "function_called": false,
+          "latencies_ms": [],
+          "avg_ms": null,
+          "tool_details": null
+        },
+        "structured_output": {
+          "status": "FAILED",
+          "valid_json": false,
+          "avg_ms": null
+        },
+        "streaming": {
+          "status": "FAILED",
+          "avg_ttft_ms": null,
+          "avg_total_stream_ms": null,
+          "avg_tokens": 0
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 4.0
+    },
+    {
+      "provider": "mistral",
+      "model": "mistral-small-latest",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            3096.65,
+            1503.46,
+            2514.13
+          ],
+          "min_ms": 1503.46,
+          "max_ms": 3096.65,
+          "avg_ms": 2371.41,
+          "median_ms": 2514.13,
+          "sample_response": "Hello! I'm SERA, your advanced AI assistant designed to provide helpful, accurate, and engaging responses."
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            2702.59,
+            2438.84
+          ],
+          "avg_ms": 2570.72,
+          "sample_snippet": "When a Python program consumes excessive memory, its performance can degrade significantly due to several interconnected"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            857.3,
+            1130.61
+          ],
+          "avg_ms": 993.95,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 1211.14
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 966.36,
+          "avg_total_stream_ms": 1086.65,
+          "avg_tokens": 11.5
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "mistral",
+      "model": "mistral-medium-3.5",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            788.48,
+            895.47,
+            1209.37
+          ],
+          "min_ms": 788.48,
+          "max_ms": 1209.37,
+          "avg_ms": 964.44,
+          "median_ms": 895.47,
+          "sample_response": "Hello! I'm SERA, your advanced AI assistant designed to provide accurate, helpful, and engaging responses."
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            3279.94,
+            2741.31
+          ],
+          "avg_ms": 3010.62,
+          "sample_snippet": "A Python program can become slow when memory usage becomes excessive due to several key factors related to how Python ma"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            920.34,
+            805.01
+          ],
+          "avg_ms": 862.67,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 794.94
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 827.35,
+          "avg_total_stream_ms": 1009.73,
+          "avg_tokens": 10.0
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "mistral",
+      "model": "codestral-latest",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            2050.4,
+            954.99,
+            1618.44
+          ],
+          "min_ms": 954.99,
+          "max_ms": 2050.4,
+          "avg_ms": 1541.28,
+          "median_ms": 1618.44,
+          "sample_response": "Hello! I'm SERA, a friendly and efficient assistant here to help you with anything you need. \ud83d\ude0a"
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            2995.45,
+            4032.35
+          ],
+          "avg_ms": 3513.9,
+          "sample_snippet": "A Python program can become slow when memory usage becomes excessive due to several key reasons related to how Python ma"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            995.37,
+            865.36
+          ],
+          "avg_ms": 930.37,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {
+              "timezone": "UTC"
+            }
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 1024.12
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 1823.97,
+          "avg_total_stream_ms": 2115.78,
+          "avg_tokens": 39.0
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "mistral",
+      "model": "ministral-8b-latest",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            1215.55,
+            1943.65,
+            2949.59
+          ],
+          "min_ms": 1215.55,
+          "max_ms": 2949.59,
+          "avg_ms": 2036.26,
+          "median_ms": 1943.65,
+          "sample_response": "**\"SERA is your AI assistant\u2014blending cutting-edge research, creative problem-solving, and a dash of futuristic flair to turn ideas into action, one conversation at a time.\"**"
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            6148.58,
+            3038.71
+          ],
+          "avg_ms": 4593.65,
+          "sample_snippet": "A Python program can become slow when memory usage becomes excessive due to several key factors related to Python's memo"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            1416.99,
+            1023.03
+          ],
+          "avg_ms": 1220.01,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 1024.84
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 1023.14,
+          "avg_total_stream_ms": 1251.05,
+          "avg_tokens": 29.0
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "cerebras",
+      "model": "gpt-oss-120b",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "ERROR",
+      "error_category": "RATE_LIMIT",
+      "error_message": "[cerebras] HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}",
+      "tasks": {
+        "basic_text": {
+          "status": "FAILED",
+          "error": "[cerebras] HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        }
+      },
+      "summary": {}
+    },
+    {
+      "provider": "cerebras",
+      "model": "gemma-4-31b",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "ERROR",
+      "error_category": "RATE_LIMIT",
+      "error_message": "[cerebras] HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}",
+      "tasks": {
+        "basic_text": {
+          "status": "FAILED",
+          "error": "[cerebras] HTTP 402: {\"message\":\"Payment required to access this resource. Visit your billing tab.\",\"type\":\"payment_required_error\",\"param\":\"quota\",\"code\":\"payment_required\"}"
+        }
+      },
+      "summary": {}
+    },
+    {
+      "provider": "zai",
+      "model": "glm-5",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "ERROR",
+      "error_category": "RATE_LIMIT",
+      "error_message": "[zai] HTTP 429: {\"error\":{\"code\":\"1113\",\"message\":\"Insufficient balance or no resource package. Please recharge.\"}}",
+      "tasks": {
+        "basic_text": {
+          "status": "FAILED",
+          "error": "[zai] HTTP 429: {\"error\":{\"code\":\"1113\",\"message\":\"Insufficient balance or no resource package. Please recharge.\"}}"
+        }
+      },
+      "summary": {}
+    },
+    {
+      "provider": "zai",
+      "model": "glm-4.7",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true,
+        "embeddings": false,
+        "audio": false
+      },
+      "status": "ERROR",
+      "error_category": "RATE_LIMIT",
+      "error_message": "[zai] HTTP 429: {\"error\":{\"code\":\"1113\",\"message\":\"Insufficient balance or no resource package. Please recharge.\"}}",
+      "tasks": {
+        "basic_text": {
+          "status": "FAILED",
+          "error": "[zai] HTTP 429: {\"error\":{\"code\":\"1113\",\"message\":\"Insufficient balance or no resource package. Please recharge.\"}}"
+        }
+      },
+      "summary": {}
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "capabilities": {
+        "text": true,
+        "vision": false,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            990.13,
+            1352.61,
+            600.98
+          ],
+          "min_ms": 600.98,
+          "max_ms": 1352.61,
+          "avg_ms": 981.24,
+          "median_ms": 990.13,
+          "sample_response": "I\u2019m SERA, your friendly AI assistant here to help with whatever you need."
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            6500.44,
+            3590.45
+          ],
+          "avg_ms": 5045.44,
+          "sample_snippet": "### Why Excessive Memory Use Can Slow a Python Program  \n\n| Reason | What Happens | Why It Slows You Down |\n|--------|--"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            610.22,
+            565.11
+          ],
+          "avg_ms": 587.66,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {
+              "timezone": "UTC"
+            }
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 743.12
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 1025.88,
+          "avg_total_stream_ms": 1085.3,
+          "avg_tokens": 33.5
+        },
+        "vision": {
+          "status": "NOT_TESTED (No Vision Capability)"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.6-27b",
+      "capabilities": {
+        "text": true,
+        "vision": true,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            1167.15,
+            1411.88,
+            1355.87
+          ],
+          "min_ms": 1167.15,
+          "max_ms": 1411.88,
+          "avg_ms": 1311.63,
+          "median_ms": 1355.87,
+          "sample_response": "Hello, I'm SERA, a helpful AI assistant here to answer your questions, solve problems, and support you with whatever you need."
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            4390.63,
+            4328.91
+          ],
+          "avg_ms": 4359.77,
+          "sample_snippet": "When a Python program consumes excessive memory, performance degradation rarely stems from a single cause. Instead, it's"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            1045.86,
+            1085.46
+          ],
+          "avg_ms": 1065.66,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 3204.07
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 9257.17,
+          "avg_total_stream_ms": 9262.6,
+          "avg_tokens": 37.0
+        },
+        "vision": {
+          "status": "SUCCESS",
+          "accuracy": true,
+          "avg_ms": 34032.67,
+          "sample_response": "Based on the text visible in the window title bar (\"Google Chrome - RTX5090 Benchmarks\") and the welcome message in the center (\"Welcome to Google Chrome Browser\"), the application visible on the screen is **Google Chrome**."
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "capabilities": {
+        "text": true,
+        "vision": true,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            4364.16,
+            6857.87,
+            2731.24
+          ],
+          "min_ms": 2731.24,
+          "max_ms": 6857.87,
+          "avg_ms": 4651.09,
+          "median_ms": 4364.16,
+          "sample_response": "I am SERA, your dedicated artificial intelligence assistant designed to provide insightful information and help you navigate complex tasks."
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            6731.28,
+            5962.65
+          ],
+          "avg_ms": 6346.97,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "FAILED",
+          "valid_json": false,
+          "avg_ms": null
+        },
+        "streaming": {
+          "status": "FAILED",
+          "avg_ttft_ms": null,
+          "avg_total_stream_ms": null,
+          "avg_tokens": 0
+        },
+        "vision": {
+          "status": "FAILED",
+          "accuracy": false,
+          "avg_ms": null,
+          "sample_response": ""
+        }
+      },
+      "summary": {},
+      "qualitative_score": 4.5
+    },
+    {
+      "provider": "openrouter",
+      "model": "openrouter/free",
+      "capabilities": {
+        "text": true,
+        "vision": true,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "status": "HEALTHY",
+      "error_category": null,
+      "error_message": null,
+      "tasks": {
+        "basic_text": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            13643.99,
+            2014.82,
+            4348.72
+          ],
+          "min_ms": 2014.82,
+          "max_ms": 13643.99,
+          "avg_ms": 6669.18,
+          "median_ms": 4348.72,
+          "sample_response": "Hello, I'm SERA, a helpful and conversationally-fluent AI assistant designed to understand your needs and provide accurate, thoughtful, and engaging responses to help you navigate any topic or task."
+        },
+        "reasoning": {
+          "status": "SUCCESS",
+          "latencies_ms": [
+            14251.52,
+            40515.4
+          ],
+          "avg_ms": 27383.46,
+          "sample_snippet": "When a Python program experiences excessive memory usage, its performance can degrade significantly due to several inter"
+        },
+        "tool_calling": {
+          "status": "SUCCESS",
+          "function_called": true,
+          "latencies_ms": [
+            2770.88,
+            1663.52
+          ],
+          "avg_ms": 2217.2,
+          "tool_details": {
+            "name": "get_current_time",
+            "args": {}
+          }
+        },
+        "structured_output": {
+          "status": "SUCCESS",
+          "valid_json": true,
+          "avg_ms": 8072.41
+        },
+        "streaming": {
+          "status": "SUCCESS",
+          "avg_ttft_ms": 12258.56,
+          "avg_total_stream_ms": 12897.75,
+          "avg_tokens": 41.5
+        },
+        "vision": {
+          "status": "SUCCESS",
+          "accuracy": false,
+          "avg_ms": 3428.31,
+          "sample_response": "User Safety: safe"
+        }
+      },
+      "summary": {},
+      "qualitative_score": 5.0
+    }
+  ]
+}

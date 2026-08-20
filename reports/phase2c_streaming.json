@@ -1,0 +1,132 @@
+{
+  "benchmark_date": "2026-08-18 00:21:08",
+  "hardware": {
+    "stt_device": "CUDA (float16)",
+    "whisper_model": "small",
+    "reasoning_model": "groq / openai/gpt-oss-120b",
+    "tts_model": "fish / s2.1-pro-free"
+  },
+  "workloads": {
+    "workload_a": {
+      "name": "Local Command",
+      "phrase": "Set my brightness to 30 percent",
+      "stt_latency": {
+        "min": 120.88,
+        "max": 383.97,
+        "avg": 181.53,
+        "median": 126.91,
+        "p95": 154.38,
+        "samples": 5
+      },
+      "first_sentence_latency": null,
+      "time_to_first_audio": {
+        "min": 928.48,
+        "max": 1868.19,
+        "avg": 1274.91,
+        "median": 1101.03,
+        "p95": 1507.79,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 928.48,
+        "max": 1868.19,
+        "avg": 1274.91,
+        "median": 1101.03,
+        "p95": 1507.79,
+        "samples": 5
+      }
+    },
+    "workload_b": {
+      "name": "Reasoning / Tool Command",
+      "phrase": "Open Notepad",
+      "stt_latency": {
+        "min": 121.54,
+        "max": 356.19,
+        "avg": 290.01,
+        "median": 328.99,
+        "p95": 352.92,
+        "samples": 5
+      },
+      "first_sentence_latency": {
+        "min": 852.61,
+        "max": 2928.01,
+        "avg": 1648.3,
+        "median": 1610.56,
+        "p95": 1690.9,
+        "samples": 5
+      },
+      "time_to_first_audio": {
+        "min": 1993.07,
+        "max": 4627.8,
+        "avg": 2812.16,
+        "median": 2388.18,
+        "p95": 2684.05,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 2807.83,
+        "max": 5521.62,
+        "avg": 3741.03,
+        "median": 3344.13,
+        "p95": 3868.18,
+        "samples": 5
+      }
+    },
+    "workload_c": {
+      "name": "Conversational Reasoning",
+      "phrase": "Explain why Python programs can become slow when they use too much memory.",
+      "stt_latency": {
+        "min": 343.06,
+        "max": 482.31,
+        "avg": 394.43,
+        "median": 388.99,
+        "p95": 412.29,
+        "samples": 5
+      },
+      "first_sentence_latency": {
+        "min": 569.29,
+        "max": 870.76,
+        "avg": 754.18,
+        "median": 811.55,
+        "p95": 837.71,
+        "samples": 5
+      },
+      "time_to_first_audio": {
+        "min": 2512.43,
+        "max": 3995.49,
+        "avg": 3288.75,
+        "median": 3458.44,
+        "p95": 3925.51,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 7712.79,
+        "max": 15940.03,
+        "avg": 11309.95,
+        "median": 10395.87,
+        "p95": 13149.11,
+        "samples": 5
+      }
+    }
+  },
+  "interruption_verification": {
+    "trials": 3,
+    "cutoff_latency_ms": {
+      "min": 175.52,
+      "max": 187.79,
+      "avg": 180.44,
+      "median": 178.0,
+      "p95": 178.0,
+      "samples": 3
+    },
+    "state_after_interruption": "LISTENING"
+  },
+  "comparison_phase2b_vs_2c": {
+    "workload_c": {
+      "phase2b_batch_latency_ms": 7697.77,
+      "phase2c_time_to_first_audio_ms": 3288.75,
+      "phase2c_total_latency_ms": 11309.95,
+      "perceived_latency_improvement_pct": "57.3% faster TTFA"
+    }
+  }
+}

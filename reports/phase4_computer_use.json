@@ -1,0 +1,76 @@
+{
+  "benchmark_date": "2026-08-18 01:26:53",
+  "limits": {
+    "max_steps": 10,
+    "max_task_time_seconds": 30.0,
+    "max_retries_per_step": 2,
+    "infinite_loop_protection": "Enforced by bounded retry counter and absolute wall-clock timeout"
+  },
+  "tasks": {
+    "notepad_open_and_type": {
+      "task": "Open Notepad and type SERA 1.0 Multi-Step Active",
+      "step_count": 2,
+      "success": true,
+      "verification_rate": "100%",
+      "planning_latency_ms": 0.2,
+      "execution_timing_ms": {
+        "min": 3182.93,
+        "max": 4530.67,
+        "avg": 3640.63,
+        "median": 3208.28,
+        "samples": 3
+      }
+    },
+    "calculator_arithmetic": {
+      "task": "Open Calculator and calculate 125 * 8",
+      "step_count": 7,
+      "success": true,
+      "calculation_result": "1000",
+      "planning_latency_ms": 0.35,
+      "execution_timing_ms": {
+        "min": 6365.31,
+        "max": 6411.45,
+        "avg": 6386.43,
+        "median": 6382.53,
+        "samples": 3
+      }
+    },
+    "file_explorer_navigate": {
+      "task": "Open File Explorer and go to C:\\Users",
+      "step_count": 2,
+      "success": true,
+      "execution_timing_ms": {
+        "min": 3331.22,
+        "max": 6651.19,
+        "avg": 4539.96,
+        "median": 3637.46,
+        "samples": 3
+      }
+    },
+    "browser_search": {
+      "task": "Open Chrome and search for RTX 5090 benchmarks",
+      "step_count": 3,
+      "success": true,
+      "execution_timing_ms": {
+        "min": 717.98,
+        "max": 1526.22,
+        "avg": 1027.37,
+        "median": 837.9,
+        "samples": 3
+      }
+    }
+  },
+  "cancellation_validation": {
+    "cancelled_successfully": true,
+    "state_after_cancellation": "TASK_CANCELLED",
+    "orphaned_tasks": 0,
+    "clean_interruption": true
+  },
+  "recovery_validation": {
+    "oversized_plan_rejected": true,
+    "max_step_limit_enforced": true,
+    "max_retries_enforced": true,
+    "wall_clock_timeout_enforced": true
+  },
+  "security_validation": {}
+}

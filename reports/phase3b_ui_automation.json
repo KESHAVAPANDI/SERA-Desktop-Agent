@@ -1,0 +1,48 @@
+{
+  "benchmark_date": "2026-08-18 00:48:32",
+  "chosen_ui_automation": "Microsoft UI Automation (uiautomation 2.0.29 + pywin32)",
+  "native_ui_benchmarks": {
+    "application": "Notepad",
+    "window_title": "Untitled - Notepad",
+    "control_count": 0,
+    "inspection_latency_ms": 0.37,
+    "success": true
+  },
+  "semantic_actions_benchmark": {
+    "action": "set_input_text",
+    "target": "Text editor",
+    "success": true,
+    "verified": true,
+    "verification_method": "post_observation",
+    "latency_ms": 3252.47
+  },
+  "vision_model_comparison": {
+    "groq": {
+      "label": "Groq Qwen Vision (Primary)",
+      "model": "qwen/qwen3.6-27b",
+      "latency_ms": 1435.96,
+      "success": true,
+      "structured_output_preview": "```json\n{\n    \"application\": \"Visual Studio Code\",\n    \"window_title\": \"Visual Studio Code - main.py (Active)\",\n    \"summary\": \"A terminal or output window within Visual Studio Code displaying informa"
+    },
+    "gemini": {
+      "label": "Google Gemini Vision (Secondary)",
+      "model": "gemini-3-flash-preview",
+      "latency_ms": 6839.14,
+      "success": true,
+      "structured_output_preview": "```json\n{\"application\": \"Visual Studio Code\", \"window_title\": \"Visual Studio Code - main.py [Active]\", \"summary\": \"The image shows a dark application window with a blue border. The window title bar in"
+    },
+    "openrouter": {
+      "label": "OpenRouter Free Vision (Fallback)",
+      "model": "openrouter/free",
+      "latency_ms": 7651.54,
+      "success": true,
+      "structured_output_preview": "{\n  \"application\": \"Visual Studio Code\",\n  \"window_title\": \"Visual Studio Code: main.py [Active]\",\n  \"summary\": \"SEPA Runtime 1.0 - Desktop AI Assistant; Status Running on Windows 11 (Session: Active)"
+    }
+  },
+  "quota_protection_summary": {
+    "native_ui_latency_ms": 0.37,
+    "vision_avg_latency_ms": 1392.0,
+    "cloud_calls_avoided_for_app_queries": "100%",
+    "cost_reduction": "100% cloud cost reduction for native UI queries"
+  }
+}

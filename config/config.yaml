@@ -1,0 +1,161 @@
+assistant:
+  name: SERA
+
+hotkey:
+  combination: "ctrl+space"
+  enabled: true
+  debounce_ms: 300
+
+wake_word:
+  enabled: true
+  phrase: "SERA"
+  provider: "openwakeword"
+  sensitivity: 0.5
+  debounce_ms: 1000
+
+audio:
+  sample_rate: 16000
+  recording_duration_seconds: 5.0
+
+audio_cues:
+  enabled: true
+  volume: 0.5
+
+streaming:
+  enabled: true
+  sentence_buffer: true
+  min_words: 4
+  audio_queue_size: 3
+
+vision:
+  primary:
+    provider: groq
+    model: qwen/qwen3.6-27b
+  secondary:
+    provider: gemini
+    model: gemini-3-flash-preview
+  fallback:
+    provider: openrouter
+    model: openrouter/free
+  cache_enabled: true
+  cache_duration_seconds: 5
+  image_format: jpeg
+  image_quality: 85
+  max_width: 1920
+  routing:
+    prefer_native_ui: true
+    vision_fallback_enabled: true
+
+telemetry:
+  enabled: true
+  manual_debug_mode: true
+
+stt:
+  provider: nvidia
+  model: nvidia/canary-qwen-2.5b
+  language: en-US
+  endpoint: https://integrate.api.nvidia.com/v1/audio/transcriptions
+  recording_duration_seconds: 5.0
+
+stt_fallback:
+  provider: faster-whisper
+  model: small
+  device: cuda
+  compute_type: float16
+
+# ===================================================================
+# PHASE 4.4 PRODUCTION ROLE MAPPING
+# ===================================================================
+roles:
+  reasoning:
+    primary:
+      provider: groq
+      model: openai/gpt-oss-120b
+    fallbacks:
+      - provider: mistral
+        model: mistral-large-latest
+      - provider: mistral
+        model: mistral-medium-3.5
+      - provider: openrouter
+        model: openrouter/free
+
+  fast:
+    primary:
+      provider: mistral
+      model: mistral-small-latest
+    fallbacks:
+      - provider: gemini
+        model: gemini-3.5-flash-lite
+      - provider: openrouter
+        model: openrouter/free
+
+  desktop:
+    primary:
+      provider: mistral
+      model: codestral-latest
+    fallbacks:
+      - provider: groq
+        model: openai/gpt-oss-120b
+      - provider: openrouter
+        model: openrouter/free
+
+  vision:
+    primary:
+      provider: groq
+      model: qwen/qwen3.6-27b
+    fallbacks:
+      - provider: gemini
+        model: gemini-3-flash-preview
+      - provider: openrouter
+        model: openrouter/free
+
+  ocr:
+    primary:
+      provider: mistral
+      model: mistral-ocr-latest
+
+  embeddings:
+    primary:
+      provider: mistral
+      model: mistral-embed
+
+# ===================================================================
+# BACKWARD-COMPATIBLE MODELS CONFIGURATION
+# ===================================================================
+models:
+  reasoning:
+    provider: groq
+    model: openai/gpt-oss-120b
+
+  vision_qwen:
+    provider: groq
+    model: qwen/qwen3.6-27b
+
+  vision_gemini:
+    provider: gemini
+    model: gemini-3-flash-preview
+
+  vision:
+    provider: groq
+    model: qwen/qwen3.6-27b
+
+  fast:
+    provider: mistral
+    model: mistral-small-latest
+
+  fallback:
+    provider: openrouter
+    model: openrouter/free
+
+  tts:
+    provider: fish
+    model: s2.1-pro-free
+    reference_id: 9a9cf47702da476aa4629e2506d4a857
+    temperature: 0.3
+    top_p: 0.7
+
+  stt:
+    provider: nvidia
+    model: nvidia/canary-qwen-2.5b
+    language: en-US
+    recording_duration_seconds: 5.0

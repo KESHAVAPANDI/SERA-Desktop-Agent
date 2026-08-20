@@ -1,0 +1,111 @@
+{
+  "benchmark_date": "2026-08-18 01:08:05",
+  "root_cause_investigation": {
+    "issue": "Notepad control_count = 0 in Phase 3B benchmark",
+    "root_cause": "find_window_context() returned the summary object from get_all_windows() (which deliberately has controls=[] to avoid background freezing) instead of calling inspect_window_by_hwnd(hwnd) on the matched HWND.",
+    "fix": "find_window_context() now stores the matched HWND and calls inspect_window_by_hwnd(hwnd) to extract all child controls in < 1ms.",
+    "status": "Resolved & Verified"
+  },
+  "target_resolver_architecture": {
+    "factors": [
+      "exact_name",
+      "normalized_name",
+      "automation_id",
+      "control_type",
+      "contextual_container",
+      "enabled_state",
+      "visibility"
+    ],
+    "confidence_tiers": {
+      "HIGH": "Score >= 0.70 & unique -> Safe automatic execution",
+      "MEDIUM": "0.40 <= Score < 0.70 or ambiguous candidates -> Contextual disambiguation / vision",
+      "LOW": "Score < 0.40 -> Refusal to execute"
+    }
+  },
+  "app_benchmarks": {
+    "notepad": {
+      "app_name": "Windows Notepad",
+      "controls_extracted": 43,
+      "success": true,
+      "verification_strategy": "value_change",
+      "timing_ms": {
+        "min": 3046.56,
+        "max": 3093.38,
+        "avg": 3067.36,
+        "median": 3062.16,
+        "samples": 3
+      }
+    },
+    "calculator": {
+      "app_name": "Windows Calculator",
+      "controls_extracted": 25,
+      "calculation": "5 + 5 = 10",
+      "success": true,
+      "verification_strategy": "control_state_change",
+      "timing_ms": {
+        "min": 2478.22,
+        "max": 2491.08,
+        "avg": 2483.52,
+        "median": 2481.26,
+        "samples": 3
+      }
+    },
+    "file_explorer": {
+      "app_name": "File Explorer",
+      "controls_extracted": 12,
+      "success": true,
+      "verification_strategy": "active_window_check",
+      "timing_ms": {
+        "min": 536.47,
+        "max": 542.05,
+        "avg": 540.11,
+        "median": 541.82,
+        "samples": 3
+      }
+    },
+    "vscode": {
+      "app_name": "Visual Studio Code",
+      "controls_extracted": 18,
+      "success": true,
+      "verification_strategy": "active_window_check",
+      "timing_ms": {
+        "min": 538.85,
+        "max": 540.59,
+        "avg": 539.83,
+        "median": 540.04,
+        "samples": 3
+      }
+    },
+    "browser": {
+      "app_name": "Web Browser (Microsoft Edge / Chrome)",
+      "controls_extracted": 15,
+      "success": true,
+      "verification_strategy": "active_window_check",
+      "timing_ms": {
+        "min": 11.8,
+        "max": 13.1,
+        "avg": 12.43,
+        "median": 12.4,
+        "samples": 3
+      }
+    }
+  },
+  "ambiguity_guard_validation": {
+    "ambiguous_target_blocked": true,
+    "confidence_tier": "medium",
+    "contextual_disambiguation_succeeded": true,
+    "disambiguated_control": "b1"
+  },
+  "vision_fallback_validation": {
+    "primary_vision": "groq/qwen3.6-27b",
+    "primary_latency_ms": 1968.7,
+    "primary_success": true,
+    "secondary_vision": "gemini/gemini-3-flash-preview",
+    "fallback_vision": "openrouter/free"
+  },
+  "security_validation": {
+    "sensitive_fields_blocked": true,
+    "reason": "Sensitive field protection triggered.",
+    "destructive_actions_isolated": true
+  }
+}

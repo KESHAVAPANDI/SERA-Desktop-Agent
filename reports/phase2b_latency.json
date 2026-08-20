@@ -1,0 +1,227 @@
+{
+  "benchmark_date": "2026-08-18 00:05:55",
+  "hardware": {
+    "stt_device": "CUDA (float16)",
+    "whisper_model": "small",
+    "reasoning_model": "groq / openai/gpt-oss-120b",
+    "tts_model": "fish / s2.1-pro-free"
+  },
+  "workloads": {
+    "workload_a": {
+      "name": "Local Command",
+      "phrase": "Set my brightness to 30 percent",
+      "selected_models": [
+        "local_intent (No LLM)"
+      ],
+      "stt_latency": {
+        "min": 121.72,
+        "max": 383.6,
+        "avg": 177.25,
+        "median": 126.83,
+        "p95": 132.04,
+        "samples": 5
+      },
+      "intent_latency": {
+        "min": 0.01,
+        "max": 0.14,
+        "avg": 0.04,
+        "median": 0.01,
+        "p95": 0.02,
+        "samples": 5
+      },
+      "llm_latency": null,
+      "tool_latency": {
+        "min": 48.35,
+        "max": 56.47,
+        "avg": 50.57,
+        "median": 49.18,
+        "p95": 49.84,
+        "samples": 5
+      },
+      "tts_generation_latency": {
+        "min": 836.22,
+        "max": 1146.35,
+        "avg": 989.59,
+        "median": 946.71,
+        "p95": 1133.4,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 1007.35,
+        "max": 1386.98,
+        "avg": 1217.5,
+        "median": 1314.68,
+        "p95": 1323.08,
+        "samples": 5
+      }
+    },
+    "workload_b": {
+      "name": "Reasoning / Tool Command",
+      "phrase": "Open Notepad",
+      "selected_models": [
+        "reasoning"
+      ],
+      "stt_latency": {
+        "min": 150.93,
+        "max": 437.93,
+        "avg": 307.64,
+        "median": 330.91,
+        "p95": 352.71,
+        "samples": 5
+      },
+      "intent_latency": {
+        "min": 0.01,
+        "max": 0.16,
+        "avg": 0.04,
+        "median": 0.02,
+        "p95": 0.02,
+        "samples": 5
+      },
+      "llm_latency": {
+        "min": 978.91,
+        "max": 3316.35,
+        "avg": 1832.23,
+        "median": 1749.34,
+        "p95": 1966.15,
+        "samples": 5
+      },
+      "tool_latency": null,
+      "tts_generation_latency": {
+        "min": 1159.21,
+        "max": 1898.78,
+        "avg": 1358.31,
+        "median": 1199.31,
+        "p95": 1334.97,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 2577.92,
+        "max": 4919.59,
+        "avg": 3501.59,
+        "median": 3520.73,
+        "p95": 3806.84,
+        "samples": 5
+      }
+    },
+    "workload_c": {
+      "name": "Conversational Reasoning",
+      "phrase": "Explain why Python programs can become slow when they use too much memory.",
+      "selected_models": [
+        "reasoning"
+      ],
+      "stt_latency": {
+        "min": 326.33,
+        "max": 468.01,
+        "avg": 381.9,
+        "median": 339.41,
+        "p95": 445.44,
+        "samples": 5
+      },
+      "intent_latency": {
+        "min": 0.01,
+        "max": 0.02,
+        "avg": 0.01,
+        "median": 0.01,
+        "p95": 0.01,
+        "samples": 5
+      },
+      "llm_latency": {
+        "min": 703.15,
+        "max": 1171.71,
+        "avg": 952.17,
+        "median": 912.97,
+        "p95": 1130.47,
+        "samples": 5
+      },
+      "tool_latency": null,
+      "tts_generation_latency": {
+        "min": 5689.88,
+        "max": 7303.53,
+        "avg": 6363.63,
+        "median": 6110.32,
+        "p95": 6949.42,
+        "samples": 5
+      },
+      "total_post_speech_latency": {
+        "min": 6936.24,
+        "max": 8525.39,
+        "avg": 7697.77,
+        "median": 7349.7,
+        "p95": 8485.55,
+        "samples": 5
+      }
+    }
+  },
+  "routing_verification": {
+    "local_intent_bypass": {
+      "query": "set volume to 40%",
+      "detected_action": {
+        "tool": "set_volume",
+        "arguments": {
+          "volume": 40
+        }
+      },
+      "bypasses_llm": true
+    },
+    "fast_query_route": {
+      "query": "hello",
+      "selected_role": "fast",
+      "is_fast_or_reasoning": true
+    },
+    "reasoning_query_route": {
+      "query": "Explain quantum entanglement...",
+      "selected_role": "reasoning",
+      "is_reasoning": true
+    },
+    "vision_query_route": {
+      "query": "What is shown in this screenshot? (has_media=True)",
+      "selected_role": "vision",
+      "is_vision": true
+    },
+    "fallback_execution": {
+      "primary_failed": true,
+      "fallback_role_used": "fallback",
+      "fallback_succeeded": true
+    }
+  },
+  "interruption_verification": {
+    "trials": 3,
+    "cutoff_latency_ms": {
+      "min": 0.05,
+      "max": 0.07,
+      "avg": 0.06,
+      "median": 0.06,
+      "p95": 0.06,
+      "samples": 3
+    },
+    "state_after_interruption": "LISTENING"
+  },
+  "cancellation_verification": {
+    "state_before": "THINKING",
+    "task_cancelled": true,
+    "cancellation_time_ms": 62.64,
+    "state_after": "LISTENING"
+  },
+  "safety_verification": {
+    "restart_computer": {
+      "blocked_unconfirmed": true,
+      "reason": "restart_computer requires user confirmation before execution."
+    },
+    "shutdown_computer": {
+      "blocked_unconfirmed": true,
+      "reason": "shutdown_computer requires user confirmation before execution."
+    }
+  },
+  "race_conditions": {
+    "rapid_hotkey": {
+      "status": "PASS",
+      "final_state": "LISTENING",
+      "message": "Handled 5 rapid triggers without crashing or task deadlock."
+    },
+    "provider_429_fallback": {
+      "status": "PASS",
+      "role_used": "fallback",
+      "recovered": true
+    }
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "timestamp": "2026-08-21 01:26:10",
+  "roles_configured": {
+    "reasoning": [
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b"
+      },
+      {
+        "provider": "mistral",
+        "model": "mistral-large-latest"
+      },
+      {
+        "provider": "mistral",
+        "model": "mistral-medium-3.5"
+      },
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free"
+      }
+    ],
+    "fast": [
+      {
+        "provider": "mistral",
+        "model": "mistral-small-latest"
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite"
+      },
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free"
+      }
+    ],
+    "desktop": [
+      {
+        "provider": "mistral",
+        "model": "codestral-latest"
+      },
+      {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b"
+      },
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free"
+      }
+    ],
+    "vision": [
+      {
+        "provider": "groq",
+        "model": "qwen/qwen3.6-27b"
+      },
+      {
+        "provider": "gemini",
+        "model": "gemini-3-flash-preview"
+      },
+      {
+        "provider": "openrouter",
+        "model": "openrouter/free"
+      }
+    ],
+    "ocr": [
+      {
+        "provider": "mistral",
+        "model": "mistral-ocr-latest"
+      }
+    ],
+    "embeddings": [
+      {
+        "provider": "mistral",
+        "model": "mistral-embed"
+      }
+    ]
+  },
+  "local_intent_checks": [
+    {
+      "query": "Set brightness to 30 percent",
+      "matched_command": "set_brightness",
+      "expected_command": "set_brightness",
+      "bypassed_llm": true
+    },
+    {
+      "query": "Set volume to 40 percent",
+      "matched_command": "set_volume",
+      "expected_command": "set_volume",
+      "bypassed_llm": true
+    },
+    {
+      "query": "Mute audio",
+      "matched_command": "mute",
+      "expected_command": "mute",
+      "bypassed_llm": true
+    }
+  ],
+  "role_executions": [
+    {
+      "role": "fast",
+      "provider": "mistral",
+      "model": "mistral-small-latest",
+      "latency_ms": 1288.15,
+      "status": "SUCCESS",
+      "output": "Paris"
+    },
+    {
+      "role": "reasoning",
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "latency_ms": 1061.47,
+      "status": "SUCCESS",
+      "output": "A function calling itself to solve smaller instances until reaching a defined explicit base case."
+    },
+    {
+      "role": "desktop",
+      "provider": "mistral",
+      "model": "codestral-latest",
+      "latency_ms": 956.96,
+      "status": "SUCCESS",
+      "has_tool_calls": true,
+      "tool_name": "open_application"
+    },
+    {
+      "role": "vision",
+      "provider": "groq",
+      "model": "qwen/qwen3.6-27b",
+      "latency_ms": 931.42,
+      "status": "SUCCESS",
+      "output": "The application window title shown is **Calculator - Standard Mode**."
+    }
+  ],
+  "embeddings_check": {
+    "provider": "mistral",
+    "model": "mistral-embed",
+    "dim": 1024,
+    "latency_ms": 636.42,
+    "status": "SUCCESS"
+  }
+}

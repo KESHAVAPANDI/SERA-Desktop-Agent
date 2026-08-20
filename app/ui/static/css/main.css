@@ -1,0 +1,657 @@
+@import url('./variables.css');
+
+/* ===================================================================
+   RESET & FOUNDATIONS
+   =================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle Sci-Fi Ambient Grid */
+body::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Application Shell Layout */
+#app-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+}
+
+/* ===================================================================
+   1. GLOBAL PERSISTENT HEADER
+   =================================================================== */
+#global-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px;
+  background: var(--bg-surface-glass);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-brand);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-primary);
+}
+
+.brand-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent-cyan);
+  filter: drop-shadow(0 0 8px var(--accent-cyan));
+}
+
+.state-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.aura-orb-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 10px var(--accent-cyan);
+  transition: all var(--transition-smooth);
+}
+
+/* Aura Orb Pulse states */
+.state-idle .aura-orb-pip { background: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan); animation: pulse-slow 4s infinite; }
+.state-listening .aura-orb-pip { background: var(--accent-amber); box-shadow: 0 0 14px var(--accent-amber); animation: pulse-fast 1s infinite; }
+.state-thinking .aura-orb-pip { background: var(--accent-violet); box-shadow: 0 0 14px var(--accent-violet); animation: spin-orb 2s infinite linear; }
+.state-executing .aura-orb-pip { background: var(--accent-emerald); box-shadow: 0 0 14px var(--accent-emerald); animation: pulse-fast 0.8s infinite; }
+.state-speaking .aura-orb-pip { background: var(--accent-cyan); box-shadow: 0 0 16px var(--accent-cyan); animation: wave-orb 1.2s infinite ease-in-out; }
+.state-error .aura-orb-pip { background: var(--accent-crimson); box-shadow: 0 0 14px var(--accent-crimson); }
+
+.task-ticker {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.nav-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.nav-tab-btn .tab-num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.nav-tab-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-tab-btn.active {
+  color: var(--accent-cyan);
+  background: var(--bg-card);
+  border: 1px solid var(--border-active);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.hardware-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.hardware-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hardware-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+}
+
+/* ===================================================================
+   2. MAIN VIEWPORT & VIEW CONTAINERS
+   =================================================================== */
+#main-viewport {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+}
+
+.view-container {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none;
+  padding: 24px;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+}
+
+.view-container.active {
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ===================================================================
+   3. VIEW 1: WORKFLOW GRAPH (TEMPORAL CANVAS)
+   =================================================================== */
+#view-workflow {
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.03) 0%, transparent 70%);
+}
+
+.workflow-toolbar {
+  position: absolute;
+  top: 20px; left: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  z-index: 10;
+}
+
+.workflow-canvas {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: grab;
+}
+
+.workflow-canvas:active {
+  cursor: grabbing;
+}
+
+.workflow-svg-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.temporal-node {
+  position: absolute;
+  min-width: 180px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-smooth);
+  cursor: pointer;
+}
+
+.temporal-node:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: var(--glow-cyan);
+  transform: translateY(-2px);
+}
+
+.temporal-node.node-active {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.35);
+  background: var(--bg-card-hover);
+}
+
+.temporal-node.node-fallback {
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 20px rgba(255, 184, 0, 0.25);
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.node-role-badge {
+  font-family: var(--font-brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-cyan);
+}
+
+.node-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.node-meta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ===================================================================
+   4. VIEW 2: LIVE VOICE ORB & CHAT
+   =================================================================== */
+#view-live {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  height: 100%;
+}
+
+.live-orb-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.aura-orb-large {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.4) 0%, rgba(138, 43, 226, 0.2) 60%, transparent 75%);
+  box-shadow: 0 0 60px rgba(0, 240, 255, 0.3), inset 0 0 40px rgba(138, 43, 226, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+}
+
+.aura-orb-rings {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 240, 255, 0.25);
+  animation: spin-orb 20s infinite linear;
+}
+
+.live-chat-panel {
+  width: 440px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-stream {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-bubble {
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 85%;
+  font-size: 0.9rem;
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  background: var(--accent-cyan-dim);
+  border: 1px solid var(--border-active);
+  color: var(--text-primary);
+}
+
+.chat-bubble.sera {
+  align-self: flex-start;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.chat-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+/* ===================================================================
+   5. VIEW 3: MULTI-AGENT HIERARCHY
+   =================================================================== */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.agent-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all var(--transition-fast);
+}
+
+.agent-card:hover {
+  border-color: var(--accent-violet);
+  box-shadow: 0 0 16px var(--accent-violet-dim);
+}
+
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.agent-name {
+  font-family: var(--font-brand);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.agent-status-pill {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 229, 153, 0.15);
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+/* ===================================================================
+   6. VIEW 4: MEMORY CORE & RAG
+   =================================================================== */
+.memory-layout {
+  display: flex;
+  gap: 24px;
+  height: 100%;
+}
+
+.memory-core-view {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.memory-item-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+/* ===================================================================
+   7. VIEW 5: PROVIDERS & QUOTA GAUGES
+   =================================================================== */
+.providers-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.provider-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.provider-title {
+  font-family: var(--font-brand);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.models-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.model-item-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.quota-bar-wrapper {
+  margin-top: 10px;
+}
+
+.quota-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.quota-bar-fill {
+  height: 100%;
+  background: var(--accent-cyan);
+  border-radius: 3px;
+}
+
+/* ===================================================================
+   8. VIEW 6: HISTORY TIMELINE
+   =================================================================== */
+.history-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.history-session-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.btn-action {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.btn-action:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-cyan);
+}
+
+.btn-action.btn-replay {
+  color: var(--accent-cyan);
+  border-color: var(--border-active);
+}
+
+/* ===================================================================
+   9. VIEW 7: DEBUG TELEMETRY
+   =================================================================== */
+.debug-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.debug-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-trace-box {
+  background: #000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  height: 240px;
+  overflow-y: auto;
+  color: var(--accent-emerald);
+}
+
+/* Keyframe Animations */
+@keyframes pulse-slow { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.3); opacity: 1; } }
+@keyframes pulse-fast { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.4); } }
+@keyframes spin-orb { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes wave-orb { 0%, 100% { box-shadow: 0 0 10px var(--accent-cyan); } 50% { box-shadow: 0 0 24px var(--accent-cyan); } }

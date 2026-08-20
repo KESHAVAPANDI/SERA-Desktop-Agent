@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SERA 1.0 — Temporal Command Center</title>
+  
+  <!-- Fonts: Outfit, Inter, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="./css/variables.css">
+  <link rel="stylesheet" href="./css/main.css">
+</head>
+<body>
+  <div id="app-shell">
+    
+    <!-- 1. GLOBAL PERSISTENT HEADER -->
+    <header id="global-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+          </svg>
+          <span>SERA</span>
+        </div>
+
+        <div id="state-indicator" class="state-indicator state-idle">
+          <div class="aura-orb-pip"></div>
+          <span id="state-text">IDLE</span>
+        </div>
+
+        <div id="task-ticker" class="task-ticker">Ready • Awaiting Command</div>
+      </div>
+
+      <!-- Navigation Tabs (1 - 7) -->
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab-btn active" data-view="workflow" id="tab-workflow">
+          <span class="tab-num">1</span> WORKFLOW
+        </button>
+        <button class="nav-tab-btn" data-view="live" id="tab-live">
+          <span class="tab-num">2</span> LIVE
+        </button>
+        <button class="nav-tab-btn" data-view="agents" id="tab-agents">
+          <span class="tab-num">3</span> AGENTS
+        </button>
+        <button class="nav-tab-btn" data-view="memory" id="tab-memory">
+          <span class="tab-num">4</span> MEMORY
+        </button>
+        <button class="nav-tab-btn" data-view="providers" id="tab-providers">
+          <span class="tab-num">5</span> PROVIDERS
+        </button>
+        <button class="nav-tab-btn" data-view="history" id="tab-history">
+          <span class="tab-num">6</span> HISTORY
+        </button>
+        <button class="nav-tab-btn" data-view="debug" id="tab-debug">
+          <span class="tab-num">7</span> DEBUG
+        </button>
+      </nav>
+
+      <div class="header-right">
+        <div class="hardware-telemetry">
+          <div class="hardware-pill">
+            <div class="hardware-dot"></div>
+            <span>GPU: <strong id="gpu-gauge">18%</strong></span>
+          </div>
+          <div class="hardware-pill">
+            <span>RAM: <strong id="ram-gauge">3.4 GB</strong></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. MAIN VIEWPORT CONTAINERS -->
+    <main id="main-viewport">
+      
+      <!-- VIEW 1: WORKFLOW GRAPH -->
+      <section id="view-workflow" class="view-container active">
+        <div class="workflow-toolbar">
+          <button class="btn-action" id="btn-zoom-in">+</button>
+          <button class="btn-action" id="btn-zoom-out">-</button>
+          <button class="btn-action" id="btn-reset-view">Reset View</button>
+          <span style="color: var(--text-muted); font-size: 0.75rem;">Horizontal Temporal Graph</span>
+        </div>
+        <div id="workflow-canvas" class="workflow-canvas">
+          <svg id="workflow-svg" class="workflow-svg-layer"></svg>
+          <div id="workflow-nodes-container"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: LIVE VIEW -->
+      <section id="view-live" class="view-container">
+        <div class="live-orb-panel">
+          <div id="aura-orb-main" class="aura-orb-large">
+            <div class="aura-orb-rings"></div>
+            <div style="font-family: var(--font-brand); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.1em; color: var(--accent-cyan);">SERA</div>
+          </div>
+          <div style="margin-top: 24px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">
+            Press <kbd style="background: var(--bg-card); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-subtle);">Ctrl+Space</kbd> or say "SERA"
+          </div>
+        </div>
+
+        <div class="live-chat-panel">
+          <div style="padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); font-family: var(--font-brand); font-weight: 700; font-size: 0.95rem;">
+            CONVERSATION STREAM
+          </div>
+          <div id="chat-stream" class="chat-stream">
+            <div class="chat-bubble sera">
+              Hello! I am SERA, your desktop AI companion. How can I assist you today?
+            </div>
+          </div>
+          <form id="chat-form" class="chat-input-bar">
+            <input type="text" id="chat-input" class="chat-input-field" placeholder="Type a command or question..." autocomplete="off">
+            <button type="submit" class="btn-action">Send</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- VIEW 3: AGENTS -->
+      <section id="view-agents" class="view-container">
+        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Multi-Agent Hierarchy</h2>
+        <div id="agents-grid" class="agent-grid"></div>
+      </section>
+
+      <!-- VIEW 4: MEMORY -->
+      <section id="view-memory" class="view-container">
+        <div class="memory-layout">
+          <div class="memory-core-view">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 style="font-family: var(--font-brand); font-size: 1.3rem;">Neural Knowledge Core</h2>
+              <input type="text" id="memory-search" placeholder="Search knowledge..." class="chat-input-field" style="max-width: 240px; background: var(--bg-secondary); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+            </div>
+            <div id="memory-grid" class="memory-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: PROVIDERS -->
+      <section id="view-providers" class="view-container">
+        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Model Providers & Quota Infrastructure</h2>
+        <div id="providers-container" class="providers-grid"></div>
+      </section>
+
+      <!-- VIEW 6: HISTORY -->
+      <section id="view-history" class="view-container">
+        <div style="max-width: 900px; margin: 0 auto 16px auto; width: 100%; display: flex; justify-content: space-between; align-items: center;">
+          <h2 style="font-family: var(--font-brand); font-size: 1.3rem;">Interaction History Timeline</h2>
+          <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">Daily Chronological Sessions</span>
+        </div>
+        <div id="history-stream" class="history-stream"></div>
+      </section>
+
+      <!-- VIEW 7: DEBUG -->
+      <section id="view-debug" class="view-container">
+        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Telemetry & Real-Time Observer</h2>
+        <div class="debug-grid">
+          <div class="debug-card">
+            <h3 style="font-family: var(--font-brand); font-size: 1rem;">Live EventBus Stream</h3>
+            <div id="event-trace-box" class="event-trace-box"></div>
+          </div>
+          <div class="debug-card">
+            <h3 style="font-family: var(--font-brand); font-size: 1rem;">Pipeline Latency Waterfall</h3>
+            <div id="latency-telemetry-box" style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: 0.85rem;"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

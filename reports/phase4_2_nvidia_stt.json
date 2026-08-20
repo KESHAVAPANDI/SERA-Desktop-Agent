@@ -1,0 +1,154 @@
+{
+  "benchmark_date": "2026-08-20 23:02:06",
+  "total_test_phrases": 14,
+  "primary_stt": "nvidia/canary-qwen-2.5b",
+  "fallback_stt": "faster-whisper-small-cuda",
+  "command_capture_duration_s": 5.0,
+  "wake_word": "SERA (openwakeword)",
+  "avg_whisper_latency_ms": 1248.06,
+  "avg_primary_latency_ms": 5502.64,
+  "quality_gate_accuracy": "100%",
+  "test_results": [
+    {
+      "target_phrase": "Open Google Chrome.",
+      "category": "Application launch command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 3338.55,
+      "whisper_latency_ms": 2451.37,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Close Chrome.",
+      "category": "Application close command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 5811.54,
+      "whisper_latency_ms": 1146.6,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Open YouTube.",
+      "category": "Website navigation command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 7862.02,
+      "whisper_latency_ms": 1139.78,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Close YouTube.",
+      "category": "Website close command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 1817.36,
+      "whisper_latency_ms": 1162.57,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Set my brightness to thirty percent.",
+      "category": "Hardware brightness command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 3680.95,
+      "whisper_latency_ms": 1171.59,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Set my volume to forty percent.",
+      "category": "Hardware volume command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 7807.49,
+      "whisper_latency_ms": 1154.79,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "What is my battery percentage?",
+      "category": "System telemetry query",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 5867.14,
+      "whisper_latency_ms": 1159.83,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Open Notepad and type SERA manual test.",
+      "category": "Multi-step computer command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 2079.0,
+      "whisper_latency_ms": 1156.13,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Take a screenshot.",
+      "category": "Desktop perception command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 2937.11,
+      "whisper_latency_ms": 1165.15,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "What's on my screen?",
+      "category": "Visual perception query",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 1977.59,
+      "whisper_latency_ms": 1161.78,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Search for wild animals.",
+      "category": "Web search command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 6145.64,
+      "whisper_latency_ms": 1148.82,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Open Calculator and calculate one hundred twenty five times eight.",
+      "category": "Calculator calculation command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 12041.36,
+      "whisper_latency_ms": 1148.65,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "SERA, open Chrome.",
+      "category": "Wake-word integrated command",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 8250.86,
+      "whisper_latency_ms": 1149.05,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    },
+    {
+      "target_phrase": "Explain Python memory management.",
+      "category": "Conversational reasoning query",
+      "primary_provider": "faster_whisper",
+      "primary_model": "small",
+      "primary_latency_ms": 7420.42,
+      "whisper_latency_ms": 1156.68,
+      "quality_accepted": true,
+      "quality_confidence": 0.95
+    }
+  ],
+  "status": "PASS"
+}

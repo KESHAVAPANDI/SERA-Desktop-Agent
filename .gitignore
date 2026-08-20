@@ -1,0 +1,52 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & Temporary Files
+*.log
+logs/
+generated/
+temporary/
+temp/
+scratch/
+
+# Audio Recordings & Local Media
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.m4a
+
+# Local Databases & Persistent Storage
+data/
+memory/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDEs & System Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node / Web artifacts (if any)
+node_modules/
+.cache/

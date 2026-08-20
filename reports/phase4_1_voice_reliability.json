@@ -1,0 +1,93 @@
+{
+  "benchmark_date": "2026-08-18 15:20:14",
+  "hotkey_debounce": {
+    "configured_debounce_ms": 300,
+    "burst_count": 10,
+    "accepted_events": 1,
+    "debounced_events": 9,
+    "burst_elapsed_ms": 0.02,
+    "status": "PASS"
+  },
+  "transcript_quality_gate": {
+    "test_cases": [
+      {
+        "transcript": "um",
+        "expected_accepted": false,
+        "actual_accepted": false,
+        "confidence": 0.1,
+        "reason": "Rejected known filler word or noise fragment: 'um'",
+        "passed": true
+      },
+      {
+        "transcript": "from",
+        "expected_accepted": false,
+        "actual_accepted": false,
+        "confidence": 0.1,
+        "reason": "Rejected known filler word or noise fragment: 'from'",
+        "passed": true
+      },
+      {
+        "transcript": "   ",
+        "expected_accepted": false,
+        "actual_accepted": false,
+        "confidence": 0.0,
+        "reason": "Empty or whitespace transcript",
+        "passed": true
+      },
+      {
+        "transcript": "mute",
+        "expected_accepted": true,
+        "actual_accepted": true,
+        "confidence": 0.98,
+        "reason": "Matched known valid command phrase",
+        "passed": true
+      },
+      {
+        "transcript": "open chrome",
+        "expected_accepted": true,
+        "actual_accepted": true,
+        "confidence": 0.95,
+        "reason": "Transcript passed quality criteria",
+        "passed": true
+      },
+      {
+        "transcript": "what time is it?",
+        "expected_accepted": true,
+        "actual_accepted": true,
+        "confidence": 0.95,
+        "reason": "Transcript passed quality criteria",
+        "passed": true
+      }
+    ],
+    "all_passed": true,
+    "status": "PASS"
+  },
+  "duplicate_suppression": {},
+  "interruption_and_cancellation": {},
+  "quota_protection_and_429": {
+    "primary_failed_429": true,
+    "fallback_role": "fallback",
+    "fallback_latency_ms": 0.09,
+    "duplicate_conversations": 0,
+    "status": "PASS"
+  },
+  "website_disambiguation": {
+    "close_youtube_is_website": true,
+    "close_youtube_explanation": "'Youtube' is a website/browser tab, not an independent Windows application. Please close the tab directly in your web browser.",
+    "open_youtube_is_website": true,
+    "status": "PASS"
+  },
+  "audio_cues": {
+    "enabled": true,
+    "cues_implemented": [
+      "play_listening_cue",
+      "play_thinking_cue",
+      "play_interrupted_cue",
+      "play_completed_cue",
+      "play_error_cue",
+      "play_confirmation_required_cue"
+    ],
+    "latency": "< 5ms (local winsound generation)",
+    "status": "PASS"
+  }
+}
