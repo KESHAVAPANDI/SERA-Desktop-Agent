@@ -1,5 +1,5 @@
 /**
- * LiveView — Primary Conversational Interface & Central Reactive Aura Orb
+ * LiveView — Primary Conversational Interface, Reactive Aura Orb, Hold-To-Talk Visualizer & Activity Rail
  */
 
 export class LiveView {
@@ -9,7 +9,7 @@ export class LiveView {
     this.chatForm = document.getElementById("chat-form");
     this.chatInput = document.getElementById("chat-input");
     
-    // Aura & Countdown Elements
+    // Aura & Hold-To-Talk Elements
     this.auraOrb = document.getElementById("aura-orb-main");
     this.auraStatusText = document.getElementById("aura-status-subtext");
     this.captureContainer = document.getElementById("capture-progress-container");
@@ -25,9 +25,14 @@ export class LiveView {
     this.taskElapsedTimer = document.getElementById("task-elapsed-timer");
     this.btnInterrupt = document.getElementById("btn-interrupt-task");
 
+    // Activity Rail
+    this.activityRail = document.getElementById("live-activity-rail");
+
     this.elapsedSeconds = 0.0;
+    this.holdSeconds = 0.0;
     this.taskTimerInterval = null;
     this.captureTimerInterval = null;
+    this.holdTimerInterval = null;
 
     this.init();
   }
@@ -58,15 +63,38 @@ export class LiveView {
     this.chatStream.scrollTop = this.chatStream.scrollHeight;
   }
 
-  setAuraState(status) {
+  logActivity(eventType, detail) {
+    if (!this.activityRail) return;
+    const item = document.createElement("div");
+    item.className = "activity-rail-item";
+    const timeStr = new Date().toLocaleTimeString().split(" ")[0];
+
+    item.innerHTML = `
+      <span class="activity-time">${timeStr}</span>
+      <span class="activity-badge">${eventType}</span>
+      <span class="activity-text">${detail || ''}</span>
+    `;
+
+    this.activityRail.prepend(item);
+    if (this.activityRail.children.length > 25) {
+      this.activityRail.lastElementChild?.remove();
+    }
+  }
+
+  setAuraState(status, meta = {}) {
     if (this.auraStatusText) {
       this.auraStatusText.textContent = status.toUpperCase();
     }
 
     if (status === "LISTENING") {
-      this.startCaptureCountdown(5.0, "HOTKEY");
+      if (meta.source === "HOTKEY_HOLD" || meta.mode === "HOLD_TO_TALK") {
+        this.startHoldToTalkVisualizer();
+      } else {
+        this.startWakeWordCountdown(5.0);
+      }
     } else {
-      this.stopCaptureCountdown();
+      this.stopHoldToTalkVisualizer();
+      this.stopWakeWordCountdown();
     }
 
     if (status === "BROKEN") {
@@ -76,11 +104,38 @@ export class LiveView {
     }
   }
 
-  startCaptureCountdown(duration = 5.0, method = "HOTKEY") {
+  startHoldToTalkVisualizer() {
     if (!this.captureContainer || !this.captureTimerVal || !this.captureProgressFill) return;
     this.captureContainer.classList.remove("hidden");
     if (this.activationMethodLabel) {
-      this.activationMethodLabel.textContent = `Activation: ${method === 'WAKE_WORD' ? 'Wake Word ("SERA")' : 'Ctrl+Space Hotkey'}`;
+      this.activationMethodLabel.innerHTML = `<strong>HOLD TO TALK</strong> (Release Ctrl+Space to Send)`;
+    }
+
+    this.holdSeconds = 0.0;
+    this.captureProgressFill.style.width = "100%";
+    this.captureProgressFill.style.background = "var(--accent-cyan)";
+    this.auraOrb?.classList.add("aura-recording");
+
+    clearInterval(this.holdTimerInterval);
+    this.holdTimerInterval = setInterval(() => {
+      this.holdSeconds += 0.05;
+      const mins = Math.floor(this.holdSeconds / 60).toString().padStart(2, "0");
+      const secs = (this.holdSeconds % 60).toFixed(2).padStart(5, "0");
+      this.captureTimerVal.textContent = `${mins}:${secs}`;
+    }, 50);
+  }
+
+  stopHoldToTalkVisualizer() {
+    clearInterval(this.holdTimerInterval);
+    this.auraOrb?.classList.remove("aura-recording");
+    this.captureContainer?.classList.add("hidden");
+  }
+
+  startWakeWordCountdown(duration = 5.0) {
+    if (!this.captureContainer || !this.captureTimerVal || !this.captureProgressFill) return;
+    this.captureContainer.classList.remove("hidden");
+    if (this.activationMethodLabel) {
+      this.activationMethodLabel.textContent = `Wake Word ("SERA") Detected`;
     }
 
     let remaining = duration;
@@ -98,7 +153,7 @@ export class LiveView {
     }, 100);
   }
 
-  stopCaptureCountdown() {
+  stopWakeWordCountdown() {
     clearInterval(this.captureTimerInterval);
     this.captureContainer?.classList.add("hidden");
   }

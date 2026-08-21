@@ -124,7 +124,7 @@
 
             <!-- Hotkey Hint -->
             <div class="hotkey-assist-pill">
-              Press <kbd>Ctrl+Space</kbd> or say <strong style="color: var(--accent-cyan);">"SERA"</strong> to speak
+              Hold <kbd>Ctrl+Space</kbd> to talk (release to send) or say <strong style="color: var(--accent-cyan);">"SERA"</strong>
             </div>
 
             <!-- Current Task Panel -->
@@ -142,17 +142,23 @@
                 <button id="btn-interrupt-task" class="btn-mini btn-interrupt">Interrupt</button>
               </div>
             </div>
+
+            <!-- Activity Rail -->
+            <div class="activity-rail-card">
+              <div class="activity-rail-header">LIVE RUNTIME ACTIVITY</div>
+              <div id="live-activity-rail" class="activity-rail-stream"></div>
+            </div>
           </div>
 
           <!-- Right: Live Conversation Stream -->
           <div class="live-chat-panel">
             <div class="chat-header">
               <span>INTERACTION STREAM</span>
-              <span id="stt-model-badge" class="model-badge">NVIDIA Canary-Qwen 2.5B</span>
+              <span id="stt-model-badge" class="model-badge">Faster-Whisper (Active Fallback)</span>
             </div>
             <div id="chat-stream" class="chat-stream">
               <div class="chat-bubble sera">
-                Hello! I am SERA, your desktop AI companion. Press <kbd>Ctrl+Space</kbd> or speak to activate.
+                Hello! I am SERA, your desktop AI companion. Hold <kbd>Ctrl+Space</kbd> to talk or say "SERA".
               </div>
             </div>
             <form id="chat-form" class="chat-input-bar">

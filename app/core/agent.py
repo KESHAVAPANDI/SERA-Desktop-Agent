@@ -193,8 +193,13 @@ IDENTITY:
                 print(f"[RESULT] {result}")
 
                 # Deterministic Single-Step Fast Finish
-                # If a deterministic action (like open_application or set_brightness) succeeded, stop immediately
-                if tool_call.name in ("open_application", "close_application", "set_brightness", "set_volume", "mute_system", "unmute_system"):
+                # If a deterministic action succeeded, return natural spoken response immediately
+                deterministic_actions = (
+                    "open_application", "close_application", "open_folder", "open_file",
+                    "browser_open", "capture_screen", "set_brightness", "set_volume",
+                    "mute_system", "unmute_system", "lock_screen"
+                )
+                if tool_call.name in deterministic_actions:
                     if isinstance(result, dict) and result.get("success", False):
                         if tool_call.name == "open_application":
                             app_name = args_dict.get("app_name") or args_dict.get("application", "Application")
@@ -202,12 +207,25 @@ IDENTITY:
                         elif tool_call.name == "close_application":
                             app_name = args_dict.get("app_name") or args_dict.get("application", "Application")
                             final_resp = f"Closed {app_name.capitalize()}."
+                        elif tool_call.name == "open_folder":
+                            folder = args_dict.get("folder_name", "folder")
+                            final_resp = f"Opened the {folder} folder."
+                        elif tool_call.name == "open_file":
+                            file_name = args_dict.get("file_path", "file")
+                            final_resp = f"Opened {file_name}."
+                        elif tool_call.name == "capture_screen":
+                            final_resp = "I have captured a screenshot of your screen."
                         else:
                             final_resp = str(result.get("message") or "Action completed.")
 
                         self.state.last_response = final_resp
                         self.state.active_tool_name = None
                         return final_resp
+                    elif isinstance(result, dict) and not result.get("success", True):
+                        err = result.get("error", "Action failed.")
+                        self.state.last_response = err
+                        self.state.active_tool_name = None
+                        return err
 
                 args_str = json.dumps(args_dict) if isinstance(args_dict, (dict, list)) else str(args_dict)
 

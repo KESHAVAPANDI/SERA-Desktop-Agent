@@ -2,6 +2,8 @@ from app.tools.registry import ToolRegistry
 
 from app.tools.windows.apps import (
     OpenApplicationTool,
+    OpenFolderTool,
+    OpenFileTool,
     CloseApplicationTool,
     ListRunningApplicationsTool,
 )
@@ -40,14 +42,30 @@ from app.tools.desktop.tools import (
     SelectTabTool,
 )
 
+from app.tools.browser.web_search import WebSearchTool
+from app.tools.browser.browser import BrowserTool, ReadWebPageTool
+from app.tools.screen.capture import ScreenCaptureTool
+from app.tools.screen.vision import AnalyzeScreenTool
+
 
 def create_tool_registry():
     registry = ToolRegistry()
 
-    # Applications
+    # Applications, Folders, Files
     registry.register(OpenApplicationTool())
+    registry.register(OpenFolderTool())
+    registry.register(OpenFileTool())
     registry.register(CloseApplicationTool())
     registry.register(ListRunningApplicationsTool())
+
+    # Web & Browser
+    registry.register(WebSearchTool())
+    registry.register(BrowserTool())
+    registry.register(ReadWebPageTool())
+
+    # Screen Capture & Vision
+    registry.register(ScreenCaptureTool())
+    registry.register(AnalyzeScreenTool())
 
     # System & Diagnostics
     registry.register(GetSystemInfoTool())

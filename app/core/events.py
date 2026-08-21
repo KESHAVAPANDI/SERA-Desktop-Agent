@@ -39,7 +39,7 @@ class AgentTurn:
 
 
 class EventBus:
-    """Pub-Sub Event Bus for internal assistant event communication."""
+    """Pub-Sub Event Bus for internal assistant event communication supporting both positional payloads and kwargs."""
 
     def __init__(self):
         self._listeners: Dict[str, List[Callable]] = {}
@@ -50,26 +50,41 @@ class EventBus:
             self._listeners[event_name] = []
         self._listeners[event_name].append(callback)
 
-    async def emit_async(self, event_name: str, **kwargs):
+    async def emit_async(self, event_name: str, payload: Any = None, **kwargs):
         """Publishes event to all registered subscriber callbacks (handling both async and sync)."""
         if event_name in self._listeners:
             for callback in self._listeners[event_name]:
                 try:
                     if inspect.iscoroutinefunction(callback):
-                        await callback(**kwargs)
+                        if payload is not None and not kwargs:
+                            await callback(payload)
+                        elif payload is not None and isinstance(payload, dict):
+                            await callback(**{**payload, **kwargs})
+                        else:
+                            await callback(**kwargs)
                     else:
-                        callback(**kwargs)
+                        if payload is not None and not kwargs:
+                            callback(payload)
+                        elif payload is not None and isinstance(payload, dict):
+                            callback(**{**payload, **kwargs})
+                        else:
+                            callback(**kwargs)
                 except Exception as e:
-                    logger.error(f"Error executing async listener for {event_name}: {e}")
+                    logger.debug(f"Error executing async listener for {event_name}: {e}")
 
-    def emit(self, event_name: str, **kwargs):
+    def emit(self, event_name: str, payload: Any = None, **kwargs):
         """Synchronously publishes event to registered sync subscriber callbacks."""
         if event_name in self._listeners:
             for callback in self._listeners[event_name]:
                 try:
                     if not inspect.iscoroutinefunction(callback):
-                        callback(**kwargs)
+                        if payload is not None and not kwargs:
+                            callback(payload)
+                        elif payload is not None and isinstance(payload, dict):
+                            callback(**{**payload, **kwargs})
+                        else:
+                            callback(**kwargs)
                 except Exception as e:
-                    logger.error(f"Error executing sync listener for {event_name}: {e}")
+                    logger.debug(f"Error executing sync listener for {event_name}: {e}")
 
     publish = emit

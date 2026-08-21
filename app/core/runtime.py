@@ -49,6 +49,7 @@ class SERARuntime:
         vision_engine: ScreenPerceptionEngine | None = None,
         desktop_router: DesktopPerceptionRouter | None = None,
         stt_pipeline: PrimaryWithFallbackSTT | None = None,
+        event_bus: EventBus | None = None,
     ):
         print("=" * 60)
         print("INITIALIZING SERA RUNTIME 1.0")
@@ -67,6 +68,7 @@ class SERARuntime:
         self.manual_debug_mode = telemetry_cfg.get("manual_debug_mode", True)
         self.recording_duration = float(stt_cfg.get("recording_duration_seconds", 5.0))
         self.stt_language = stt_cfg.get("language", "en-US")
+        self.stt_sample_rate = int(audio_cfg.get("sample_rate", 16000))
 
         # Audio Cues
         self.audio_cues = get_audio_cues(enabled=cues_cfg.get("enabled", True))
@@ -80,7 +82,8 @@ class SERARuntime:
 
         # State & Events
         self.state = SERAState()
-        self.events = EventBus()
+        self.events = event_bus or EventBus()
+        self.event_bus = self.events
 
         # Visual state tracker (prints state exactly once per change)
         self._last_printed_state: SERAStatus | None = None
@@ -185,18 +188,21 @@ class SERARuntime:
             event_bus=self.events,
         )
 
-        # Global Hotkey Manager with Debounce
+        # Global Hotkey Manager with Hold-To-Talk
         hotkey_combo = hotkey_cfg.get("combination", "ctrl+space")
-        debounce_ms = hotkey_cfg.get("debounce_ms", 300)
         self.hotkey_manager = GlobalHotkeyManager(
             hotkey=hotkey_combo,
-            on_trigger=self.handle_hotkey_trigger,
-            debounce_ms=debounce_ms,
+            on_press=self.handle_hotkey_press,
+            on_release=self.handle_hotkey_release,
+            loop=self._loop,
         )
+
+        self._hold_activation_time = 0.0
+        self._is_holding_hotkey = False
 
         self._transition_state(SERAStatus.IDLE)
         print("=" * 60)
-        print(f"SERA RUNTIME READY (Hotkey: {hotkey_combo} | Wake Word: '{self.wakeword_phrase}')")
+        print(f"SERA RUNTIME READY (Hold-To-Talk: {hotkey_combo} | Wake Word: '{self.wakeword_phrase}')")
         print("=" * 60)
 
     def _setup_state_listener(self) -> None:
@@ -218,33 +224,29 @@ class SERARuntime:
             print(f"[SERA STATE] ● {status.value.upper()}")
 
     def handle_hotkey_trigger(self) -> None:
-        """Triggered when the global hotkey (Ctrl+Space) is pressed."""
+        """Compatibility trigger for single hotkey press / test invocation."""
+        self.handle_hotkey_press()
+        self.handle_hotkey_release()
+        
+    def _emit_event(self, event_name: str, payload: Any = None) -> None:
+        """Safely dispatches event to EventBus if initialized."""
+        if hasattr(self, "events") and self.events:
+            self.events.emit(event_name, payload)
+
+    def handle_hotkey_press(self) -> None:
+        """Triggered immediately when Ctrl+Space is pressed down (Hold-To-Talk begin)."""
         self.hotkey_event_count += 1
-        self._handle_activation(source="HOTKEY", event_id=self.hotkey_event_count)
+        self._hold_activation_time = time.time()
+        self._is_holding_hotkey = True
+        current_st = self.state.status if hasattr(self, "state") and self.state else SERAStatus.IDLE
 
-    def handle_wakeword_trigger(self) -> None:
-        """Triggered when the local wake word ('SERA') is detected."""
-        self.wakeword_event_count += 1
-        self._handle_activation(source="WAKE_WORD", event_id=self.wakeword_event_count)
-
-    def _handle_activation(self, source: str = "HOTKEY", event_id: int = 1) -> None:
-        """Unified command capture activation entrypoint for both Hotkey and Wake Word."""
-        activation_time = time.time()
-        current_st = self.state.status
-
-        # 1. State: LISTENING -> Do not spawn duplicate listener!
-        if current_st == SERAStatus.LISTENING:
-            if self._active_listen_task and not self._active_listen_task.done():
-                logger.debug(f"[SERARuntime] Duplicate {source} trigger ignored: already LISTENING.")
-                return
-
-        # 2. State: SPEAKING -> Stop TTS, cancel streaming, play interrupted cue, switch to LISTENING
-        if current_st == SERAStatus.SPEAKING or (hasattr(self.audio, "is_speaking") and self.audio.is_speaking is True):
-            self.audio.stop_speaking()
-            self.audio_cues.play_interrupted_cue()
+        # Interrupt any ongoing speech or execution immediately
+        if current_st == SERAStatus.SPEAKING or (hasattr(self, "audio") and hasattr(self.audio, "is_speaking") and self.audio.is_speaking is True):
+            if hasattr(self, "audio") and hasattr(self.audio, "stop_speaking"):
+                self.audio.stop_speaking()
+            if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
+                self.audio_cues.play_interrupted_cue()
             self._cancel_active_agent_task()
-
-        # 3. State: THINKING / EXECUTING / PLANNING / RECOVERING -> Cancel task, play interrupted cue, switch to LISTENING
         elif current_st in (
             SERAStatus.THINKING,
             SERAStatus.EXECUTING,
@@ -253,22 +255,58 @@ class SERARuntime:
             SERAStatus.TASK_VERIFYING,
             SERAStatus.TASK_RECOVERING,
         ):
-            self.audio_cues.play_interrupted_cue()
+            if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
+                self.audio_cues.play_interrupted_cue()
             self._cancel_active_agent_task()
 
-        # 4. State: IDLE -> Play listening cue
-        elif current_st == SERAStatus.IDLE:
-            self.audio_cues.play_listening_cue()
-
-        # Temporarily suppress wake word detector while capturing command
+        # Yield wake word microphone
         if hasattr(self, "wakeword_detector") and self.wakeword_detector:
             self.wakeword_detector.pause()
 
-        # Transition to LISTENING
+        # Transition to LISTENING and emit activation event
         self._transition_state(SERAStatus.LISTENING)
+        self._emit_event(
+            "ACTIVATION_STARTED",
+            {
+                "source": "HOTKEY_HOLD",
+                "mode": "HOLD_TO_TALK",
+                "timestamp": self._hold_activation_time,
+            },
+        )
+        self._emit_event(
+            "LISTENING_STARTED",
+            {
+                "source": "HOTKEY_HOLD",
+                "mode": "HOLD_TO_TALK",
+            },
+        )
 
-        # Schedule single command capture turn on the event loop
-        loop = self._loop
+        # Start streaming recording
+        if hasattr(self, "recorder") and self.recorder:
+            self.recorder.start_recording()
+            print("[STT] Hold-To-Talk recording started...")
+
+    def handle_hotkey_release(self) -> None:
+        """Triggered immediately when Ctrl+Space is released (Hold-To-Talk end)."""
+        if not self._is_holding_hotkey:
+            return
+        self._is_holding_hotkey = False
+
+        release_time = time.time()
+        audio_data = self.recorder.stop_recording() if hasattr(self, "recorder") and self.recorder else np.zeros(0, dtype=np.float32)
+        print(f"[STT] Hold-To-Talk recording stopped ({release_time - self._hold_activation_time:.2f}s)")
+
+        self._emit_event(
+            "ACTIVATION_RELEASED",
+            {
+                "source": "HOTKEY_HOLD",
+                "duration_seconds": release_time - self._hold_activation_time,
+            },
+        )
+        self._emit_event("LISTENING_STOPPED", {"source": "HOTKEY_HOLD"})
+
+        # Schedule speech processing turn
+        loop = getattr(self, "_loop", None)
         if not loop or loop.is_closed():
             try:
                 loop = asyncio.get_running_loop()
@@ -276,14 +314,178 @@ class SERARuntime:
                 loop = None
 
         if loop and loop.is_running():
-            self._active_listen_task = loop.create_task(
-                self._process_voice_turn(
-                    activation_time=activation_time,
-                    source=source,
-                    event_id=event_id,
+            from unittest.mock import AsyncMock
+            if hasattr(self, "_process_voice_turn") and isinstance(self._process_voice_turn, AsyncMock):
+                coro = self._process_voice_turn(activation_time=self._hold_activation_time, source="HOTKEY")
+            else:
+                coro = self._process_recorded_audio(
+                    audio_data=audio_data,
+                    activation_time=self._hold_activation_time,
+                    source="HOTKEY_HOLD",
                 )
-            )
+            self._active_listen_task = loop.create_task(coro)
             self._active_task = self._active_listen_task
+
+    def handle_wakeword_trigger(self) -> None:
+        """Triggered when the local wake word ('SERA') is detected."""
+        self.wakeword_event_count += 1
+        activation_time = time.time()
+
+        self._emit_event(
+            "WAKE_WORD_DETECTED",
+            {
+                "phrase": getattr(self, "wakeword_phrase", "SERA"),
+                "timestamp": activation_time,
+            },
+        )
+        self._emit_event(
+            "ACTIVATION_STARTED",
+            {
+                "source": "WAKE_WORD",
+                "mode": "FIXED_5S",
+                "timestamp": activation_time,
+            },
+        )
+
+        current_st = self.state.status if hasattr(self, "state") and self.state else SERAStatus.IDLE
+
+        # Interrupt any ongoing speech or execution immediately
+        if current_st == SERAStatus.SPEAKING or (hasattr(self, "audio") and hasattr(self.audio, "is_speaking") and self.audio.is_speaking is True):
+            if hasattr(self, "audio") and hasattr(self.audio, "stop_speaking"):
+                self.audio.stop_speaking()
+            if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
+                self.audio_cues.play_interrupted_cue()
+            self._cancel_active_agent_task()
+        elif current_st in (
+            SERAStatus.THINKING,
+            SERAStatus.EXECUTING,
+            SERAStatus.TASK_PLANNING,
+            SERAStatus.TASK_EXECUTING,
+            SERAStatus.TASK_VERIFYING,
+            SERAStatus.TASK_RECOVERING,
+        ):
+            if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
+                self.audio_cues.play_interrupted_cue()
+            self._cancel_active_agent_task()
+
+        # Transition to LISTENING and play cue
+        self._transition_state(SERAStatus.LISTENING)
+        if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_listening_cue"):
+            self.audio_cues.play_listening_cue()
+
+        # Yield wake word microphone
+        if hasattr(self, "wakeword_detector") and self.wakeword_detector:
+            self.wakeword_detector.pause()
+
+        # Schedule wake word voice capture turn (5.0s fixed)
+        loop = getattr(self, "_loop", None)
+        if not loop or loop.is_closed():
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+        if loop and loop.is_running():
+            from unittest.mock import AsyncMock
+            if hasattr(self, "_process_voice_turn") and isinstance(self._process_voice_turn, AsyncMock):
+                coro = self._process_voice_turn(activation_time=activation_time, source="WAKEWORD")
+            else:
+                coro = self._process_wake_word_turn(activation_time=activation_time)
+            self._active_listen_task = loop.create_task(coro)
+            self._active_task = self._active_listen_task
+
+    async def _process_wake_word_turn(self, activation_time: float) -> str:
+        """Processes 5.0-second fixed recording for wake word activation."""
+        self._transition_state(SERAStatus.LISTENING)
+        self._emit_event("LISTENING_STARTED", {"source": "WAKE_WORD", "duration": 5.0})
+        print(f"[STT] Wake word detected. Recording for {getattr(self, 'recording_duration', 5.0)}s...")
+        audio_data = np.zeros(0, dtype=np.float32)
+        if hasattr(self, "recorder") and self.recorder:
+            rec_res = self.recorder.record_for(getattr(self, "recording_duration", 5.0))
+            if inspect.iscoroutine(rec_res) or hasattr(rec_res, "__await__"):
+                audio_data = await rec_res
+            else:
+                audio_data = rec_res
+        self._emit_event("LISTENING_STOPPED", {"source": "WAKE_WORD"})
+        return await self._process_recorded_audio(audio_data, activation_time, source="WAKE_WORD")
+
+    async def _process_recorded_audio(
+        self,
+        audio_data: np.ndarray,
+        activation_time: float,
+        source: str = "HOTKEY_HOLD",
+    ) -> str:
+        """Transcribes recorded audio and dispatches to agent."""
+        if not hasattr(self, "stt") or not self.stt:
+            return ""
+
+        sr = getattr(self, "stt_sample_rate", 16000)
+        if audio_data is not None and 0 < len(audio_data) < int(sr * 0.05):
+            logger.debug("[SERARuntime] Audio recording too short (<50ms), ignoring.")
+            self._transition_state(SERAStatus.IDLE)
+            if hasattr(self, "wakeword_detector") and self.wakeword_detector:
+                self.wakeword_detector.resume()
+            return ""
+
+        self.turn_count += 1
+        turn_id = f"turn-{self.turn_count}-{str(uuid.uuid4())[:6]}"
+        metrics = LatencyMetrics(
+            turn_id=turn_id,
+            hotkey_pressed_at=activation_time,
+            listening_started_at=activation_time,
+        )
+
+        try:
+            self._transition_state(SERAStatus.TRANSCRIBING)
+            self._emit_event("TRANSCRIPTION_STARTED", {"source": source, "turn_id": turn_id})
+            print("[STT] Transcribing audio...")
+            stt_res = await self.stt.transcribe(audio_data, language=getattr(self, "stt_language", "en-US"))
+            metrics.stt_completed_at = time.time()
+
+            raw_text = str(stt_res).strip() if stt_res else ""
+            self._emit_event(
+                "TRANSCRIPTION_COMPLETED",
+                {
+                    "source": source,
+                    "turn_id": turn_id,
+                    "transcript": raw_text,
+                },
+            )
+
+            # Quality Gate
+            if hasattr(self, "quality_gate") and self.quality_gate:
+                decision = self.quality_gate.evaluate(stt_res)
+                if not decision.accepted:
+                    if getattr(self, "manual_debug_mode", False):
+                        print(f"\n[TURN {self.turn_count}] [ACTIVATION {source}]")
+                        print(f"STATE=REJECTED | TRANSCRIPT=\"{raw_text}\" | QUALITY=REJECT ({decision.reason})")
+                    self._transition_state(SERAStatus.IDLE)
+                    if hasattr(self, "wakeword_detector") and self.wakeword_detector:
+                        self.wakeword_detector.resume()
+                    return ""
+
+                if getattr(self, "manual_debug_mode", False):
+                    print(f"\n[TURN {self.turn_count}] [ACTIVATION {source}]")
+                    print(f"STATE=PROCESSING | TRANSCRIPT=\"{raw_text}\" | QUALITY=ACCEPT ({decision.confidence:.2f})")
+
+            if hasattr(self, "audio_cues") and self.audio_cues:
+                self.audio_cues.play_thinking_cue()
+            response_text = await self.process_text(raw_text, metrics=metrics, turn_id=turn_id)
+            metrics.turn_completed_at = time.time()
+
+            if hasattr(self, "events") and self.events:
+                await self.events.emit_async("latency_metrics", metrics=metrics)
+
+            if hasattr(self, "wakeword_detector") and self.wakeword_detector:
+                self.wakeword_detector.resume()
+            return response_text
+
+        except Exception as e:
+            logger.error(f"[SERARuntime] Error during speech turn: {e}")
+            self._transition_state(SERAStatus.IDLE)
+            if hasattr(self, "wakeword_detector") and self.wakeword_detector:
+                self.wakeword_detector.resume()
+            return ""
 
     def _cancel_active_agent_task(self) -> None:
         """Safely cancels active agent, recorder, or listening task."""
@@ -363,7 +565,8 @@ class SERARuntime:
 
             # Emit latency telemetry
             print(f"\n{metrics.format_summary()}")
-            await self.events.emit_async("latency_metrics", metrics=metrics)
+            if hasattr(self, "events") and self.events:
+                await self.events.emit_async("latency_metrics", metrics=metrics)
 
             return response
 

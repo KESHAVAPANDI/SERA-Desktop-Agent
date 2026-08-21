@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class AudioRecorder:
-    """Fixed-duration microphone audio recording service with zero VAD delay and cancellation."""
+    """Microphone audio recording service supporting both dynamic Hold-To-Talk and fixed wake-word duration."""
 
     def __init__(
         self,
@@ -26,6 +26,9 @@ class AudioRecorder:
         self._lock = threading.Lock()
         self._cancel_flag = False
 
+        self._stream: sd.InputStream | None = None
+        self._active_chunks: list[np.ndarray] = []
+
     @property
     def is_recording(self) -> bool:
         return self._is_recording
@@ -33,60 +36,86 @@ class AudioRecorder:
     def cancel(self) -> None:
         """Signals active recording to immediately halt."""
         self._cancel_flag = True
+        self.stop_recording()
 
-    async def record_for(self, seconds: float = 5.0) -> np.ndarray:
-        """Records from the microphone for exactly `seconds` duration.
-
-        No VAD, no speech detection, no silence timeouts.
-        Returns:
-            1D numpy array of float32 samples.
-        """
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._record_sync, seconds)
-
-    def _record_sync(self, seconds: float) -> np.ndarray:
+    def start_recording(self) -> bool:
+        """Starts streaming microphone audio into internal buffer for Hold-To-Talk."""
         with self._lock:
+            if self._is_recording:
+                return False
             self._is_recording = True
             self._cancel_flag = False
-
-        total_frames = int(self.sample_rate * seconds)
-        recorded_chunks = []
-        frames_collected = 0
+            self._active_chunks = []
 
         def callback(indata, frames, time_info, status):
             if status:
                 logger.debug(f"[AudioRecorder] InputStream status: {status}")
-            recorded_chunks.append(indata[:, 0].copy())
+            with self._lock:
+                if self._is_recording:
+                    self._active_chunks.append(indata[:, 0].copy())
 
         try:
-            with sd.InputStream(
+            self._stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
                 dtype=self.dtype,
                 blocksize=self.block_size,
                 callback=callback,
-            ):
-                t_start = time.perf_counter()
-                target_time = t_start + seconds
-
-                while time.perf_counter() < target_time:
-                    if self._cancel_flag:
-                        logger.info("[AudioRecorder] Recording cancelled by user/runtime.")
-                        break
-                    time.sleep(0.01)
-
-            if not recorded_chunks:
-                return np.zeros(0, dtype=np.float32)
-
-            audio_data = np.concatenate(recorded_chunks)
-            # Ensure exact length or trim if slight overage
-            if len(audio_data) > total_frames:
-                audio_data = audio_data[:total_frames]
-            return audio_data
-
+            )
+            self._stream.start()
+            logger.info("[AudioRecorder] Hold-To-Talk recording stream opened.")
+            return True
         except Exception as e:
-            logger.error(f"[AudioRecorder] Error during audio capture: {e}")
-            return np.zeros(0, dtype=np.float32)
-        finally:
+            logger.error(f"[AudioRecorder] Failed to open recording stream: {e}")
             with self._lock:
                 self._is_recording = False
+            return False
+
+    def stop_recording(self) -> np.ndarray:
+        """Stops streaming microphone audio and returns concatenated float32 numpy array."""
+        with self._lock:
+            if not self._is_recording and not self._stream:
+                return np.zeros(0, dtype=np.float32)
+            self._is_recording = False
+
+        if self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception as e:
+                logger.debug(f"[AudioRecorder] Error closing stream: {e}")
+            finally:
+                self._stream = None
+
+        with self._lock:
+            if not self._active_chunks:
+                return np.zeros(0, dtype=np.float32)
+            audio_data = np.concatenate(self._active_chunks)
+            self._active_chunks = []
+
+        logger.info(f"[AudioRecorder] Recorded {len(audio_data)} samples ({len(audio_data)/self.sample_rate:.2f}s).")
+        return audio_data
+
+    async def record_for(self, seconds: float = 5.0) -> np.ndarray:
+        """Records from the microphone for exactly `seconds` duration (for wake-word capture)."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._record_sync, seconds)
+
+    def _record_sync(self, seconds: float) -> np.ndarray:
+        if not self.start_recording():
+            return np.zeros(0, dtype=np.float32)
+
+        t_start = time.perf_counter()
+        target_time = t_start + seconds
+
+        while time.perf_counter() < target_time:
+            if self._cancel_flag:
+                logger.info("[AudioRecorder] Recording cancelled.")
+                break
+            time.sleep(0.02)
+
+        audio_data = self.stop_recording()
+        total_frames = int(self.sample_rate * seconds)
+        if len(audio_data) > total_frames:
+            audio_data = audio_data[:total_frames]
+        return audio_data

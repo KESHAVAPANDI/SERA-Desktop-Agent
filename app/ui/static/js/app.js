@@ -154,35 +154,42 @@ class SERAApp {
       if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);
-      this.views.live?.setAuraState(data.status);
-    } else if (eventType === "CAPTURE_COUNTDOWN") {
-      this.views.live?.startCaptureCountdown(data.duration_seconds || 5.0, data.activation_method || "HOTKEY");
-      if (this.captureBadge) {
-        this.captureBadge.classList.remove("hidden");
-        let rem = data.duration_seconds || 5.0;
-        const intv = setInterval(() => {
-          rem -= 0.1;
-          if (rem <= 0) {
-            clearInterval(intv);
-            this.captureBadge.classList.add("hidden");
-          } else {
-            this.captureBadge.textContent = `${rem.toFixed(1)}s`;
-          }
-        }, 100);
+      this.views.live?.setAuraState(data.status, data);
+      this.views.live?.logActivity("STATE", `State: ${data.status}`);
+    } else if (eventType === "ACTIVATION_STARTED") {
+      this.views.live?.setAuraState("LISTENING", data);
+      this.views.live?.logActivity("ACTIVATION", `${data.source} (${data.mode || 'HOLD'})`);
+    } else if (eventType === "ACTIVATION_RELEASED") {
+      this.views.live?.setAuraState("TRANSCRIBING");
+      this.views.live?.logActivity("ACTIVATION", `Released after ${data.duration_seconds?.toFixed(2)}s`);
+    } else if (eventType === "WAKE_WORD_DETECTED") {
+      this.views.live?.setAuraState("LISTENING", { source: "WAKE_WORD" });
+      this.views.live?.logActivity("WAKE", `Wake word '${data.phrase}' detected`);
+    } else if (eventType === "TRANSCRIPTION_STARTED") {
+      this.updateRuntimeState("TRANSCRIBING");
+      this.views.live?.setAuraState("TRANSCRIBING");
+    } else if (eventType === "TRANSCRIPTION_COMPLETED") {
+      if (data.transcript) {
+        this.views.live?.appendMessage("user", data.transcript);
+        this.views.live?.startTask(data.transcript);
+        this.views.live?.logActivity("TRANSCRIPT", data.transcript);
       }
-    } else if (eventType === "TRANSCRIPT_RECEIVED") {
-      this.views.live?.appendMessage("user", data.text);
-      this.views.live?.startTask(data.text);
-    } else if (eventType === "AGENT_RESPONSE") {
-      this.views.live?.appendMessage("sera", data.text);
+    } else if (eventType === "MODEL_SELECTED") {
+      this.views.live?.logActivity("MODEL", `${data.role} ➔ ${data.provider} • ${data.model}`);
     } else if (eventType === "TOOL_STARTED") {
       this.views.live?.updateTaskStep(2, 4, `Executing ${data.tool}`);
-    } else if (eventType === "VISION_STARTED") {
-      this.views.live?.updateTaskStep(3, 4, "Inspecting screen context");
+      this.views.live?.logActivity("TOOL", `Started: ${data.tool}`);
+    } else if (eventType === "TOOL_COMPLETED") {
+      this.views.live?.logActivity("TOOL", `Completed: ${data.tool} (${data.latency_ms || 0}ms)`);
+    } else if (eventType === "AGENT_RESPONSE") {
+      this.views.live?.appendMessage("sera", data.text);
+      this.views.live?.logActivity("RESPONSE", data.text);
     } else if (eventType === "TASK_COMPLETED") {
       this.views.live?.stopTask("Task completed");
+      this.views.live?.logActivity("STATUS", "✓ Task Completed");
     } else if (eventType === "TASK_CANCELLED") {
       this.views.live?.stopTask("Task cancelled");
+      this.views.live?.logActivity("STATUS", "✕ Task Cancelled");
     } else if (eventType === "SECURITY_CONFIRMATION_REQUIRED") {
       this.views.security?.showConfirmationRequest(data.action_id, data.tool_name, data.prompt, data.arguments);
       this.updateRuntimeState("CONFIRMING_ACTION", `Confirmation required: ${data.tool_name}`);
