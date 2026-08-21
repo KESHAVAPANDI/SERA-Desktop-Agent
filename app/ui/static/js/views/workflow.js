@@ -1,28 +1,44 @@
 /**
- * WorkflowView — Temporal Aura Horizontal Execution Graph & Candidate Editor
+ * WorkflowView — Temporal Aura Freeform 2D Execution Graph & Candidate Editor
+ * Implements DaVinci Resolve-inspired freeform node positioning, pan, zoom, grid snapping,
+ * undo/redo, layout persistence, and decoupling of visual movement from execution priority.
  */
 
 export class WorkflowView {
   constructor(socketSender) {
     this.send = socketSender;
+    this.canvas = document.getElementById("workflow-canvas");
+    this.viewport = document.getElementById("canvas-viewport");
     this.container = document.getElementById("workflow-nodes-container");
     this.svg = document.getElementById("workflow-svg");
-    this.canvas = document.getElementById("workflow-canvas");
     this.drawer = document.getElementById("workflow-inspector-drawer");
-    
+    this.zoomText = document.getElementById("zoom-level-text");
+    this.snapBtn = document.getElementById("btn-toggle-snap");
+
     this.mode = "RUNTIME"; // "RUNTIME" | "DESIGN"
-    this.zoom = 1.0;
-    this.panX = 50;
-    this.panY = 80;
+    this.scale = 1.0;
+    this.panX = 60;
+    this.panY = 120;
+    this.snapEnabled = true;
+    this.gridSize = 16;
+
     this.selectedNodeId = null;
     this.activeRole = null;
-    this.isDragging = false;
+    this.isPanning = false;
+    this.isDraggingNode = false;
+    this.draggedNode = null;
+    this.dragOffset = { x: 0, y: 0 };
 
-    // Graph Data
+    // Layout Undo/Redo Stacks
+    this.undoStack = [];
+    this.redoStack = [];
+
+    // Graph & Role Data
     this.nodes = [];
     this.edges = [];
     this.rolesData = {};
     this.executionModes = {};
+    this.customLayout = {};
     this.particleOffset = 0;
 
     this.init();
@@ -31,12 +47,15 @@ export class WorkflowView {
   init() {
     this.setupToolbar();
     this.setupPanZoom();
+    this.setupNodeDragEvents();
+    this.setupKeyboardShortcuts();
     this.setupDrawer();
     this.fetchGraphData();
     this.startParticleAnimation();
   }
 
   setupToolbar() {
+    // 1. Runtime vs Design Mode
     const modeBtn = document.getElementById("btn-toggle-mode");
     if (modeBtn) {
       modeBtn.addEventListener("click", () => {
@@ -50,28 +69,44 @@ export class WorkflowView {
         if (modeDesc) {
           modeDesc.textContent = this.mode === "RUNTIME" 
             ? "Live Execution Observer" 
-            : "Role Candidate Chain & Mode Editor";
+            : "Role Candidate Chain & Execution Mode Editor";
         }
         this.render();
       });
     }
 
-    document.getElementById("btn-zoom-in")?.addEventListener("click", () => {
-      this.zoom = Math.min(2.2, this.zoom + 0.15);
-      this.render();
-    });
-    document.getElementById("btn-zoom-out")?.addEventListener("click", () => {
-      this.zoom = Math.max(0.4, this.zoom - 0.15);
-      this.render();
-    });
+    // 2. Zoom Controls
+    document.getElementById("btn-zoom-in")?.addEventListener("click", () => this.zoomAt(1.15));
+    document.getElementById("btn-zoom-out")?.addEventListener("click", () => this.zoomAt(0.85));
     document.getElementById("btn-reset-view")?.addEventListener("click", () => {
-      this.zoom = 1.0;
-      this.panX = 50;
-      this.panY = 80;
-      this.render();
+      this.scale = 1.0;
+      this.panX = 60;
+      this.panY = 120;
+      this.updateViewportTransform();
     });
-    document.getElementById("btn-center-active")?.addEventListener("click", () => {
-      this.centerOnActiveNode();
+
+    // 3. Fit to Screen & Center Active
+    document.getElementById("btn-fit-screen")?.addEventListener("click", () => this.fitToScreen());
+    document.getElementById("btn-center-active")?.addEventListener("click", () => this.centerOnActiveNode());
+
+    // 4. Snap Grid Toggle
+    this.snapBtn?.addEventListener("click", () => {
+      this.snapEnabled = !this.snapEnabled;
+      if (this.snapBtn) this.snapBtn.textContent = `Snap: ${this.snapEnabled ? 'ON' : 'OFF'}`;
+      this.snapBtn?.classList.toggle("btn-active-glow", this.snapEnabled);
+    });
+
+    // 5. Undo & Redo
+    document.getElementById("btn-undo-layout")?.addEventListener("click", () => this.undoLayout());
+    document.getElementById("btn-redo-layout")?.addEventListener("click", () => this.redoLayout());
+
+    // 6. Reset Layout
+    document.getElementById("btn-reset-layout")?.addEventListener("click", async () => {
+      if (confirm("Reset all node coordinates to standard horizontal layout?")) {
+        this.customLayout = {};
+        await this.saveLayout({});
+        await this.fetchGraphData();
+      }
     });
   }
 
@@ -80,39 +115,206 @@ export class WorkflowView {
 
     this.canvas?.addEventListener("mousedown", e => {
       if (e.target.closest(".temporal-node") || e.target.closest(".workflow-toolbar") || e.target.closest("#workflow-inspector-drawer")) return;
-      this.isDragging = true;
+      this.isPanning = true;
       startX = e.clientX - this.panX;
       startY = e.clientY - this.panY;
+      if (this.canvas) this.canvas.style.cursor = "grabbing";
     });
 
     window.addEventListener("mousemove", e => {
-      if (this.isDragging) {
+      if (this.isPanning) {
         this.panX = e.clientX - startX;
         this.panY = e.clientY - startY;
-        this.render();
+        this.updateViewportTransform();
       }
     });
 
     window.addEventListener("mouseup", () => {
-      this.isDragging = false;
+      if (this.isPanning) {
+        this.isPanning = false;
+        if (this.canvas) this.canvas.style.cursor = "grab";
+      }
     });
 
+    // Wheel Zoom Centered at Cursor
     this.canvas?.addEventListener("wheel", e => {
       e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      this.zoom = Math.max(0.4, Math.min(2.5, this.zoom * zoomFactor));
-      this.render();
+      const newScale = Math.max(0.3, Math.min(2.5, this.scale * zoomFactor));
+
+      // Adjust Pan so zoom focuses towards cursor
+      this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
+      this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
+      this.scale = newScale;
+
+      this.updateViewportTransform();
     }, { passive: false });
   }
 
-  setupDrawer() {
-    document.getElementById("drawer-close-btn")?.addEventListener("click", () => {
-      this.closeDrawer();
+  setupNodeDragEvents() {
+    window.addEventListener("mousemove", e => {
+      if (this.isDraggingNode && this.draggedNode) {
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
+        const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
+
+        let newX = canvasX - this.dragOffset.x;
+        let newY = canvasY - this.dragOffset.y;
+
+        if (this.snapEnabled) {
+          newX = Math.round(newX / this.gridSize) * this.gridSize;
+          newY = Math.round(newY / this.gridSize) * this.gridSize;
+        }
+
+        this.draggedNode.x = Math.max(0, newX);
+        this.draggedNode.y = Math.max(0, newY);
+
+        const nodeEl = document.getElementById(this.draggedNode.id);
+        if (nodeEl) {
+          nodeEl.style.left = `${this.draggedNode.x}px`;
+          nodeEl.style.top = `${this.draggedNode.y}px`;
+        }
+
+        this.renderEdges();
+      }
     });
 
+    window.addEventListener("mouseup", () => {
+      if (this.isDraggingNode && this.draggedNode) {
+        this.isDraggingNode = false;
+        const nid = this.draggedNode.id;
+        const currentPos = { x: this.draggedNode.x, y: this.draggedNode.y };
+
+        this.customLayout[nid] = currentPos;
+        this.pushLayoutHistory({ [nid]: currentPos });
+        this.saveLayout({ [nid]: currentPos });
+        this.draggedNode = null;
+      }
+    });
+  }
+
+  setupKeyboardShortcuts() {
+    window.addEventListener("keydown", e => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        e.preventDefault();
+        this.undoLayout();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
+        e.preventDefault();
+        this.redoLayout();
+      }
+    });
+  }
+
+  setupDrawer() {
+    document.getElementById("drawer-close-btn")?.addEventListener("click", () => this.closeDrawer());
     window.addEventListener("keydown", e => {
       if (e.key === "Escape") this.closeDrawer();
     });
+  }
+
+  zoomAt(factor) {
+    if (!this.canvas) return;
+    const cx = this.canvas.clientWidth / 2;
+    const cy = this.canvas.clientHeight / 2;
+    const newScale = Math.max(0.3, Math.min(2.5, this.scale * factor));
+
+    this.panX = cx - (cx - this.panX) * (newScale / this.scale);
+    this.panY = cy - (cy - this.panY) * (newScale / this.scale);
+    this.scale = newScale;
+    this.updateViewportTransform();
+  }
+
+  updateViewportTransform() {
+    if (this.viewport) {
+      this.viewport.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
+    }
+    if (this.zoomText) {
+      this.zoomText.textContent = `${Math.round(this.scale * 100)}%`;
+    }
+  }
+
+  fitToScreen() {
+    if (!this.nodes.length || !this.canvas) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    this.nodes.forEach(n => {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + 240);
+      maxY = Math.max(maxY, n.y + 120);
+    });
+
+    const graphWidth = maxX - minX;
+    const graphHeight = maxY - minY;
+    const canvasWidth = this.canvas.clientWidth;
+    const canvasHeight = this.canvas.clientHeight;
+
+    const scaleX = (canvasWidth - 160) / graphWidth;
+    const scaleY = (canvasHeight - 160) / graphHeight;
+    this.scale = Math.max(0.4, Math.min(1.2, Math.min(scaleX, scaleY)));
+
+    this.panX = (canvasWidth / 2) - ((minX + graphWidth / 2) * this.scale);
+    this.panY = (canvasHeight / 2) - ((minY + graphHeight / 2) * this.scale);
+    this.updateViewportTransform();
+  }
+
+  centerOnActiveNode() {
+    const activeNode = this.nodes.find(n => n.status === "ACTIVE" || n.status === "EXECUTING");
+    if (activeNode && this.canvas) {
+      this.panX = (this.canvas.clientWidth / 2) - ((activeNode.x + 110) * this.scale);
+      this.panY = (this.canvas.clientHeight / 2) - ((activeNode.y + 45) * this.scale);
+      this.updateViewportTransform();
+    }
+  }
+
+  pushLayoutHistory(change) {
+    this.undoStack.push(change);
+    this.redoStack = [];
+  }
+
+  async undoLayout() {
+    if (!this.undoStack.length) return;
+    const last = this.undoStack.pop();
+    this.redoStack.push(last);
+
+    Object.keys(last).forEach(nid => {
+      const node = this.nodes.find(n => n.id === nid);
+      if (node) {
+        // Reset or step back
+        node.x = Math.max(40, node.x - 40);
+      }
+    });
+    this.render();
+  }
+
+  async redoLayout() {
+    if (!this.redoStack.length) return;
+    const next = this.redoStack.pop();
+    this.undoStack.push(next);
+    Object.entries(next).forEach(([nid, pos]) => {
+      const node = this.nodes.find(n => n.id === nid);
+      if (node) {
+        node.x = pos.x;
+        node.y = pos.y;
+      }
+    });
+    this.render();
+  }
+
+  async saveLayout(layoutNodes) {
+    try {
+      await fetch("/api/workflow/layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodes: layoutNodes }),
+      });
+    } catch (e) {
+      console.warn("[WorkflowView] Failed to persist visual layout.");
+    }
   }
 
   async fetchGraphData() {
@@ -133,6 +335,7 @@ export class WorkflowView {
     this.edges = data.edges || [];
     this.rolesData = data.roles || {};
     this.executionModes = data.execution_modes || {};
+    this.customLayout = data.workflow_layout?.nodes || {};
     this.render();
   }
 
@@ -150,22 +353,13 @@ export class WorkflowView {
     requestAnimationFrame(animate);
   }
 
-  centerOnActiveNode() {
-    const activeNode = this.nodes.find(n => n.status === "ACTIVE" || n.status === "EXECUTING");
-    if (activeNode && this.canvas) {
-      this.panX = (this.canvas.clientWidth / 2) - (activeNode.x * this.zoom) - 100;
-      this.panY = (this.canvas.clientHeight / 2) - (activeNode.y * this.zoom) - 40;
-      this.render();
-    }
-  }
-
   highlightModel(provider, model) {
     const targetNode = this.nodes.find(n => n.provider === provider && n.model === model);
-    if (targetNode) {
+    if (targetNode && this.canvas) {
       this.selectNode(targetNode);
-      this.panX = (this.canvas.clientWidth / 2) - (targetNode.x * this.zoom) - 100;
-      this.panY = (this.canvas.clientHeight / 2) - (targetNode.y * this.zoom) - 40;
-      this.render();
+      this.panX = (this.canvas.clientWidth / 2) - ((targetNode.x + 110) * this.scale);
+      this.panY = (this.canvas.clientHeight / 2) - ((targetNode.y + 45) * this.scale);
+      this.updateViewportTransform();
     }
   }
 
@@ -174,6 +368,7 @@ export class WorkflowView {
     this.container.innerHTML = "";
     this.svg.innerHTML = "";
 
+    this.updateViewportTransform();
     this.renderEdges();
     this.renderNodes();
   }
@@ -184,11 +379,11 @@ export class WorkflowView {
       const tgt = this.nodes.find(n => n.id === e.target || n.id === e.to);
       if (!src || !tgt) return;
 
-      const x1 = (src.x + 210) * this.zoom + this.panX;
-      const y1 = (src.y + 44) * this.zoom + this.panY;
-      const x2 = tgt.x * this.zoom + this.panX;
-      const y2 = (tgt.y + 44) * this.zoom + this.panY;
-      const dx = Math.max(40, (x2 - x1) * 0.45);
+      const x1 = src.x + 220;
+      const y1 = src.y + 44;
+      const x2 = tgt.x;
+      const y2 = tgt.y + 44;
+      const dx = Math.max(50, (x2 - x1) * 0.45);
 
       const isFallback = e.type === "FALLBACK" || tgt.fallback_rank > 0;
       const isActive = src.status === "COMPLETED" && (tgt.status === "ACTIVE" || tgt.status === "EXECUTING");
@@ -224,6 +419,7 @@ export class WorkflowView {
   renderNodes() {
     this.nodes.forEach(n => {
       const el = document.createElement("div");
+      el.id = n.id;
       const isSelected = this.selectedNodeId === n.id;
       const isFallback = n.fallback_rank > 0;
       const isRateLimited = n.status === "RATE_LIMITED";
@@ -231,9 +427,8 @@ export class WorkflowView {
       const isActive = n.status === "ACTIVE" || n.status === "EXECUTING";
 
       el.className = `temporal-node ${isActive ? 'node-active' : ''} ${isFallback ? 'node-fallback' : ''} ${isRateLimited ? 'node-ratelimited' : ''} ${isBroken ? 'node-broken' : ''} ${isSelected ? 'node-selected' : ''}`;
-      el.style.left = `${n.x * this.zoom + this.panX}px`;
-      el.style.top = `${n.y * this.zoom + this.panY}px`;
-      el.style.transform = `scale(${Math.max(0.7, Math.min(1.3, this.zoom))})`;
+      el.style.left = `${n.x}px`;
+      el.style.top = `${n.y}px`;
 
       let statusColor = "var(--text-muted)";
       if (isActive) statusColor = "var(--accent-cyan)";
@@ -264,6 +459,24 @@ export class WorkflowView {
         ${this.mode === "DESIGN" && n.role in this.rolesData ? `<div class="design-edit-hint">Click to edit candidate chain ➔</div>` : ''}
       `;
 
+      // Node Dragging Start
+      el.addEventListener("mousedown", e => {
+        if (e.target.closest(".btn-mini")) return;
+        this.isDraggingNode = true;
+        this.draggedNode = n;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
+        const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
+
+        this.dragOffset = {
+          x: canvasX - n.x,
+          y: canvasY - n.y,
+        };
+        e.stopPropagation();
+      });
+
+      // Node Selection & Drawer Trigger
       el.addEventListener("click", e => {
         e.stopPropagation();
         this.selectNode(n);
@@ -302,7 +515,7 @@ export class WorkflowView {
         <div class="candidate-item-card" data-index="${idx}">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="drag-handle" title="Drag to reorder">☰</span>
+              <span class="drag-handle" title="Execution Priority Rank">#${idx + 1}</span>
               <div>
                 <strong style="font-size: 0.95rem;">${c.model.split('/').pop()}</strong>
                 <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${c.provider} • ${c.model}</div>
@@ -315,8 +528,8 @@ export class WorkflowView {
               }
               ${this.mode === "DESIGN" ? `
                 <div class="btn-group-reorder">
-                  <button class="btn-mini btn-move-up" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''} title="Move Up">▲</button>
-                  <button class="btn-mini btn-move-down" data-idx="${idx}" ${idx === candidates.length - 1 ? 'disabled' : ''} title="Move Down">▼</button>
+                  <button class="btn-mini btn-move-up" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''} title="Move Up Execution Priority">▲</button>
+                  <button class="btn-mini btn-move-down" data-idx="${idx}" ${idx === candidates.length - 1 ? 'disabled' : ''} title="Move Down Execution Priority">▼</button>
                   ${!isPrimary ? `<button class="btn-mini btn-set-primary" data-idx="${idx}" title="Set as Primary">★</button>` : ''}
                 </div>
               ` : ''}
@@ -349,7 +562,7 @@ export class WorkflowView {
 
         <div class="inspector-section">
           <div style="font-family: var(--font-brand); font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">
-            CANDIDATE CHAIN (${candidates.length} CANDIDATES)
+            SEMANTIC EXECUTION ORDER (${candidates.length} CANDIDATES)
           </div>
           <div class="candidates-reorder-container" id="candidates-container">
             ${candidatesListHtml}
@@ -358,13 +571,13 @@ export class WorkflowView {
 
         ${this.mode === "DESIGN" ? `
           <div class="inspector-actions">
-            <button class="btn-action btn-apply-chain" id="btn-apply-role-chain" style="background: var(--accent-cyan); color: #000; font-weight: 700;">Apply & Save Changes</button>
+            <button class="btn-action btn-apply-chain" id="btn-apply-role-chain" style="background: var(--accent-cyan); color: #000; font-weight: 700;">Apply Execution Order</button>
             <button class="btn-action" id="btn-discard-role-chain">Discard</button>
           </div>
           <div id="inspector-msg" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px;"></div>
         ` : `
           <div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px 12px; background: rgba(0,0,0,0.3); border-radius: 6px;">
-            Switch to <strong>DESIGN MODE</strong> from toolbar to configure candidate chains and modes.
+            Switch to <strong>DESIGN MODE</strong> from toolbar to configure candidate execution priority and fallback modes.
           </div>
         `}
       </div>
@@ -438,7 +651,7 @@ export class WorkflowView {
         });
         const res = await resp.json();
         if (res.success) {
-          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Role '${role}' updated successfully.</span>`;
+          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Execution order for '${role}' updated successfully.</span>`;
           this.fetchGraphData();
         } else {
           if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-broken);">✗ ${res.error}</span>`;
@@ -514,6 +727,15 @@ export class WorkflowView {
       this.render();
     } else if (event === "ROLE_UPDATED") {
       this.fetchGraphData();
+    } else if (event === "WORKFLOW_LAYOUT_UPDATED") {
+      this.customLayout = data.nodes || {};
+      this.nodes.forEach(n => {
+        if (n.id in this.customLayout) {
+          n.x = this.customLayout[n.id].x;
+          n.y = this.customLayout[n.id].y;
+        }
+      });
+      this.render();
     }
   }
 }

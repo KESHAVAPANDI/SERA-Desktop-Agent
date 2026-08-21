@@ -18,6 +18,10 @@ class SERAApp {
     this.captureBadge = document.getElementById("capture-countdown-badge");
     this.privacyModeText = document.getElementById("privacy-mode-text");
 
+    // Runtime Connection Indicator
+    this.runtimeIndicator = document.getElementById("runtime-indicator");
+    this.runtimeText = document.getElementById("runtime-text");
+
     this.init();
   }
 
@@ -105,11 +109,29 @@ class SERAApp {
       };
 
       this.ws.onclose = () => {
+        this.setRuntimeConnectionStatus("DISCONNECTED");
         this.views.debug?.logEvent("GATEWAY_DISCONNECTED", { retry_in: "3s" });
         setTimeout(() => this.connectWebSocket(), 3000);
       };
     } catch (e) {
+      this.setRuntimeConnectionStatus("DISCONNECTED");
       console.warn("[SERA UI] Standalone mode.");
+    }
+  }
+
+  setRuntimeConnectionStatus(status) {
+    if (!this.runtimeIndicator || !this.runtimeText) return;
+    this.runtimeIndicator.className = "runtime-badge";
+
+    if (status === "ONLINE") {
+      this.runtimeIndicator.classList.add("runtime-online");
+      this.runtimeText.textContent = "RUNTIME: ONLINE";
+    } else if (status === "STANDALONE") {
+      this.runtimeIndicator.classList.add("runtime-standalone");
+      this.runtimeText.textContent = "RUNTIME: STANDALONE";
+    } else {
+      this.runtimeIndicator.classList.add("runtime-disconnected");
+      this.runtimeText.textContent = "RUNTIME: DISCONNECTED";
     }
   }
 
@@ -124,6 +146,9 @@ class SERAApp {
     this.views.workflow?.handleRuntimeEvent(eventType, data);
 
     if (eventType === "SNAPSHOT") {
+      const isAttached = Boolean(data.runtime_attached);
+      this.setRuntimeConnectionStatus(isAttached ? "ONLINE" : "STANDALONE");
+
       this.updateRuntimeState(data.status, data.active_task);
       if (data.providers) this.views.providers?.update(data.providers);
       if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);

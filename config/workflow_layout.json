@@ -1,0 +1,14 @@
+{
+  "workflow_layout": {
+    "nodes": {
+      "node_stt": {
+        "x": 160,
+        "y": 320
+      },
+      "node_router": {
+        "x": 480,
+        "y": 320
+      }
+    }
+  }
+}

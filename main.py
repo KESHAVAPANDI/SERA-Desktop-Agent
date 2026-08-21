@@ -1,20 +1,12 @@
-import asyncio
+import sys
+import os
 
-from dotenv import load_dotenv
+# Ensure project root is in sys.path
+PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-from app.core.assistant import SERA
-
-
-def main():
-
-    load_dotenv()
-
-    sera = SERA()
-
-    asyncio.run(
-        sera.run()
-    )
-
+from app.launcher import main
 
 if __name__ == "__main__":
     main()

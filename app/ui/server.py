@@ -104,7 +104,34 @@ class SERAUIServer:
         # Custom Registered Providers (Onboarded via Vercel-style modal)
         self.custom_providers: list[dict[str, Any]] = []
 
+        # Freeform Visual Workflow Layout Storage (Decoupled from execution configuration)
+        self.workflow_layout_path = os.path.join(PROJECT_ROOT, "config", "workflow_layout.json")
+        self.workflow_layout: dict[str, dict[str, float]] = self._load_workflow_layout()
+
         self._setup_event_listeners()
+
+    def _load_workflow_layout(self) -> dict[str, dict[str, float]]:
+        """Loads persistent 2D visual layout coordinates from config/workflow_layout.json."""
+        if os.path.isfile(self.workflow_layout_path):
+            try:
+                with open(self.workflow_layout_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data.get("workflow_layout", {}).get("nodes", {})
+            except Exception as e:
+                logger.warning(f"[SERAUIServer] Failed to read workflow layout file: {e}")
+        return {}
+
+    def _save_workflow_layout(self, layout_nodes: dict[str, dict[str, float]]) -> bool:
+        """Saves persistent 2D visual layout coordinates without altering execution configuration."""
+        try:
+            self.workflow_layout.update(layout_nodes)
+            os.makedirs(os.path.dirname(self.workflow_layout_path), exist_ok=True)
+            with open(self.workflow_layout_path, "w", encoding="utf-8") as f:
+                json.dump({"workflow_layout": {"nodes": self.workflow_layout}}, f, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"[SERAUIServer] Failed to save workflow layout: {e}")
+            return False
 
     def _setup_event_listeners(self):
         """Attaches real-time EventBus and State listeners to broadcast over WebSockets."""
@@ -354,9 +381,19 @@ class SERAUIServer:
             if path == "/api/state":
                 return "200 OK", resp_headers, json.dumps(self._get_initial_snapshot()).encode("utf-8")
 
-            # 2. Workflow
+            # 2. Workflow Dynamic Graph
             if path == "/api/workflow":
                 return "200 OK", resp_headers, json.dumps(self._get_dynamic_workflow_graph()).encode("utf-8")
+
+            # 2b. Workflow Visual Layout (GET & POST decoupled from execution)
+            if path == "/api/workflow/layout":
+                if method == "POST":
+                    nodes_data = body_json.get("nodes") or body_json.get("workflow_layout", {}).get("nodes", {})
+                    success = self._save_workflow_layout(nodes_data)
+                    if success:
+                        asyncio.create_task(self.broadcast_event("WORKFLOW_LAYOUT_UPDATED", {"nodes": self.workflow_layout}))
+                    return ("200 OK" if success else "400 Bad Request"), resp_headers, json.dumps({"success": success, "workflow_layout": {"nodes": self.workflow_layout}}).encode("utf-8")
+                return "200 OK", resp_headers, json.dumps({"workflow_layout": {"nodes": self.workflow_layout}}).encode("utf-8")
 
             # 3. Roles Update
             if path == "/api/roles/update":
@@ -602,6 +639,13 @@ class SERAUIServer:
         })
         edges.append({"id": "e_verify_tts", "source": "node_verify", "target": "node_tts", "type": "PRIMARY"})
 
+        # Apply custom visual layout overrides if present
+        for node in nodes:
+            nid = node["id"]
+            if nid in self.workflow_layout:
+                node["x"] = self.workflow_layout[nid].get("x", node["x"])
+                node["y"] = self.workflow_layout[nid].get("y", node["y"])
+
         return {
             "status": state_str,
             "active_task": getattr(self.runtime.state, "last_user_message", None) if self.runtime and hasattr(self.runtime, "state") else None,
@@ -609,6 +653,7 @@ class SERAUIServer:
             "edges": edges,
             "roles": roles_summary,
             "execution_modes": self.role_execution_modes,
+            "workflow_layout": {"nodes": self.workflow_layout},
             "timestamp": asyncio.get_event_loop().time(),
         }
 
@@ -803,6 +848,7 @@ class SERAUIServer:
 
         return {
             "status": state_str,
+            "runtime_attached": self.runtime is not None,
             "active_task": getattr(self.runtime.state, "last_user_message", None) if self.runtime and hasattr(self.runtime, "state") else None,
             "gpu_usage_pct": 18.4,
             "system_memory_mb": 3420,
@@ -811,6 +857,7 @@ class SERAUIServer:
             "providers": self._get_providers_summary(),
             "security": self._get_security_summary(),
             "workflow": self._get_dynamic_workflow_graph(),
+            "workflow_layout": {"nodes": self.workflow_layout},
         }
 
     def _get_roles_summary(self) -> dict[str, Any]:

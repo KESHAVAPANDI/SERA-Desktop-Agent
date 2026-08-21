@@ -77,6 +77,10 @@
       </nav>
 
       <div class="header-right">
+        <div id="runtime-indicator" class="runtime-badge runtime-online" title="SERA Voice Runtime Connection">
+          <span class="runtime-dot"></span>
+          <span id="runtime-text">RUNTIME: ONLINE</span>
+        </div>
         <div class="privacy-pill" title="Privacy: Hybrid Local & Cloud Processing">
           <span class="privacy-dot"></span>
           <span id="privacy-mode-text">HYBRID</span>
@@ -166,10 +170,17 @@
             <span style="color: var(--accent-cyan);">●</span> RUNTIME MODE
           </button>
           <div class="toolbar-divider"></div>
-          <button class="btn-action" id="btn-zoom-in" title="Zoom In">+</button>
-          <button class="btn-action" id="btn-zoom-out" title="Zoom Out">-</button>
-          <button class="btn-action" id="btn-reset-view" title="Reset Pan/Zoom">Reset</button>
+          <button class="btn-action btn-icon-sm" id="btn-zoom-in" title="Zoom In (+)">+</button>
+          <span id="zoom-level-text" class="zoom-level-text">100%</span>
+          <button class="btn-action btn-icon-sm" id="btn-zoom-out" title="Zoom Out (-)">-</button>
+          <button class="btn-action" id="btn-reset-view" title="Reset Pan/Zoom">Reset View</button>
+          <button class="btn-action" id="btn-fit-screen" title="Fit Graph to Screen">Fit</button>
           <button class="btn-action" id="btn-center-active" title="Center on Active Step">Center Active</button>
+          <div class="toolbar-divider"></div>
+          <button class="btn-action" id="btn-toggle-snap" title="Toggle 16px Grid Snapping">Snap: ON</button>
+          <button class="btn-action" id="btn-undo-layout" title="Undo Layout Move (Ctrl+Z)">↶ Undo</button>
+          <button class="btn-action" id="btn-redo-layout" title="Redo Layout Move (Ctrl+Y)">↷ Redo</button>
+          <button class="btn-action btn-danger" id="btn-reset-layout" title="Reset Node Layout Coordinates">Reset Layout</button>
           <div class="toolbar-divider"></div>
           <span id="workflow-mode-desc" style="color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono);">
             Live Execution Observer
@@ -177,8 +188,10 @@
         </div>
 
         <div id="workflow-canvas" class="workflow-canvas">
-          <svg id="workflow-svg" class="workflow-svg-layer"></svg>
-          <div id="workflow-nodes-container"></div>
+          <div id="canvas-viewport" class="canvas-viewport">
+            <svg id="workflow-svg" class="workflow-svg-layer"></svg>
+            <div id="workflow-nodes-container" class="workflow-nodes-layer"></div>
+          </div>
         </div>
 
         <!-- Sliding Inspector Drawer for Candidate Chains & Execution Modes -->
