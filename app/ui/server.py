@@ -5,7 +5,13 @@ import json
 import logging
 import mimetypes
 import os
+import sys
 from typing import Any
+
+# Ensure project root is in sys.path when executed directly as a script
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from app.core.router import RoleCandidate
 from app.utils.security import SecurityManager
@@ -1003,3 +1009,24 @@ class SERAUIServer:
             }
         ]
         return base_providers + self.custom_providers
+
+
+async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
+    server = SERAUIServer(host=host, port=port)
+    await server.start()
+    print(f"[SERA] Command Center running at http://{host}:{port}")
+    print("[SERA] Press Ctrl+C to stop.")
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        await server.stop()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    try:
+        asyncio.run(_run_standalone())
+    except KeyboardInterrupt:
+        print("\n[SERA] Server stopped.")
+
