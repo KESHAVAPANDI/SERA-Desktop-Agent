@@ -1542,18 +1542,403 @@ body::before {
   font-weight: 600;
 }
 
-.test-result-box {
-  background: rgba(0, 229, 153, 0.1);
-  border: 1px solid rgba(0, 229, 153, 0.3);
-  color: var(--accent-emerald);
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+/* ===================================================================
+   12. AGENT STUDIO & STYLIZED ANIMATED AGENTS
+   =================================================================== */
+.agent-tree-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--bg-surface-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
 }
 
-.hidden {
-  display: none !important;
+.tree-node {
+  font-family: var(--font-brand);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+
+.tree-node.parent {
+  background: var(--accent-cyan-dim);
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.tree-branch-line {
+  width: 2px;
+  height: 16px;
+  background: var(--border-active);
+  margin: 4px 0;
+}
+
+.tree-children-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.tree-node.child.active-agent {
+  background: var(--bg-card);
+  border: 1px solid var(--accent-violet);
+  color: var(--text-primary);
+}
+
+.tree-node.child.planned-agent {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.agent-grid-inner {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.agent-studio-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: pointer;
+}
+
+.agent-studio-card:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 8px 24px rgba(0, 240, 255, 0.15);
+}
+
+.agent-studio-card.selected {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px var(--accent-cyan), 0 8px 30px rgba(0, 240, 255, 0.25);
+}
+
+.agent-studio-card.planned-card {
+  opacity: 0.75;
+  border-style: dashed;
+}
+
+.agent-card-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.agent-avatar-frame {
+  width: 58px;
+  height: 58px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+
+.agent-avatar-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.agent-card-title {
+  font-family: var(--font-brand);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.agent-role-subtitle {
+  font-size: 0.75rem;
+  color: var(--accent-violet);
+  font-weight: 600;
+}
+
+.agent-status-tag {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.agent-status-tag.status-active {
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.agent-status-tag.status-planned {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.agent-desc-box {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.agent-spec-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.agent-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Character Animations */
+.anim-core-pulse { animation: core-pulse-anim 2s infinite ease-in-out; }
+.anim-core-idle { animation: core-idle-anim 4s infinite ease-in-out; }
+.anim-typing { animation: typing-anim 1s infinite alternate ease-in-out; }
+.anim-scanning { animation: scan-anim 1.5s infinite linear; }
+.anim-idle { animation: gentle-bob 3s infinite ease-in-out; }
+
+@keyframes core-pulse-anim {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--accent-cyan)); }
+  50% { transform: scale(1.08); filter: drop-shadow(0 0 12px var(--accent-cyan)); }
+}
+@keyframes core-idle-anim {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.03); opacity: 1; }
+}
+@keyframes typing-anim {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+@keyframes scan-anim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes gentle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+/* ===================================================================
+   13. TRUTHFUL MEMORY EMPTY STATE
+   =================================================================== */
+.memory-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-subtle);
+  border-radius: 16px;
+  max-width: 600px;
+  margin: 40px auto;
+}
+
+.memory-empty-icon {
+  margin-bottom: 16px;
+}
+
+.memory-empty-title {
+  font-family: var(--font-brand);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.memory-empty-subtext {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.memory-empty-capabilities {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: left;
+  margin-bottom: 24px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 12px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.memory-empty-capabilities ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+  line-height: 1.6;
+}
+
+.memory-empty-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* ===================================================================
+   14. TIMELINE HISTORY SYSTEM
+   =================================================================== */
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.timeline-session-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.timeline-time-col {
+  width: 70px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.timeline-time-val { font-weight: 700; color: var(--text-primary); }
+.timeline-date-val { font-size: 0.65rem; }
+
+.timeline-node-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.timeline-node-dot.status-done {
+  background: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+  border: 1px solid var(--accent-emerald);
+}
+
+.timeline-node-dot.status-fail {
+  background: var(--accent-broken-dim);
+  color: var(--accent-broken);
+  border: 1px solid var(--accent-broken);
+}
+
+.timeline-content-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timeline-query {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.timeline-duration-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-cyan);
+}
+
+.timeline-pipeline-bar {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.timeline-models-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ===================================================================
+   15. STRUCTURED DEBUG EVENT CARDS
+   =================================================================== */
+.structured-event-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-time-tag {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.event-type-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+
+.event-summary-line {
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.event-raw-details pre {
+  margin: 6px 0 0 0;
+  padding: 8px;
+  background: #000;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent-cyan);
+  overflow-x: auto;
 }
 
 /* Animations */
@@ -1562,3 +1947,4 @@ body::before {
 @keyframes spin-orb { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes wave-orb { 0%, 100% { box-shadow: 0 0 10px var(--accent-cyan); } 50% { box-shadow: 0 0 24px var(--accent-cyan); } }
 @keyframes glitch-broken { 0% { filter: hue-rotate(0deg); } 50% { filter: hue-rotate(20deg) brightness(1.2); } 100% { filter: hue-rotate(-20deg); } }
+

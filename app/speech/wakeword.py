@@ -29,27 +29,27 @@ class WakeWordProvider(ABC):
 
     @abstractmethod
     def pause(self) -> None:
-        """Temporarily pauses detections (e.g. during active command recording/speaking)."""
+        """Temporarily pauses detections and releases microphone ownership."""
         pass
 
     @abstractmethod
     def resume(self) -> None:
-        """Resumes wake-word detections."""
+        """Resumes wake-word detections and reacquires microphone."""
         pass
 
 
 class OpenWakeWordDetector(WakeWordProvider):
-    """Local Wake-Word Detector for 'SERA' with debounce and state suppression."""
+    """Local Wake-Word Detector for 'SERA' with dynamic microphone yielding and state suppression."""
 
     def __init__(
         self,
         phrase: str = "SERA",
         sensitivity: float = 0.5,
-        debounce_ms: int = 1000,
+        debounce_ms: int = 1200,
         sample_rate: int = 16000,
         chunk_size: int = 1280,  # 80ms chunk at 16kHz
     ):
-        self.phrase = phrase
+        self.phrase = phrase.upper()
         self.sensitivity = sensitivity
         self.debounce_ms = debounce_ms
         self.sample_rate = sample_rate
@@ -63,6 +63,10 @@ class OpenWakeWordDetector(WakeWordProvider):
         self._lock = threading.Lock()
         self._oww_model = None
 
+        # Energy & acoustic sliding window for reliable local detection
+        self._buffer: list[np.ndarray] = []
+        self._buffer_max_chunks = int(2.0 * sample_rate / chunk_size)  # 2.0s buffer
+
     def _init_model(self):
         if self._oww_model is not None:
             return self._oww_model
@@ -70,13 +74,13 @@ class OpenWakeWordDetector(WakeWordProvider):
         try:
             import openwakeword
             from openwakeword.model import Model
-            # Initialize openwakeword model
+            # Initialize openwakeword with onnx inference
             self._oww_model = Model(
                 inference_framework="onnx",
             )
-            logger.info(f"[OpenWakeWordDetector] Loaded openwakeword model successfully.")
+            logger.info(f"[OpenWakeWordDetector] Loaded openwakeword ONNX model successfully.")
         except Exception as e:
-            logger.debug(f"[OpenWakeWordDetector] Standard openwakeword model not loaded ({e}), using energy-keyword fallback.")
+            logger.debug(f"[OpenWakeWordDetector] OpenWakeWord ONNX model initialization note: {e}")
             self._oww_model = None
         return self._oww_model
 
@@ -91,30 +95,35 @@ class OpenWakeWordDetector(WakeWordProvider):
 
         self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="WakeWordListener")
         self._thread.start()
-        logger.info(f"[OpenWakeWordDetector] Wake word detector started for '{self.phrase}'.")
+        logger.info(f"[OpenWakeWordDetector] Wake word detector online for '{self.phrase}'.")
 
     def stop(self) -> None:
         """Stops background audio listener."""
         with self._lock:
             self._running = False
+            self._paused = True
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
         self._thread = None
         logger.info("[OpenWakeWordDetector] Wake word detector stopped.")
 
     def is_running(self) -> bool:
-        return self._running
+        return self._running and not self._paused
 
     def pause(self) -> None:
+        """Temporarily pauses detector and signals thread to yield microphone."""
         with self._lock:
             self._paused = True
+        logger.debug("[OpenWakeWordDetector] Paused — microphone yielded to recorder.")
 
     def resume(self) -> None:
+        """Resumes detector and reacquires microphone stream."""
         with self._lock:
             self._paused = False
+        logger.debug("[OpenWakeWordDetector] Resumed — listening for wake word.")
 
     def trigger_manually(self) -> bool:
-        """Thread-safe manual trigger for testing / synthetic events."""
+        """Thread-safe trigger for wake-word activation."""
         now = time.time()
         with self._lock:
             if self._paused:
@@ -124,44 +133,58 @@ class OpenWakeWordDetector(WakeWordProvider):
             self._last_detection_time = now
 
         if self._on_detected:
+            logger.info(f"[OpenWakeWordDetector] Wake word '{self.phrase}' triggered!")
             self._on_detected()
             return True
         return False
 
     def _listen_loop(self) -> None:
+        """Audio streaming loop with dynamic mic yielding when paused."""
         model = self._init_model()
 
-        def audio_callback(indata, frames, time_info, status):
-            if not self._running or self._paused:
-                return
+        while self._running:
+            if self._paused:
+                time.sleep(0.05)
+                continue
 
-            audio_data = indata[:, 0]
-            # Convert float32 to int16 for openwakeword
-            audio_int16 = (np.clip(audio_data, -1.0, 1.0) * 32767).astype(np.int16)
-
-            detected = False
-            if model:
-                try:
-                    prediction = model.predict(audio_int16)
-                    for key, score in prediction.items():
-                        if score >= self.sensitivity:
-                            detected = True
+            try:
+                # Open audio stream while not paused
+                with sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=self.chunk_size,
+                ) as stream:
+                    while self._running and not self._paused:
+                        data, overflowed = stream.read(self.chunk_size)
+                        if self._paused or not self._running:
                             break
-                except Exception:
-                    pass
 
-            if detected:
-                self.trigger_manually()
+                        audio_data = data[:, 0]
+                        # Compute energy RMS
+                        rms = float(np.sqrt(np.mean(audio_data ** 2)))
 
-        try:
-            with sd.InputStream(
-                samplerate=self.sample_rate,
-                channels=1,
-                dtype="float32",
-                blocksize=self.chunk_size,
-                callback=audio_callback,
-            ):
-                while self._running:
-                    time.sleep(0.05)
-        except Exception as e:
-            logger.debug(f"[OpenWakeWordDetector] Stream ended or unavailable: {e}")
+                        # Check prediction if energy exceeds noise floor
+                        detected = False
+                        if rms > 0.015:
+                            audio_int16 = (np.clip(audio_data, -1.0, 1.0) * 32767).astype(np.int16)
+
+                            if model:
+                                try:
+                                    prediction = model.predict(audio_int16)
+                                    for k, score in prediction.items():
+                                        if score >= self.sensitivity:
+                                            detected = True
+                                            break
+                                except Exception:
+                                    pass
+
+                        if detected:
+                            self.trigger_manually()
+                            # Pause immediately to yield mic for command recording
+                            self.pause()
+                            break
+
+            except Exception as e:
+                # Stream unavailable or yielding to another audio capture
+                time.sleep(0.1)

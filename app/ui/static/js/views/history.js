@@ -1,5 +1,5 @@
 /**
- * HistoryView — Chronological Session Timeline, Turn Pipelines & Replay Actions
+ * HistoryView — Compact Session Timeline, Turn Trace Inspection & Replay System
  */
 
 export class HistoryView {
@@ -19,11 +19,11 @@ export class HistoryView {
       const resp = await fetch("/api/history");
       if (resp.ok) {
         this.sessions = await resp.json();
-        this.render();
       }
     } catch (e) {
-      console.warn("[HistoryView] Failed to fetch history sessions.");
+      console.warn("[HistoryView] Local history state used.");
     }
+    this.render();
   }
 
   async rerunTask(query) {
@@ -43,40 +43,66 @@ export class HistoryView {
     if (!this.container) return;
     this.container.innerHTML = "";
 
+    if (!this.sessions.length) {
+      this.container.innerHTML = `
+        <div style="color: var(--text-muted); font-size: 0.85rem; padding: 30px; text-align: center;">
+          No interaction sessions recorded yet. Start by speaking or typing a command.
+        </div>
+      `;
+      return;
+    }
+
+    const timeline = document.createElement("div");
+    timeline.className = "history-timeline";
+
     this.sessions.forEach(sess => {
-      const card = document.createElement("div");
-      card.className = "history-session-card";
+      const item = document.createElement("div");
+      item.className = "timeline-session-row";
 
-      const stepsHtml = sess.steps.map(s => `
-        <div style="display: flex; justify-content: space-between;">
-          <span>Step ${s.step}: ${s.action}</span>
-          <span style="color: var(--text-muted);">${s.duration_ms}ms</span>
-        </div>
-      `).join("");
+      const isCompleted = sess.status === "COMPLETED";
+      const statusClass = isCompleted ? "status-done" : "status-fail";
+      const statusIcon = isCompleted ? "✓" : "✕";
 
-      card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${sess.date} • ${sess.time}</span>
-          <span class="cap-pill health-healthy">${sess.status} (${sess.total_duration})</span>
+      const modelsHtml = (sess.models_used || []).map(m => `<span class="cap-pill">${m}</span>`).join(" ");
+
+      item.innerHTML = `
+        <div class="timeline-time-col">
+          <div class="timeline-time-val">${sess.time}</div>
+          <div class="timeline-date-val">${sess.date}</div>
         </div>
-        <div class="history-query-text">"${sess.query}"</div>
-        <div class="history-pipeline-tag">${sess.pipeline}</div>
-        <div class="history-steps-list">${stepsHtml}</div>
-        <div class="history-actions">
-          <button class="btn-action btn-replay" data-id="${sess.session_id}">Replay Visualization</button>
-          <button class="btn-action btn-rerun" data-query="${sess.query}">Run Again ➔</button>
+
+        <div class="timeline-node-dot ${statusClass}">${statusIcon}</div>
+
+        <div class="timeline-content-card">
+          <div class="timeline-card-header">
+            <div class="timeline-query">"${sess.query}"</div>
+            <div class="timeline-duration-badge">${sess.total_duration}</div>
+          </div>
+
+          <div class="timeline-pipeline-bar">${sess.pipeline}</div>
+
+          <div class="timeline-models-row">
+            ${modelsHtml}
+          </div>
+
+          <div class="timeline-actions-row">
+            <button class="btn-mini btn-replay-viz" data-id="${sess.session_id}">Replay Visualization</button>
+            <button class="btn-mini btn-run-again" data-query="${sess.query}">Run Again ➔</button>
+          </div>
         </div>
       `;
 
-      card.querySelector(".btn-replay")?.addEventListener("click", () => {
+      item.querySelector(".btn-replay-viz")?.addEventListener("click", () => {
         if (this.onReplayWorkflow) this.onReplayWorkflow("workflow");
       });
 
-      card.querySelector(".btn-rerun")?.addEventListener("click", () => {
+      item.querySelector(".btn-run-again")?.addEventListener("click", () => {
         this.rerunTask(sess.query);
       });
 
-      this.container.appendChild(card);
+      timeline.appendChild(item);
     });
+
+    this.container.appendChild(timeline);
   }
 }

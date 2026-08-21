@@ -2,12 +2,72 @@
   "workflow_layout": {
     "nodes": {
       "node_stt": {
-        "x": 160,
-        "y": 320
+        "x": 0,
+        "y": 304
       },
       "node_router": {
-        "x": 480,
-        "y": 320
+        "x": 336,
+        "y": 336
+      },
+      "node_desktop_0": {
+        "x": 640,
+        "y": 336
+      },
+      "node_vision_2": {
+        "x": 992,
+        "y": 528
+      },
+      "node_vision_1": {
+        "x": 912,
+        "y": 688
+      },
+      "node_stt_fb": {
+        "x": 144,
+        "y": 32
+      },
+      "node_reasoning_0": {
+        "x": 432,
+        "y": 0
+      },
+      "node_fast_0": {
+        "x": 336,
+        "y": 144
+      },
+      "node_vision_0": {
+        "x": 512,
+        "y": 656
+      },
+      "node_desktop_2": {
+        "x": 992,
+        "y": 400
+      },
+      "node_desktop_1": {
+        "x": 704,
+        "y": 496
+      },
+      "node_reasoning_1": {
+        "x": 672,
+        "y": 0
+      },
+      "node_reasoning_3": {
+        "x": 1376,
+        "y": 0
+      },
+      "node_reasoning_2": {
+        "x": 1008,
+        "y": 0
+      },
+      "node_tools": {
+        "x": 1104,
+        "y": 288
+      },
+      "node_fast_2": {
+        "x": 768,
+        "y": 240
+      },
+      "node_fast_1": {
+        "x": 672,
+        "y": 112
       }
     }
   }

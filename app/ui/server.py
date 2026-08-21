@@ -532,8 +532,8 @@ class SERAUIServer:
         edges.append({"id": "e_stt_router", "source": "node_stt", "target": "node_router", "type": "PRIMARY"})
 
         # 3. Roles Branch (Reasoning, Fast, Desktop, Vision)
-        role_y_offsets = {"reasoning": 60, "fast": 140, "desktop": 220, "vision": 300}
-        curr_x = 580
+        role_y_offsets = {"reasoning": 80, "fast": 220, "vision": 360, "desktop": 500}
+        curr_x = 640
 
         for r_name, cands in roles_summary.items():
             if r_name not in role_y_offsets:
@@ -570,8 +570,8 @@ class SERAUIServer:
                     "provider": p_name,
                     "model": m_name,
                     "status": n_status,
-                    "x": curr_x + (idx * 20),
-                    "y": base_y + (idx * 50 if not is_primary else 0),
+                    "x": curr_x + (idx * 260),
+                    "y": base_y,
                     "latency_ms": 380 if is_primary else None,
                     "is_primary": is_primary,
                     "fallback_rank": idx,
@@ -593,8 +593,8 @@ class SERAUIServer:
             "provider": "Windows UIA",
             "model": "TargetResolver",
             "status": "ACTIVE" if state_str == "EXECUTING" else ("COMPLETED" if state_str == "SPEAKING" else "WAITING"),
-            "x": 920,
-            "y": 140,
+            "x": 1160,
+            "y": 500,
             "latency_ms": 490,
             "is_primary": True,
             "fallback_rank": 0,
@@ -611,8 +611,8 @@ class SERAUIServer:
             "provider": "Vision & UIA",
             "model": "StateInspector",
             "status": "COMPLETED" if state_str == "SPEAKING" else "WAITING",
-            "x": 1180,
-            "y": 140,
+            "x": 1420,
+            "y": 500,
             "latency_ms": 110,
             "is_primary": True,
             "fallback_rank": 0,
@@ -629,8 +629,8 @@ class SERAUIServer:
             "provider": "Fish Audio",
             "model": "s2.1-pro-free",
             "status": "ACTIVE" if state_str == "SPEAKING" else "WAITING",
-            "x": 1420,
-            "y": 140,
+            "x": 1680,
+            "y": 280,
             "latency_ms": 180,
             "is_primary": True,
             "fallback_rank": 0,
@@ -1011,6 +1011,86 @@ class SERAUIServer:
                         ],
                         "recent_avg_latency_ms": 750.0,
                         "recent_avg_ttft_ms": 240.0,
+                    }
+                ]
+            },
+            {
+                "provider_name": "nvidia",
+                "display_name": "NVIDIA NIM / Canary",
+                "status": "DEGRADED",
+                "api_key_reference": "NVIDIA_API_KEY (● Configured)",
+                "models": [
+                    {
+                        "model_id": "nvidia/canary-qwen-2.5b",
+                        "display_name": "Canary-Qwen 2.5B STT",
+                        "role": "stt (primary)",
+                        "is_primary": True,
+                        "health_status": "UNAVAILABLE",
+                        "cooldown_remaining_s": 0.0,
+                        "capabilities": {"text": False, "stt": True, "audio": True},
+                        "quota_metrics": [
+                            {"label": "Endpoint Status", "used": 404, "limit": 200, "remaining": 0, "percentage_remaining": 0.0, "unit": "status", "window": "live"}
+                        ],
+                        "recent_avg_latency_ms": None,
+                        "recent_avg_ttft_ms": None,
+                    },
+                    {
+                        "model_id": "faster-whisper-small",
+                        "display_name": "Faster-Whisper (Local Fallback)",
+                        "role": "stt (active fallback)",
+                        "is_primary": False,
+                        "health_status": "HEALTHY",
+                        "cooldown_remaining_s": 0.0,
+                        "capabilities": {"text": False, "stt": True, "audio": True},
+                        "quota_metrics": [
+                            {"label": "Local Inference Capacity", "used": 1, "limit": 100, "remaining": 99, "percentage_remaining": 99.0, "unit": "percent", "window": "local"}
+                        ],
+                        "recent_avg_latency_ms": 210.0,
+                        "recent_avg_ttft_ms": None,
+                    }
+                ]
+            },
+            {
+                "provider_name": "fish_audio",
+                "display_name": "Fish Audio",
+                "status": "HEALTHY",
+                "api_key_reference": "FISH_AUDIO_API_KEY (● Configured)",
+                "models": [
+                    {
+                        "model_id": "s2.1-pro-free",
+                        "display_name": "Fish Audio S2.1 TTS",
+                        "role": "tts",
+                        "is_primary": True,
+                        "health_status": "HEALTHY",
+                        "cooldown_remaining_s": 0.0,
+                        "capabilities": {"tts": True, "streaming": True, "audio": True},
+                        "quota_metrics": [
+                            {"label": "Credits Remaining", "used": 150, "limit": 1000, "remaining": 850, "percentage_remaining": 85.0, "unit": "credits", "window": "live"}
+                        ],
+                        "recent_avg_latency_ms": 180.0,
+                        "recent_avg_ttft_ms": 95.0,
+                    }
+                ]
+            },
+            {
+                "provider_name": "openrouter",
+                "display_name": "OpenRouter Multi-Provider",
+                "status": "HEALTHY",
+                "api_key_reference": "OPENROUTER_API_KEY (● Configured)",
+                "models": [
+                    {
+                        "model_id": "openrouter/free",
+                        "display_name": "OpenRouter Free Dynamic",
+                        "role": "reasoning (fallback)",
+                        "is_primary": False,
+                        "health_status": "HEALTHY",
+                        "cooldown_remaining_s": 0.0,
+                        "capabilities": {"text": True, "reasoning": True, "vision": True, "tool_calling": True},
+                        "quota_metrics": [
+                            {"label": "Free Tier Dynamic Quota", "used": 20, "limit": 100, "remaining": 80, "percentage_remaining": 80.0, "unit": "percent", "window": "live"}
+                        ],
+                        "recent_avg_latency_ms": 620.0,
+                        "recent_avg_ttft_ms": 190.0,
                     }
                 ]
             },

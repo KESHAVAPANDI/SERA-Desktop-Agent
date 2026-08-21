@@ -128,9 +128,17 @@ export class LiveView {
     }
   }
 
-  stopTask(reason = "Completed") {
+  stopTask(reason = "✓ Completed") {
     clearInterval(this.taskTimerInterval);
     if (this.taskStepLabel) this.taskStepLabel.textContent = reason;
     if (this.taskStepFill) this.taskStepFill.style.width = "100%";
+
+    // Auto-clear after 2.5s settling
+    setTimeout(() => {
+      if (this.taskTitle) this.taskTitle.textContent = "Awaiting User Instruction";
+      if (this.taskStepLabel) this.taskStepLabel.textContent = "Step 0 / 0";
+      if (this.taskStepFill) this.taskStepFill.style.width = "0%";
+      if (this.taskElapsedTimer) this.taskElapsedTimer.textContent = "0.0s";
+    }, 2500);
   }
 }
