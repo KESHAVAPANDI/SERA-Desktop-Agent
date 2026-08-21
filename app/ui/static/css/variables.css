@@ -1,52 +1,54 @@
-/* SERA 1.0 Temporal Aura Design Tokens */
+/* ===================================================================
+   SERA 1.0 — DESIGN SYSTEM VARIABLES & TOKENS (TEMPORAL AURA)
+   =================================================================== */
+
 :root {
-  /* Surface colors */
+  /* Surface Color Palette (Cinematic Deep Space / Void) */
   --bg-void: #05070B;
-  --bg-primary: #080C14;
-  --bg-secondary: #0E1422;
-  --bg-card: #131A2D;
-  --bg-card-hover: #1A243D;
-  --bg-surface-glass: rgba(14, 20, 34, 0.75);
+  --bg-primary: #0A0D14;
+  --bg-secondary: #101520;
+  --bg-card: rgba(16, 21, 32, 0.75);
+  --bg-card-hover: rgba(22, 30, 48, 0.85);
+  --bg-surface-glass: rgba(10, 13, 20, 0.8);
 
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.15);
-  --border-active: rgba(0, 240, 255, 0.4);
-  --border-focus: #00F0FF;
-
-  /* Temporal Accent Palettes */
+  /* Temporal Aura Energy Colors */
   --accent-cyan: #00F0FF;
   --accent-cyan-dim: rgba(0, 240, 255, 0.15);
   --accent-violet: #8A2BE2;
-  --accent-violet-dim: rgba(138, 43, 226, 0.18);
+  --accent-violet-dim: rgba(138, 43, 226, 0.15);
   --accent-emerald: #00E599;
   --accent-emerald-dim: rgba(0, 229, 153, 0.15);
   --accent-amber: #FFB800;
-  --accent-amber-dim: rgba(255, 184, 0, 0.18);
+  --accent-amber-dim: rgba(255, 184, 0, 0.15);
   --accent-crimson: #FF3366;
-  --accent-crimson-dim: rgba(255, 51, 102, 0.18);
-  --accent-magenta: #FF007F;
+  --accent-crimson-dim: rgba(255, 51, 102, 0.15);
+  --accent-broken: #FF1A4B;
 
   /* Typography */
-  --font-brand: 'Outfit', 'Inter', -apple-system, sans-serif;
+  --font-brand: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
 
   /* Text Colors */
-  --text-primary: #F4F7FC;
+  --text-primary: #F0F4F8;
   --text-secondary: #94A3B8;
-  --text-muted: #475569;
-  --text-cyan: #00F0FF;
+  --text-muted: #64748B;
+  --text-disabled: #334155;
 
-  /* Elevations & Shadows */
-  --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.25);
-  --glow-emerald: 0 0 20px rgba(0, 229, 153, 0.25);
-  --glow-amber: 0 0 20px rgba(255, 184, 0, 0.25);
-  --glow-crimson: 0 0 20px rgba(255, 51, 102, 0.3);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.45);
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(0, 240, 255, 0.4);
+  --border-broken: rgba(255, 26, 75, 0.6);
+
+  /* Shadows & Glows */
+  --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.3);
+  --glow-violet: 0 0 20px rgba(138, 43, 226, 0.3);
+  --glow-emerald: 0 0 20px rgba(0, 229, 153, 0.3);
+  --glow-amber: 0 0 20px rgba(255, 184, 0, 0.3);
+  --glow-broken: 0 0 24px rgba(255, 26, 75, 0.5);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.5);
 
   /* Transitions */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }

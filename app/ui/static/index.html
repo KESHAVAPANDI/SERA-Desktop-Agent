@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SERA 1.0 — Temporal Command Center</title>
+  <title>SERA 1.0 — Temporal Aura Command Center</title>
   
   <!-- Fonts: Outfit, Inter, JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,25 +30,38 @@
         <div id="state-indicator" class="state-indicator state-idle">
           <div class="aura-orb-pip"></div>
           <span id="state-text">IDLE</span>
+          <span id="capture-countdown-badge" class="countdown-badge hidden">5.0s</span>
         </div>
 
         <div id="task-ticker" class="task-ticker">Ready • Awaiting Command</div>
       </div>
 
-      <!-- Navigation Tabs (1 - 7) -->
+      <!-- Navigation Tabs (1 - 8) Across 3 Domains: COMMAND, INTELLIGENCE, SYSTEM -->
       <nav class="nav-tabs" role="tablist">
-        <button class="nav-tab-btn active" data-view="workflow" id="tab-workflow">
-          <span class="tab-num">1</span> WORKFLOW
+        <!-- DOMAIN 1: COMMAND -->
+        <div class="nav-group-label">COMMAND</div>
+        <button class="nav-tab-btn active" data-view="live" id="tab-live">
+          <span class="tab-num">1</span> LIVE
         </button>
-        <button class="nav-tab-btn" data-view="live" id="tab-live">
-          <span class="tab-num">2</span> LIVE
+        <button class="nav-tab-btn" data-view="workflow" id="tab-workflow">
+          <span class="tab-num">2</span> WORKFLOW
         </button>
+
+        <div class="nav-group-divider"></div>
+
+        <!-- DOMAIN 2: INTELLIGENCE -->
+        <div class="nav-group-label">INTEL</div>
         <button class="nav-tab-btn" data-view="agents" id="tab-agents">
           <span class="tab-num">3</span> AGENTS
         </button>
         <button class="nav-tab-btn" data-view="memory" id="tab-memory">
           <span class="tab-num">4</span> MEMORY
         </button>
+
+        <div class="nav-group-divider"></div>
+
+        <!-- DOMAIN 3: SYSTEM -->
+        <div class="nav-group-label">SYSTEM</div>
         <button class="nav-tab-btn" data-view="providers" id="tab-providers">
           <span class="tab-num">5</span> PROVIDERS
         </button>
@@ -58,9 +71,16 @@
         <button class="nav-tab-btn" data-view="debug" id="tab-debug">
           <span class="tab-num">7</span> DEBUG
         </button>
+        <button class="nav-tab-btn" data-view="security" id="tab-security">
+          <span class="tab-num">8</span> SECURITY
+        </button>
       </nav>
 
       <div class="header-right">
+        <div class="privacy-pill" title="Privacy: Hybrid Local & Cloud Processing">
+          <span class="privacy-dot"></span>
+          <span id="privacy-mode-text">HYBRID</span>
+        </div>
         <div class="hardware-telemetry">
           <div class="hardware-pill">
             <div class="hardware-dot"></div>
@@ -73,11 +93,74 @@
       </div>
     </header>
 
-    <!-- 2. MAIN VIEWPORT CONTAINERS -->
+    <!-- 2. MAIN VIEWPORT CONTAINERS (8 FIRST-CLASS VIEWS) -->
     <main id="main-viewport">
       
-      <!-- VIEW 1: WORKFLOW GRAPH (TEMPORAL AURA WORKFLOW & EDITOR) -->
-      <section id="view-workflow" class="view-container active">
+      <!-- VIEW 1: LIVE VIEW (HUMAN-FACING CONVERSATIONAL COMMAND CENTER) -->
+      <section id="view-live" class="view-container active">
+        <div class="live-layout">
+          <!-- Left: Reactive Central Aura Orb Panel -->
+          <div class="live-orb-panel">
+            <div id="aura-orb-main" class="aura-orb-large">
+              <div class="aura-orb-rings"></div>
+              <div class="aura-orb-core">
+                <div class="aura-brand-name">SERA</div>
+                <div id="aura-status-subtext" class="aura-status-subtext">IDLE</div>
+              </div>
+            </div>
+
+            <!-- 5-Second Voice Capture Countdown Progress -->
+            <div id="capture-progress-container" class="capture-progress-container hidden">
+              <div class="capture-timer-label">VOICE CAPTURE: <strong id="capture-timer-val">5.0s</strong></div>
+              <div class="capture-progress-track">
+                <div id="capture-progress-fill" class="capture-progress-fill"></div>
+              </div>
+              <div class="activation-method-label" id="activation-method-label">Activation: Ctrl+Space Hotkey</div>
+            </div>
+
+            <!-- Hotkey Hint -->
+            <div class="hotkey-assist-pill">
+              Press <kbd>Ctrl+Space</kbd> or say <strong style="color: var(--accent-cyan);">"SERA"</strong> to speak
+            </div>
+
+            <!-- Current Task Panel -->
+            <div id="current-task-card" class="current-task-card">
+              <div class="task-card-header">
+                <span class="task-card-tag">CURRENT TASK</span>
+                <span id="task-elapsed-timer" class="task-elapsed-timer">0.0s</span>
+              </div>
+              <div id="task-card-title" class="task-card-title">Awaiting User Instruction</div>
+              <div class="task-progress-bar-wrapper">
+                <div id="task-step-fill" class="task-step-fill" style="width: 0%;"></div>
+              </div>
+              <div class="task-card-footer">
+                <span id="task-step-label" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary);">Step 0 / 0</span>
+                <button id="btn-interrupt-task" class="btn-mini btn-interrupt">Interrupt</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Live Conversation Stream -->
+          <div class="live-chat-panel">
+            <div class="chat-header">
+              <span>INTERACTION STREAM</span>
+              <span id="stt-model-badge" class="model-badge">NVIDIA Canary-Qwen 2.5B</span>
+            </div>
+            <div id="chat-stream" class="chat-stream">
+              <div class="chat-bubble sera">
+                Hello! I am SERA, your desktop AI companion. Press <kbd>Ctrl+Space</kbd> or speak to activate.
+              </div>
+            </div>
+            <form id="chat-form" class="chat-input-bar">
+              <input type="text" id="chat-input" class="chat-input-field" placeholder="Type a command or ask a question..." autocomplete="off">
+              <button type="submit" class="btn-action">Send</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: WORKFLOW GRAPH (TEMPORAL AURA EXECUTION GRAPH & CANDIDATE EDITOR) -->
+      <section id="view-workflow" class="view-container">
         <div class="workflow-toolbar">
           <button class="btn-action" id="btn-toggle-mode" style="font-weight: 700;">
             <span style="color: var(--accent-cyan);">●</span> RUNTIME MODE
@@ -98,7 +181,7 @@
           <div id="workflow-nodes-container"></div>
         </div>
 
-        <!-- Sliding Inspector Drawer for Candidates & Nodes -->
+        <!-- Sliding Inspector Drawer for Candidate Chains & Execution Modes -->
         <aside id="workflow-inspector-drawer" class="inspector-drawer">
           <div class="drawer-header">
             <div id="drawer-title" class="drawer-title">ROLE INSPECTOR</div>
@@ -108,84 +191,169 @@
         </aside>
       </section>
 
-      <!-- VIEW 2: LIVE VIEW -->
-      <section id="view-live" class="view-container">
-        <div class="live-orb-panel">
-          <div id="aura-orb-main" class="aura-orb-large">
-            <div class="aura-orb-rings"></div>
-            <div style="font-family: var(--font-brand); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.1em; color: var(--accent-cyan);">SERA</div>
-          </div>
-          <div style="margin-top: 24px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">
-            Press <kbd style="background: var(--bg-card); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-subtle);">Ctrl+Space</kbd> or say "SERA"
-          </div>
-        </div>
-
-        <div class="live-chat-panel">
-          <div style="padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); font-family: var(--font-brand); font-weight: 700; font-size: 0.95rem;">
-            CONVERSATION STREAM
-          </div>
-          <div id="chat-stream" class="chat-stream">
-            <div class="chat-bubble sera">
-              Hello! I am SERA, your desktop AI companion. How can I assist you today?
-            </div>
-          </div>
-          <form id="chat-form" class="chat-input-bar">
-            <input type="text" id="chat-input" class="chat-input-field" placeholder="Type a command or question..." autocomplete="off">
-            <button type="submit" class="btn-action">Send</button>
-          </form>
-        </div>
-      </section>
-
-      <!-- VIEW 3: AGENTS -->
+      <!-- VIEW 3: AGENTS (MULTI-AGENT HIERARCHY) -->
       <section id="view-agents" class="view-container">
-        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Multi-Agent Hierarchy</h2>
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Multi-Agent Hierarchical Executors</h2>
+            <p class="view-subtitle">SERA Core Work Executors & Delegated Subagent Pipeline</p>
+          </div>
+        </div>
         <div id="agents-grid" class="agent-grid"></div>
       </section>
 
-      <!-- VIEW 4: MEMORY -->
+      <!-- VIEW 4: MEMORY (NEURAL KNOWLEDGE CORE) -->
       <section id="view-memory" class="view-container">
-        <div class="memory-layout">
-          <div class="memory-core-view">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <h2 style="font-family: var(--font-brand); font-size: 1.3rem;">Neural Knowledge Core</h2>
-              <input type="text" id="memory-search" placeholder="Search knowledge..." class="chat-input-field" style="max-width: 240px; background: var(--bg-secondary); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
-            </div>
-            <div id="memory-grid" class="memory-grid"></div>
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Neural Knowledge Core</h2>
+            <p class="view-subtitle">Categorical Semantic Memory & RAG Retrieval Foundations</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <select id="memory-category-filter" class="form-select-sm">
+              <option value="ALL">All Categories</option>
+              <option value="PREFERENCES">Preferences</option>
+              <option value="SEMANTIC">Semantic</option>
+              <option value="EPISODIC">Episodic</option>
+              <option value="PROJECTS">Projects</option>
+              <option value="DOCUMENTS">Documents</option>
+            </select>
+            <input type="text" id="memory-search" placeholder="Search knowledge..." class="chat-input-field search-field">
           </div>
         </div>
+        <div id="memory-grid" class="memory-grid"></div>
       </section>
 
-      <!-- VIEW 5: PROVIDERS -->
+      <!-- VIEW 5: PROVIDERS (MODEL INFRASTRUCTURE & DYNAMIC QUOTA DASHBOARD) -->
       <section id="view-providers" class="view-container">
-        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Model Providers & Quota Infrastructure</h2>
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Model Providers & Dynamic Quota Infrastructure</h2>
+            <p class="view-subtitle">Multi-Provider Acceleration, Model Health, Dynamic Quotas & Latency</p>
+          </div>
+          <button id="btn-open-add-provider" class="btn-action btn-add-provider">+ ADD PROVIDER</button>
+        </div>
         <div id="providers-container" class="providers-grid"></div>
       </section>
 
-      <!-- VIEW 6: HISTORY -->
+      <!-- VIEW 6: HISTORY (SESSION TIMELINE & REPLAY SYSTEM) -->
       <section id="view-history" class="view-container">
-        <div style="max-width: 900px; margin: 0 auto 16px auto; width: 100%; display: flex; justify-content: space-between; align-items: center;">
-          <h2 style="font-family: var(--font-brand); font-size: 1.3rem;">Interaction History Timeline</h2>
-          <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">Daily Chronological Sessions</span>
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Interaction History Timeline</h2>
+            <p class="view-subtitle">Turn-by-turn Pipeline Traces, Tool Invocations, and Replay System</p>
+          </div>
         </div>
         <div id="history-stream" class="history-stream"></div>
       </section>
 
-      <!-- VIEW 7: DEBUG -->
+      <!-- VIEW 7: DEBUG (LATENCY WATERFALL & LIVE EVENTBUS STREAM) -->
       <section id="view-debug" class="view-container">
-        <h2 style="font-family: var(--font-brand); font-size: 1.3rem; margin-bottom: 16px;">Telemetry & Real-Time Observer</h2>
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Engineering Telemetry & Latency Waterfall</h2>
+            <p class="view-subtitle">Live EventBus Subscription Stream & Pipeline TTFT/TTFA Waterfall</p>
+          </div>
+        </div>
         <div class="debug-grid">
+          <!-- Latency Waterfall -->
           <div class="debug-card">
-            <h3 style="font-family: var(--font-brand); font-size: 1rem;">Live EventBus Stream</h3>
+            <h3 class="debug-card-title">Turn Latency Waterfall</h3>
+            <div id="latency-telemetry-box" class="latency-waterfall-box"></div>
+          </div>
+          <!-- Live Event Trace -->
+          <div class="debug-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 class="debug-card-title">EventBus Console Stream</h3>
+              <div class="event-filter-pills" id="event-filters">
+                <button class="filter-pill active" data-filter="ALL">ALL</button>
+                <button class="filter-pill" data-filter="MODEL">MODEL</button>
+                <button class="filter-pill" data-filter="TOOL">TOOL</button>
+                <button class="filter-pill" data-filter="STATE">STATE</button>
+              </div>
+            </div>
             <div id="event-trace-box" class="event-trace-box"></div>
           </div>
-          <div class="debug-card">
-            <h3 style="font-family: var(--font-brand); font-size: 1rem;">Pipeline Latency Waterfall</h3>
-            <div id="latency-telemetry-box" style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: 0.85rem;"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 8: SECURITY (PERMISSIONS MATRIX & PRIVACY CONTROLS) -->
+      <section id="view-security" class="view-container">
+        <div class="view-header-bar">
+          <div>
+            <h2 class="view-title">Security & Permission Policies</h2>
+            <p class="view-subtitle">Windows UI Automation Security Boundaries, Dangerous Action Rules & Privacy</p>
+          </div>
+        </div>
+        <div class="security-layout">
+          <div class="security-card">
+            <h3 class="security-section-title">System Action Permissions</h3>
+            <div id="security-permissions-list" class="permissions-list"></div>
+          </div>
+          <div class="security-card">
+            <h3 class="security-section-title">Data Privacy & Processing Boundaries</h3>
+            <div id="privacy-breakdown-list" class="privacy-breakdown-list"></div>
           </div>
         </div>
       </section>
 
     </main>
+
+    <!-- 3. ACTION CONFIRMATION MODAL -->
+    <div id="modal-confirmation" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <span style="color: var(--accent-amber); font-weight: 700;">⚠ ACTION CONFIRMATION REQUIRED</span>
+        </div>
+        <div class="modal-body">
+          <p id="modal-confirm-prompt">SERA is requesting permission to perform a sensitive operation.</p>
+          <div id="modal-confirm-action" class="modal-confirm-action-box"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-confirm-deny" class="btn-action btn-danger">DENY</button>
+          <button id="btn-confirm-allow" class="btn-action btn-primary-glow">ALLOW ONCE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. ADD PROVIDER MODAL (VERCEL-STYLE ONBOARDING) -->
+    <div id="modal-add-provider" class="modal-backdrop hidden">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <span class="modal-title">ADD CUSTOM MODEL PROVIDER</span>
+          <button id="btn-close-add-provider" class="btn-close-drawer">✕</button>
+        </div>
+        <div class="modal-body">
+          <form id="form-add-provider" class="form-grid">
+            <div class="form-group">
+              <label>Provider Name</label>
+              <input type="text" id="add-prov-name" class="chat-input-field" placeholder="e.g. together, deepseek, local-vllm" required>
+            </div>
+            <div class="form-group">
+              <label>API Base URL</label>
+              <input type="text" id="add-prov-url" class="chat-input-field" placeholder="https://api.together.xyz/v1" required>
+            </div>
+            <div class="form-group">
+              <label>API Key Environment Variable Reference</label>
+              <input type="text" id="add-prov-env" class="chat-input-field" placeholder="MY_CUSTOM_API_KEY">
+            </div>
+            <div class="form-group">
+              <label>API Format</label>
+              <select id="add-prov-format" class="form-select-sm" style="width: 100%;">
+                <option value="openai_compatible">OpenAI-Compatible Endpoint</option>
+                <option value="native">Native Adapter</option>
+              </select>
+            </div>
+          </form>
+          <div id="add-provider-test-result" class="test-result-box hidden"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-test-provider-conn" class="btn-action">Test Connection</button>
+          <button id="btn-save-provider" class="btn-action btn-primary-glow">Save Provider</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Scripts -->

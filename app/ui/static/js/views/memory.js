@@ -1,43 +1,92 @@
 /**
- * MemoryView — Neural Knowledge Core & Searchable Items
+ * MemoryView — Neural Knowledge Core & Categorical Semantic Memory
  */
+
 export class MemoryView {
   constructor() {
     this.container = document.getElementById("memory-grid");
     this.searchInput = document.getElementById("memory-search");
-    this.items = [
-      { id: "m1", category: "PREFERENCE", content: "Preferred Browser: Google Chrome", confidence: "HIGH", usage: 42 },
-      { id: "m2", category: "FACT", content: "Primary Display: 1920x1200 @ 60Hz 16:10", confidence: "HIGH", usage: 18 },
-      { id: "m3", category: "PROJECT", content: "Active Workspace: c:/Users/kesha/OneDrive/Documents/Sera", confidence: "HIGH", usage: 89 },
-      { id: "m4", category: "PREFERENCE", content: "Default Screen Brightness: 40%", confidence: "MEDIUM", usage: 12 },
-      { id: "m5", category: "TASK", content: "SERA 1.0 Architecture Validation Phases 1-5", confidence: "HIGH", usage: 65 },
-    ];
+    this.categoryFilter = document.getElementById("memory-category-filter");
+
+    this.items = [];
     this.init();
   }
 
-  init() {
-    this.render(this.items);
-    this.searchInput?.addEventListener("input", e => {
-      const q = e.target.value.toLowerCase().trim();
-      const filtered = this.items.filter(i => i.content.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
-      this.render(filtered);
-    });
+  async init() {
+    this.searchInput?.addEventListener("input", () => this.render());
+    this.categoryFilter?.addEventListener("change", () => this.render());
+    await this.fetchMemory();
   }
 
-  render(items) {
+  async fetchMemory() {
+    try {
+      const resp = await fetch("/api/memory");
+      if (resp.ok) {
+        this.items = await resp.json();
+        this.render();
+      }
+    } catch (e) {
+      console.warn("[MemoryView] Failed to fetch memory items.");
+    }
+  }
+
+  async forgetItem(itemId) {
+    try {
+      const resp = await fetch("/api/memory/forget", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: itemId }),
+      });
+      if (resp.ok) {
+        this.items = this.items.filter(i => i.id !== itemId);
+        this.render();
+      }
+    } catch (e) {
+      console.warn("[MemoryView] Forget item failed:", e);
+    }
+  }
+
+  render() {
     if (!this.container) return;
     this.container.innerHTML = "";
-    items.forEach(item => {
+
+    const query = (this.searchInput?.value || "").toLowerCase();
+    const category = this.categoryFilter?.value || "ALL";
+
+    const filtered = this.items.filter(item => {
+      const matchCat = (category === "ALL" || item.category === category);
+      const matchSearch = (!query || item.content.toLowerCase().includes(query) || item.source.toLowerCase().includes(query));
+      return matchCat && matchSearch;
+    });
+
+    if (filtered.length === 0) {
+      this.container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem; padding: 20px;">No memory items match the selected filter.</div>`;
+      return;
+    }
+
+    filtered.forEach(item => {
       const card = document.createElement("div");
       card.className = "memory-item-card";
+
       card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-          <span style="font-family: var(--font-brand); font-size: 0.7rem; color: var(--accent-cyan); font-weight: 700;">${item.category}</span>
-          <span style="font-size: 0.7rem; color: var(--accent-emerald);">● ${item.confidence} CONFIDENCE</span>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="memory-category-tag">${item.category}</span>
+          <span class="cap-pill" style="color: var(--accent-cyan);">${item.confidence} CONFIDENCE</span>
         </div>
-        <div style="font-size: 0.9rem; font-weight: 500;">${item.content}</div>
-        <div style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); margin-top: 8px;">Recall Count: ${item.usage} times</div>
+        <div class="memory-content-text">${item.content}</div>
+        <div class="memory-meta-row">
+          <span>Source: ${item.source}</span>
+          <span>${item.date}</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
+          <button class="btn-mini btn-forget" data-id="${item.id}" style="color: var(--accent-crimson);">Forget</button>
+        </div>
       `;
+
+      card.querySelector(".btn-forget")?.addEventListener("click", () => {
+        this.forgetItem(item.id);
+      });
+
       this.container.appendChild(card);
     });
   }

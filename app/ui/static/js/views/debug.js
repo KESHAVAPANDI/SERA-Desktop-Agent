@@ -1,51 +1,90 @@
 /**
- * DebugView — Real-Time Telemetry & EventBus Trace
+ * DebugView — Engineering Telemetry, Latency Waterfall & EventBus Trace Log
  */
+
 export class DebugView {
   constructor() {
     this.traceBox = document.getElementById("event-trace-box");
-    this.latencyBox = document.getElementById("latency-telemetry-box");
+    this.waterfallBox = document.getElementById("latency-telemetry-box");
+    this.filterPills = document.getElementById("event-filters");
+    this.currentFilter = "ALL";
+    this.eventsLog = [];
+
     this.init();
   }
 
   init() {
-    this.renderLatencyWaterfall([
-      { stage: "STT Input Latency (NVIDIA Canary-Qwen)", latency: 210, color: "var(--accent-cyan)" },
-      { stage: "Model Router Decision", latency: 5, color: "var(--accent-emerald)" },
-      { stage: "Reasoning LLM TTFT (Groq GPT-OSS 120B)", latency: 110, color: "var(--accent-violet)" },
-      { stage: "Desktop Tool Execution (Codestral)", latency: 490, color: "var(--accent-cyan)" },
-      { stage: "Vision Perception (Groq Qwen 3.6 27B)", latency: 410, color: "var(--accent-violet)" },
-      { stage: "TTS First Audio TTFA (Fish Audio)", latency: 180, color: "var(--accent-emerald)" },
-    ]);
-    this.logEvent("RUNTIME_READY", { hotkey: "ctrl+space", wake_word: "SERA" });
-    this.logEvent("MODEL_ROUTER_ONLINE", { roles: 6, primary: "groq/gpt-oss-120b" });
+    this.filterPills?.querySelectorAll(".filter-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        this.filterPills.querySelectorAll(".filter-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.currentFilter = btn.getAttribute("data-filter");
+        this.renderEventTrace();
+      });
+    });
+
+    this.fetchWaterfall();
   }
 
-  renderLatencyWaterfall(items) {
-    if (!this.latencyBox) return;
-    this.latencyBox.innerHTML = "";
-    items.forEach(i => {
+  async fetchWaterfall() {
+    try {
+      const resp = await fetch("/api/telemetry");
+      if (resp.ok) {
+        const data = await resp.json();
+        this.renderWaterfall(data);
+      }
+    } catch (e) {
+      console.warn("[DebugView] Failed to fetch telemetry waterfall.");
+    }
+  }
+
+  renderWaterfall(data) {
+    if (!this.waterfallBox || !data.stages) return;
+    this.waterfallBox.innerHTML = "";
+
+    const totalMs = data.total_turn_latency_ms || 1000;
+    data.stages.forEach(s => {
+      const pct = Math.max(4, Math.min(100, (s.latency_ms / totalMs) * 100));
       const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.justifyContent = "space-between";
-      row.style.padding = "6px 10px";
-      row.style.background = "var(--bg-secondary)";
-      row.style.borderRadius = "6px";
+      row.className = "waterfall-stage-row";
+
       row.innerHTML = `
-        <span style="color: var(--text-primary);">${i.stage}</span>
-        <strong style="color: ${i.color};">${i.latency} ms</strong>
+        <div class="waterfall-stage-header">
+          <span>${s.stage}</span>
+          <strong style="color: var(--text-primary);">${s.latency_ms}ms</strong>
+        </div>
+        <div class="waterfall-track">
+          <div class="waterfall-fill" style="width: ${pct}%; background: ${s.color || 'var(--accent-cyan)'};"></div>
+        </div>
       `;
-      this.latencyBox.appendChild(row);
+      this.waterfallBox.appendChild(row);
     });
   }
 
-  logEvent(name, data) {
+  logEvent(eventType, payload) {
+    const timeStr = new Date().toLocaleTimeString();
+    this.eventsLog.unshift({ time: timeStr, type: eventType, data: payload });
+    if (this.eventsLog.length > 80) this.eventsLog.pop();
+    this.renderEventTrace();
+  }
+
+  renderEventTrace() {
     if (!this.traceBox) return;
-    const timeStr = new Date().toISOString().split("T")[1].slice(0, 8);
-    const line = document.createElement("div");
-    line.style.marginBottom = "4px";
-    line.innerHTML = `<span style="color: var(--text-muted);">${timeStr}</span> <span style="color: var(--accent-cyan);">[${name}]</span> ${JSON.stringify(data)}`;
-    this.traceBox.appendChild(line);
-    this.traceBox.scrollTop = this.traceBox.scrollHeight;
+    this.traceBox.innerHTML = "";
+
+    const filtered = this.eventsLog.filter(ev => {
+      if (this.currentFilter === "ALL") return true;
+      if (this.currentFilter === "MODEL") return ev.type.includes("MODEL");
+      if (this.currentFilter === "TOOL") return ev.type.includes("TOOL");
+      if (this.currentFilter === "STATE") return ev.type.includes("STATE");
+      return true;
+    });
+
+    filtered.forEach(ev => {
+      const line = document.createElement("div");
+      line.style.lineHeight = "1.4";
+      line.innerHTML = `<span style="color: var(--text-muted);">${ev.time}</span> <strong style="color: var(--accent-cyan);">${ev.type}</strong>: ${JSON.stringify(ev.data)}`;
+      this.traceBox.appendChild(line);
+    });
   }
 }

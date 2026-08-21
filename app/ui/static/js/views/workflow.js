@@ -1,13 +1,5 @@
 /**
- * WorkflowView — Temporal Aura Horizontal Execution Graph & Role Candidate Editor
- *
- * Implements:
- * 1. Horizontal Left-to-Right Temporal Graph with curved SVG bezier branches.
- * 2. Animated particle flow along active execution paths.
- * 3. Runtime Mode (live execution observer) vs Design Mode (candidate chain editor).
- * 4. Temporal Role Inspector Drawer with candidate reordering, drag/drop, capability tags, health, and quota bars.
- * 5. Dynamic fallback branch visualization (Primary ➔ Failover ➔ Fallback #1, #2).
- * 6. Validated configuration updates with safety guards.
+ * WorkflowView — Temporal Aura Horizontal Execution Graph & Candidate Editor
  */
 
 export class WorkflowView {
@@ -30,8 +22,7 @@ export class WorkflowView {
     this.nodes = [];
     this.edges = [];
     this.rolesData = {};
-    this.providersData = [];
-    this.activeExecutionPath = new Set();
+    this.executionModes = {};
     this.particleOffset = 0;
 
     this.init();
@@ -46,7 +37,6 @@ export class WorkflowView {
   }
 
   setupToolbar() {
-    // Mode Switcher
     const modeBtn = document.getElementById("btn-toggle-mode");
     if (modeBtn) {
       modeBtn.addEventListener("click", () => {
@@ -60,13 +50,12 @@ export class WorkflowView {
         if (modeDesc) {
           modeDesc.textContent = this.mode === "RUNTIME" 
             ? "Live Execution Observer" 
-            : "Role Candidate Chain Editor";
+            : "Role Candidate Chain & Mode Editor";
         }
         this.render();
       });
     }
 
-    // Pan / Zoom Controls
     document.getElementById("btn-zoom-in")?.addEventListener("click", () => {
       this.zoom = Math.min(2.2, this.zoom + 0.15);
       this.render();
@@ -108,7 +97,6 @@ export class WorkflowView {
       this.isDragging = false;
     });
 
-    // Mouse wheel zoom
     this.canvas?.addEventListener("wheel", e => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
@@ -122,7 +110,6 @@ export class WorkflowView {
       this.closeDrawer();
     });
 
-    // Keyboard ESC to close drawer
     window.addEventListener("keydown", e => {
       if (e.key === "Escape") this.closeDrawer();
     });
@@ -136,7 +123,7 @@ export class WorkflowView {
         this.updateGraphData(data);
       }
     } catch (e) {
-      console.warn("[WorkflowView] Fallback to initial local graph structure.");
+      console.warn("[WorkflowView] Using local graph state.");
     }
   }
 
@@ -145,6 +132,7 @@ export class WorkflowView {
     this.nodes = data.nodes || [];
     this.edges = data.edges || [];
     this.rolesData = data.roles || {};
+    this.executionModes = data.execution_modes || {};
     this.render();
   }
 
@@ -164,9 +152,19 @@ export class WorkflowView {
 
   centerOnActiveNode() {
     const activeNode = this.nodes.find(n => n.status === "ACTIVE" || n.status === "EXECUTING");
-    if (activeNode) {
+    if (activeNode && this.canvas) {
       this.panX = (this.canvas.clientWidth / 2) - (activeNode.x * this.zoom) - 100;
       this.panY = (this.canvas.clientHeight / 2) - (activeNode.y * this.zoom) - 40;
+      this.render();
+    }
+  }
+
+  highlightModel(provider, model) {
+    const targetNode = this.nodes.find(n => n.provider === provider && n.model === model);
+    if (targetNode) {
+      this.selectNode(targetNode);
+      this.panX = (this.canvas.clientWidth / 2) - (targetNode.x * this.zoom) - 100;
+      this.panY = (this.canvas.clientHeight / 2) - (targetNode.y * this.zoom) - 40;
       this.render();
     }
   }
@@ -176,10 +174,7 @@ export class WorkflowView {
     this.container.innerHTML = "";
     this.svg.innerHTML = "";
 
-    // 1. Draw SVG Connecting Edges
     this.renderEdges();
-
-    // 2. Draw Temporal Nodes
     this.renderNodes();
   }
 
@@ -189,7 +184,7 @@ export class WorkflowView {
       const tgt = this.nodes.find(n => n.id === e.target || n.id === e.to);
       if (!src || !tgt) return;
 
-      const x1 = (src.x + 200) * this.zoom + this.panX;
+      const x1 = (src.x + 210) * this.zoom + this.panX;
       const y1 = (src.y + 44) * this.zoom + this.panY;
       const x2 = tgt.x * this.zoom + this.panX;
       const y2 = (tgt.y + 44) * this.zoom + this.panY;
@@ -197,13 +192,17 @@ export class WorkflowView {
 
       const isFallback = e.type === "FALLBACK" || tgt.fallback_rank > 0;
       const isActive = src.status === "COMPLETED" && (tgt.status === "ACTIVE" || tgt.status === "EXECUTING");
+      const isBroken = src.status === "BROKEN" || tgt.status === "BROKEN";
 
-      // Base Curved Path
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
       path.setAttribute("fill", "none");
 
-      if (isFallback) {
+      if (isBroken) {
+        path.setAttribute("stroke", "var(--accent-broken)");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-dasharray", "4,4");
+      } else if (isFallback) {
         path.setAttribute("stroke", "rgba(255, 184, 0, 0.45)");
         path.setAttribute("stroke-width", "2");
         path.setAttribute("stroke-dasharray", "6,5");
@@ -228,19 +227,19 @@ export class WorkflowView {
       const isSelected = this.selectedNodeId === n.id;
       const isFallback = n.fallback_rank > 0;
       const isRateLimited = n.status === "RATE_LIMITED";
+      const isBroken = n.status === "BROKEN";
       const isActive = n.status === "ACTIVE" || n.status === "EXECUTING";
 
-      el.className = `temporal-node ${isActive ? 'node-active' : ''} ${isFallback ? 'node-fallback' : ''} ${isRateLimited ? 'node-ratelimited' : ''} ${isSelected ? 'node-selected' : ''}`;
+      el.className = `temporal-node ${isActive ? 'node-active' : ''} ${isFallback ? 'node-fallback' : ''} ${isRateLimited ? 'node-ratelimited' : ''} ${isBroken ? 'node-broken' : ''} ${isSelected ? 'node-selected' : ''}`;
       el.style.left = `${n.x * this.zoom + this.panX}px`;
       el.style.top = `${n.y * this.zoom + this.panY}px`;
       el.style.transform = `scale(${Math.max(0.7, Math.min(1.3, this.zoom))})`;
 
-      // Status indicator color
       let statusColor = "var(--text-muted)";
       if (isActive) statusColor = "var(--accent-cyan)";
       else if (n.status === "COMPLETED") statusColor = "var(--accent-emerald)";
       else if (isRateLimited) statusColor = "var(--accent-amber)";
-      else if (n.status === "FAILED") statusColor = "var(--accent-crimson)";
+      else if (isBroken || n.status === "FAILED") statusColor = "var(--accent-broken)";
 
       const roleBadgeText = n.role ? n.role.toUpperCase() : "STEP";
       const modelShort = n.model ? n.model.split('/').pop() : "System";
@@ -294,6 +293,7 @@ export class WorkflowView {
     const candidates = this.rolesData[node.role] || [
       { provider: node.provider || "groq", model: node.model || "default" }
     ];
+    const currentMode = this.executionModes[node.role] || "FALLBACK_ORDER";
 
     let candidatesListHtml = "";
     candidates.forEach((c, idx) => {
@@ -323,7 +323,7 @@ export class WorkflowView {
             </div>
           </div>
 
-          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;">
             <span class="cap-pill">Streaming ✓</span>
             <span class="cap-pill">Tool Calling ✓</span>
             ${node.role === "vision" ? `<span class="cap-pill">Vision ✓</span>` : ''}
@@ -335,9 +335,21 @@ export class WorkflowView {
 
     drawerContent.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Mode Selector -->
+        <div>
+          <div style="font-family: var(--font-brand); font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+            EXECUTION MODE
+          </div>
+          <div class="mode-selector-group">
+            <button class="mode-pill-btn ${currentMode === 'PRIMARY_ONLY' ? 'active' : ''}" data-mode="PRIMARY_ONLY">PRIMARY ONLY</button>
+            <button class="mode-pill-btn ${currentMode === 'FALLBACK_ORDER' ? 'active' : ''}" data-mode="FALLBACK_ORDER">FALLBACK ORDER</button>
+            <button class="mode-pill-btn ${currentMode === 'CUSTOM' ? 'active' : ''}" data-mode="CUSTOM">CUSTOM</button>
+          </div>
+        </div>
+
         <div class="inspector-section">
           <div style="font-family: var(--font-brand); font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">
-            ACTIVE CANDIDATE CHAIN (${candidates.length} CANDIDATES)
+            CANDIDATE CHAIN (${candidates.length} CANDIDATES)
           </div>
           <div class="candidates-reorder-container" id="candidates-container">
             ${candidatesListHtml}
@@ -346,29 +358,38 @@ export class WorkflowView {
 
         ${this.mode === "DESIGN" ? `
           <div class="inspector-actions">
-            <button class="btn-action btn-apply-chain" id="btn-apply-role-chain">Apply & Save Candidate Chain</button>
+            <button class="btn-action btn-apply-chain" id="btn-apply-role-chain" style="background: var(--accent-cyan); color: #000; font-weight: 700;">Apply & Save Changes</button>
             <button class="btn-action" id="btn-discard-role-chain">Discard</button>
           </div>
           <div id="inspector-msg" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px;"></div>
         ` : `
           <div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px 12px; background: rgba(0,0,0,0.3); border-radius: 6px;">
-            Switch to <strong>DESIGN MODE</strong> from the toolbar to reorder or reassign candidate chains.
+            Switch to <strong>DESIGN MODE</strong> from toolbar to configure candidate chains and modes.
           </div>
         `}
       </div>
     `;
 
-    // Hook Reorder actions in Design Mode
     if (this.mode === "DESIGN") {
-      this.setupInspectorReorderEvents(node.role, candidates);
+      this.setupInspectorReorderEvents(node.role, candidates, currentMode);
     }
   }
 
-  setupInspectorReorderEvents(role, candidates) {
+  setupInspectorReorderEvents(role, candidates, currentMode) {
     const list = [...candidates];
+    let selectedMode = currentMode;
+
+    document.querySelectorAll(".mode-pill-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".mode-pill-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedMode = btn.getAttribute("data-mode");
+        this.executionModes[role] = selectedMode;
+      });
+    });
 
     document.querySelectorAll(".btn-move-up").forEach(btn => {
-      btn.addEventListener("click", e => {
+      btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-idx"), 10);
         if (idx > 0) {
           const temp = list[idx];
@@ -381,7 +402,7 @@ export class WorkflowView {
     });
 
     document.querySelectorAll(".btn-move-down").forEach(btn => {
-      btn.addEventListener("click", e => {
+      btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-idx"), 10);
         if (idx < list.length - 1) {
           const temp = list[idx];
@@ -394,7 +415,7 @@ export class WorkflowView {
     });
 
     document.querySelectorAll(".btn-set-primary").forEach(btn => {
-      btn.addEventListener("click", e => {
+      btn.addEventListener("click", () => {
         const idx = parseInt(btn.getAttribute("data-idx"), 10);
         const item = list.splice(idx, 1)[0];
         list.unshift(item);
@@ -405,26 +426,25 @@ export class WorkflowView {
 
     document.getElementById("btn-apply-role-chain")?.addEventListener("click", async () => {
       const msgBox = document.getElementById("inspector-msg");
-      if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-cyan);">Saving changes to live router...</span>`;
+      if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-cyan);">Saving changes to router...</span>`;
 
-      // Update via WebSocket or REST API
-      this.send({ action: "UPDATE_ROLE", role: role, candidates: list });
+      this.send({ action: "UPDATE_ROLE", role: role, candidates: list, execution_mode: selectedMode });
 
       try {
         const resp = await fetch("/api/roles/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: role, candidates: list }),
+          body: JSON.stringify({ role: role, candidates: list, execution_mode: selectedMode }),
         });
         const res = await resp.json();
         if (res.success) {
           if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Role '${role}' updated successfully.</span>`;
           this.fetchGraphData();
         } else {
-          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-crimson);">✗ ${res.error}</span>`;
+          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-broken);">✗ ${res.error}</span>`;
         }
       } catch (e) {
-        if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Role update broadcasted via WebSocket.</span>`;
+        if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Role update broadcasted.</span>`;
       }
     });
 
@@ -442,10 +462,8 @@ export class WorkflowView {
     this.render();
   }
 
-  // Real-Time Event Handlers from WebSocket
   handleRuntimeEvent(event, data) {
     if (event === "MODEL_SELECTED") {
-      this.activeExecutionPath.add(data.role);
       const targetNode = this.nodes.find(n => n.role === data.role && n.provider === data.provider);
       if (targetNode) {
         targetNode.status = "ACTIVE";

@@ -1,82 +1,52 @@
-# SERA 1.0 UI Architecture Specification
+# SERA 1.0 — UI Architecture & Command Center Blueprint
 
-## 1. System Overview & Client-Server Decoupling
+## 1. System Overview
 
-The SERA UI is designed as a decoupled client layer operating over the SERA runtime core. The existing backend (STT, TTS, ModelRouter, Agent Engine, Windows UI Automation, TargetResolver, SecurityManager, and EventBus) remains completely independent and fully functional in headless CLI mode.
-
-```
-┌────────────────────────────────────────────────────────────┐
-│                    SERA RUNTIME CORE                       │
-│  [EventBus] ──► [SERAState] ──► [ModelRouter] ──► [Agent]  │
-└─────────────────────────────┬──────────────────────────────┘
-                              │ Real-time Events & State
-                              ▼
-┌────────────────────────────────────────────────────────────┐
-│               UI BRIDGE & WEBSOCKET GATEWAY                │
-│             (app/ui/server.py: 127.0.0.1:8765)              │
-└─────────────────────────────┬──────────────────────────────┘
-                              │ JSON Event Stream / REST IPC
-                              ▼
-┌────────────────────────────────────────────────────────────┐
-│               SERA COMMAND CENTER (SPA UI)                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │                    GLOBAL HEADER                     │  │
-│  │   [Status Orb] [Active Task] [GPU/Net] [View Tabs]   │  │
-│  ├──────────────────────────────────────────────────────┤  │
-│  │                     VIEWPORT                         │  │
-│  │  1. WORKFLOW  (Temporal Horizontal Execution Graph)  │  │
-│  │  2. LIVE      (Futuristic Voice Orb & Unified Chat)  │  │
-│  │  3. AGENTS    (Multi-Agent Hierarchy & Roles)        │  │
-│  │  4. MEMORY    (Neural Memory Core & Knowledge RAG)   │  │
-│  │  5. PROVIDERS (Provider Health, Quotas & Role Chains)│  │
-│  │  6. HISTORY   (Timeline, Session Details & Replay)   │  │
-│  │  7. DEBUG     (Real-time Telemetry & Event Streams)  │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2. Event-Driven Architecture & Synchronization
-
-The UI client connects to the backend gateway over WebSocket (`ws://127.0.0.1:8765/ws`) and subscribes directly to runtime state changes.
-
-### Supported Gateway Event Streams:
-1. `RUNTIME_STATE_CHANGED`: Emitted on state transitions (`IDLE`, `LISTENING`, `TRANSCRIBING`, `THINKING`, `EXECUTING`, `SPEAKING`, `CONFIRMING`, `ERROR`).
-2. `TRANSCRIPT_RECEIVED`: Emitted when STT yields final command text.
-3. `ROUTER_DECISION`: Emitted with chosen role, candidate provider, and health status.
-4. `MODEL_FALLBACK`: Emitted when candidate 429/402 triggers failover.
-5. `TOOL_EXECUTION`: Emitted on semantic tool invoke, execution, and verification.
-6. `VISION_PERCEPTION`: Emitted when screenshot perception hierarchy is engaged.
-7. `AGENT_UPDATE`: Emitted when planner or multi-agent tasks spawn/complete.
-8. `TELEMETRY_SAMPLE`: Emitted with live TTFT, TTFA, latency metrics, and quota updates.
-
----
-
-## 3. Component Hierarchy
+The SERA Command Center is a decoupled, asynchronous, real-time user interface designed around the **Temporal Aura** design system.
 
 ```
-App
-├── GlobalHeader
-│   ├── BrandLogo
-│   ├── StateIndicator (Aura Orb)
-│   ├── ActiveTaskTicker
-│   ├── HardwareGauges (GPU / System Memory)
-│   └── NavigationBar (7 Main Views)
-├── MainContainer
-│   ├── WorkflowView (Interactive Horizontal Canvas)
-│   ├── LiveView (Aura Voice Orb + Unified Stream Chat)
-│   ├── AgentsView (Stylized Agent Nodes & Dynamic Flow)
-│   ├── MemoryView (Memory Core + RAG Knowledge Clusters)
-│   ├── ProvidersView (Provider Cards, Health & Quota Bars)
-│   ├── HistoryView (Timeline, Session Cards & Replay Modal)
-│   └── DebugView (Real-time Latency Waterfall & Event Log)
-└── GlobalNotificationDrawer / ToastSystem
+┌────────────────────────────────────────────────────────┐
+│               SERA CLI / HEADLESS RUNTIME              │
+│  State Machine • EventBus • ModelRouter • Tools • STT  │
+└───────────────────────────┬────────────────────────────┘
+                            │ (In-Memory Observers)
+┌───────────────────────────▼────────────────────────────┐
+│                    SERA UI SERVER                      │
+│     Unified Async TCP Server (HTTP GET/POST + WS)      │
+│          http://127.0.0.1:8765 / ws://.../ws           │
+└───────────────────────────┬────────────────────────────┘
+                            │ (WebSocket Events + REST)
+┌───────────────────────────▼────────────────────────────┐
+│                 TEMPORAL AURA CLIENT                   │
+│   Vanilla JS SPA • SVG Bezier Graph • Real-time Aura   │
+└────────────────────────────────────────────────────────┘
 ```
 
----
+## 2. Decoupled Gateway Architecture
 
-## 4. Headless & Production Independence
+- **Zero-Block Guarantees**: The UI server communicates via non-blocking asynchronous event loops. If the UI client closes or disconnects, the voice runtime and desktop agent continue operating with zero latency overhead.
+- **Bi-Directional WebSocket Stream**: Streams `RUNTIME_STATE_CHANGED`, `MODEL_SELECTED`, `MODEL_FALLBACK`, `TOOL_STARTED`, `TOOL_COMPLETED`, `VISION_STARTED`, `VISION_COMPLETED`, `TTS_STARTED`, `TASK_CANCELLED`, and `SECURITY_CONFIRMATION_REQUIRED`.
+- **Unified REST API**:
+  - `/api/state`: Instant snapshot of system state and hardware telemetry.
+  - `/api/workflow`: Dynamic execution graph nodes and edges.
+  - `/api/roles/update`: Validated candidate chains and execution mode updates.
+  - `/api/providers`: Provider cards, model health, and dynamic quota metrics.
+  - `/api/providers/add`: Vercel-style custom provider onboarding without leaking secrets.
+  - `/api/security`: SecurityManager permission policies and privacy boundaries.
+  - `/api/memory`: Categorical memory core retrieval and forgetting.
+  - `/api/history`: Chronological interaction sessions.
+  - `/api/telemetry`: Pipeline latency waterfall and event trace.
 
-- **Zero Coupling**: If the UI server is not launched, SERA operates identically in headless CLI voice mode.
-- **Bi-directional Control**: The UI can send text prompts, interrupt speech, reorder fallback candidates, and trigger verification actions over IPC without altering runtime business logic.
+## 3. View Architecture Across 3 Domains
+
+- **COMMAND**:
+  - `LiveView`: Human-facing conversational interface, reactive Aura Orb, 5.0s recording countdown, current task progress card.
+  - `WorkflowView`: Temporal execution graph, curved fallback branches, particle flow, and role candidate editor.
+- **INTELLIGENCE**:
+  - `AgentsView`: Multi-agent hierarchical executors (Planner, Desktop, Vision, Research).
+  - `MemoryView`: Neural Knowledge Core with categories (Preferences, Semantic, Episodic, Projects, Documents).
+- **SYSTEM**:
+  - `ProvidersView`: Multi-provider acceleration dashboard, dynamic quotas, and provider onboarding.
+  - `HistoryView`: Chronological session timeline with separate Replay and Run Again actions.
+  - `DebugView`: Engineering latency waterfall and filtered EventBus console stream.
+  - `SecurityView`: Security boundaries, permissions matrix, and action confirmation modals.

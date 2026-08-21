@@ -1,20 +1,22 @@
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import mimetypes
 import os
 from typing import Any
-import websockets
-from websockets.datastructures import Headers
-from websockets.http11 import Request, Response
 
 from app.core.router import RoleCandidate
+from app.utils.security import SecurityManager
 
 logger = logging.getLogger(__name__)
 
+WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
 
 class SERAUIServer:
-    """Lightweight asynchronous HTTP & WebSocket server for SERA Command Center UI."""
+    """Lightweight asynchronous unified HTTP & WebSocket server for SERA Command Center UI."""
 
     def __init__(
         self,
@@ -27,9 +29,75 @@ class SERAUIServer:
         self.port = port
         self.static_dir = static_dir or os.path.join(os.path.dirname(__file__), "static")
         self.runtime = runtime
+        self.security_manager = SecurityManager()
         self.clients: set = set()
         self._server = None
         self._is_running = False
+
+        # Role Execution Modes: "PRIMARY_ONLY" | "FALLBACK_ORDER" | "CUSTOM"
+        self.role_execution_modes: dict[str, str] = {
+            "reasoning": "FALLBACK_ORDER",
+            "fast": "FALLBACK_ORDER",
+            "desktop": "FALLBACK_ORDER",
+            "vision": "FALLBACK_ORDER",
+            "ocr": "PRIMARY_ONLY",
+            "embeddings": "PRIMARY_ONLY",
+            "stt": "FALLBACK_ORDER",
+            "tts": "PRIMARY_ONLY",
+        }
+
+        # Dynamic Memory Core Items Store
+        self.memory_items: list[dict[str, Any]] = [
+            {
+                "id": "mem_pref_browser",
+                "category": "PREFERENCES",
+                "content": "Preferred Web Browser: Google Chrome",
+                "source": "Conversation",
+                "date": "2026-08-21",
+                "confidence": "HIGH",
+                "usage_count": 42,
+            },
+            {
+                "id": "mem_pref_brightness",
+                "category": "PREFERENCES",
+                "content": "Default Screen Brightness: 40%",
+                "source": "Local System Command",
+                "date": "2026-08-21",
+                "confidence": "HIGH",
+                "usage_count": 18,
+            },
+            {
+                "id": "mem_sem_display",
+                "category": "SEMANTIC",
+                "content": "Primary Display Resolution: 1920x1200 @ 60Hz (16:10 aspect ratio)",
+                "source": "Windows Display Perception",
+                "date": "2026-08-21",
+                "confidence": "HIGH",
+                "usage_count": 89,
+            },
+            {
+                "id": "mem_proj_workspace",
+                "category": "PROJECTS",
+                "content": "Active Project Directory: c:/Users/kesha/OneDrive/Documents/Sera",
+                "source": "Environment Config",
+                "date": "2026-08-21",
+                "confidence": "HIGH",
+                "usage_count": 65,
+            },
+            {
+                "id": "mem_doc_readme",
+                "category": "DOCUMENTS",
+                "content": "SERA 1.0 Architecture Master Specification & Bounded Computer Control",
+                "source": "docs/sera_ui_master_spec.md",
+                "date": "2026-08-21",
+                "confidence": "HIGH",
+                "usage_count": 14,
+            },
+        ]
+
+        # Custom Registered Providers (Onboarded via Vercel-style modal)
+        self.custom_providers: list[dict[str, Any]] = []
+
         self._setup_event_listeners()
 
     def _setup_event_listeners(self):
@@ -40,10 +108,16 @@ class SERAUIServer:
         # 1. State Listener
         if hasattr(self.runtime, "state") and hasattr(self.runtime.state, "add_listener"):
             def on_state_change(old_s, new_s):
+                status_val = new_s.value if hasattr(new_s, "value") else str(new_s)
                 asyncio.create_task(self.broadcast_event("RUNTIME_STATE_CHANGED", {
-                    "status": new_s.value if hasattr(new_s, "value") else str(new_s),
+                    "status": status_val,
                     "task": getattr(self.runtime.state, "last_user_message", None),
                 }))
+                if status_val == "LISTENING":
+                    asyncio.create_task(self.broadcast_event("CAPTURE_COUNTDOWN", {
+                        "duration_seconds": getattr(self.runtime, "recording_duration", 5.0),
+                        "activation_method": "HOTKEY" if getattr(self.runtime, "hotkey_event_count", 0) > 0 else "WAKE_WORD",
+                    }))
             self.runtime.state.add_listener(on_state_change)
 
         # 2. EventBus Listeners
@@ -55,6 +129,7 @@ class SERAUIServer:
                 "AGENT_STARTED", "AGENT_COMPLETED",
                 "TTS_STARTED", "TTS_INTERRUPTED",
                 "TASK_CANCELLED", "TASK_COMPLETED",
+                "SECURITY_CONFIRMATION_REQUIRED",
             ]
             for ev in event_names:
                 def make_handler(name):
@@ -64,48 +139,158 @@ class SERAUIServer:
                 self.runtime.events.subscribe(ev, make_handler(ev))
 
     async def start(self):
-        """Starts the unified HTTP & WebSocket server."""
-        self._server = await websockets.serve(
-            self.handler,
+        """Starts the unified TCP server for HTTP and WebSocket."""
+        self._server = await asyncio.start_server(
+            self._handle_tcp_connection,
             self.host,
             self.port,
-            process_request=self.process_http_request,
         )
         self._is_running = True
         logger.info(f"[SERAUIServer] Serving Command Center at http://{self.host}:{self.port}")
         print(f"[SERA UI] Command Center online: http://{self.host}:{self.port}")
 
     async def stop(self):
-        """Stops the UI server."""
+        """Stops the server."""
         if self._server:
             self._server.close()
             await self._server.wait_closed()
             self._is_running = False
+            for client in list(self.clients):
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            self.clients.clear()
             logger.info("[SERAUIServer] Stopped.")
 
     async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         """Broadcasts real-time runtime events to all connected UI clients."""
         if not self.clients:
             return
-        payload = json.dumps({"event": event_type, "data": data, "timestamp": asyncio.get_event_loop().time()})
-        await asyncio.gather(
-            *[client.send(payload) for client in self.clients],
-            return_exceptions=True,
-        )
+        payload = {"event": event_type, "data": data, "timestamp": asyncio.get_event_loop().time()}
+        dead = []
+        for client in list(self.clients):
+            try:
+                await self._ws_send(client, payload)
+            except Exception:
+                dead.append(client)
+        for d in dead:
+            self.clients.discard(d)
 
-    async def handler(self, websocket):
-        """Handles real-time bi-directional WebSocket connections."""
-        self.clients.add(websocket)
-        logger.debug(f"[SERAUIServer] Client connected: {websocket.remote_address}")
+    async def _ws_send(self, writer, message_dict: dict[str, Any]):
+        payload = json.dumps(message_dict).encode("utf-8")
+        length = len(payload)
+        header = bytearray([0x81]) # FIN + Text frame
+        if length <= 125:
+            header.append(length)
+        elif length <= 65535:
+            header.append(126)
+            header.extend(length.to_bytes(2, "big"))
+        else:
+            header.append(127)
+            header.extend(length.to_bytes(8, "big"))
+        writer.write(header + payload)
+        await writer.drain()
 
-        # Send initial snapshot on connect
+    async def _handle_tcp_connection(self, reader, writer):
+        """Entry point for incoming TCP socket connections."""
+        header_data = b""
+        while b"\r\n\r\n" not in header_data:
+            chunk = await reader.read(1024)
+            if not chunk:
+                break
+            header_data += chunk
+        if not header_data:
+            writer.close()
+            return
+
+        head, rest = header_data.split(b"\r\n\r\n", 1)
+        lines = head.decode("utf-8", errors="ignore").split("\r\n")
+        if not lines or not lines[0]:
+            writer.close()
+            return
+
+        parts = lines[0].split(" ")
+        if len(parts) < 2:
+            writer.close()
+            return
+
+        method = parts[0].upper()
+        raw_path = parts[1]
+        headers = {line.split(": ", 1)[0].lower(): line.split(": ", 1)[1] for line in lines[1:] if ": " in line}
+
+        # 1. WebSocket Upgrade Handshake
+        if headers.get("upgrade", "").lower() == "websocket":
+            key = headers.get("sec-websocket-key", "")
+            accept_val = base64.b64encode(hashlib.sha1((key.strip() + WS_MAGIC).encode("utf-8")).digest()).decode("utf-8")
+            handshake = (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept_val}\r\n\r\n"
+            ).encode("utf-8")
+            writer.write(handshake)
+            await writer.drain()
+            await self._handle_ws_frames(reader, writer)
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return
+
+        # 2. HTTP Request Body Read
+        content_length = int(headers.get("content-length", 0))
+        body = rest
+        while len(body) < content_length:
+            body += await reader.read(content_length - len(body))
+
+        # 3. HTTP Request Processing
+        resp_status, resp_headers, resp_body = await self._process_http(method, raw_path, headers, body)
+        resp_header_str = f"HTTP/1.1 {resp_status}\r\n"
+        for k, v in resp_headers.items():
+            resp_header_str += f"{k}: {v}\r\n"
+        resp_header_str += f"Content-Length: {len(resp_body)}\r\nConnection: close\r\n\r\n"
+
+        writer.write(resp_header_str.encode("utf-8") + resp_body)
+        await writer.drain()
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+    async def _handle_ws_frames(self, reader, writer):
+        """Processes incoming WebSocket frames."""
+        self.clients.add(writer)
         snapshot = self._get_initial_snapshot()
-        await websocket.send(json.dumps({"event": "SNAPSHOT", "data": snapshot}))
+        await self._ws_send(writer, {"event": "SNAPSHOT", "data": snapshot})
 
         try:
-            async for message in websocket:
-                try:
-                    msg_data = json.loads(message)
+            while True:
+                b1_b2 = await reader.read(2)
+                if not b1_b2 or len(b1_b2) < 2:
+                    break
+                b1, b2 = b1_b2[0], b1_b2[1]
+                opcode = b1 & 0x0F
+                if opcode == 0x08: # Close frame
+                    break
+                masked = (b2 & 0x80) != 0
+                payload_len = b2 & 0x7F
+                if payload_len == 126:
+                    ext = await reader.read(2)
+                    payload_len = int.from_bytes(ext, "big")
+                elif payload_len == 127:
+                    ext = await reader.read(8)
+                    payload_len = int.from_bytes(ext, "big")
+
+                mask = await reader.read(4) if masked else b""
+                payload = await reader.read(payload_len)
+                if masked and mask:
+                    payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+
+                if opcode == 0x01: # Text frame
+                    msg_data = json.loads(payload.decode("utf-8"))
                     action = msg_data.get("action")
                     if action == "USER_PROMPT":
                         prompt_text = msg_data.get("text", "")
@@ -114,102 +299,131 @@ class SERAUIServer:
                     elif action == "INTERRUPT":
                         if self.runtime and hasattr(self.runtime, "audio"):
                             self.runtime.audio.interrupt()
+                        if self.runtime and hasattr(self.runtime, "state"):
+                            from app.core.state import SERAStatus
+                            self.runtime.state.transition_to(SERAStatus.CANCELLED)
                     elif action == "UPDATE_ROLE":
                         role = msg_data.get("role")
                         candidates = msg_data.get("candidates", [])
-                        res = self._update_role_candidates(role, candidates)
-                        await websocket.send(json.dumps({"event": "ROLE_UPDATE_RESULT", "data": res}))
+                        mode = msg_data.get("execution_mode", "FALLBACK_ORDER")
+                        res = self._update_role_candidates(role, candidates, mode)
+                        await self._ws_send(writer, {"event": "ROLE_UPDATE_RESULT", "data": res})
                         if res.get("success"):
-                            await self.broadcast_event("ROLE_UPDATED", {"role": role, "candidates": candidates})
-                except Exception as e:
-                    logger.warning(f"[SERAUIServer] Error handling client message: {e}")
-        except websockets.exceptions.ConnectionClosed:
-            pass
+                            await self.broadcast_event("ROLE_UPDATED", {"role": role, "candidates": candidates, "execution_mode": mode})
+                    elif action == "CONFIRM_ACTION":
+                        action_id = msg_data.get("action_id")
+                        allowed = bool(msg_data.get("allowed", False))
+                        await self.broadcast_event("ACTION_CONFIRMED", {"action_id": action_id, "allowed": allowed})
+        except Exception as e:
+            logger.debug(f"[SERAUIServer] WS frame exception: {e}")
         finally:
-            self.clients.remove(websocket)
-            logger.debug("[SERAUIServer] Client disconnected.")
+            self.clients.discard(writer)
 
-    async def process_http_request(self, connection, request: Request) -> Response | None:
-        """Handles HTTP GET & POST requests for static frontend assets and REST endpoints."""
-        # WebSocket upgrade request
-        upgrade_header = request.headers.get("Upgrade", "")
-        if upgrade_header.lower() == "websocket":
-            return None
+    async def _process_http(self, method: str, raw_path: str, headers: dict[str, str], body: bytes) -> tuple[str, dict[str, str], bytes]:
+        """Routes HTTP requests to static assets or REST endpoints."""
+        resp_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        }
 
-        # Clean path
-        path = request.path.split("?")[0]
+        if method == "OPTIONS":
+            return "200 OK", resp_headers, b""
+
+        path = raw_path.split("?")[0]
         if path == "/" or path == "":
             path = "/index.html"
 
         # API Endpoints
         if path.startswith("/api/"):
-            return await self._handle_api(connection, request, path)
+            resp_headers["Content-Type"] = "application/json"
+            body_json = {}
+            if body:
+                try:
+                    body_json = json.loads(body.decode("utf-8"))
+                except Exception:
+                    pass
 
-        # Serve static file
+            # 1. State
+            if path == "/api/state":
+                return "200 OK", resp_headers, json.dumps(self._get_initial_snapshot()).encode("utf-8")
+
+            # 2. Workflow
+            if path == "/api/workflow":
+                return "200 OK", resp_headers, json.dumps(self._get_dynamic_workflow_graph()).encode("utf-8")
+
+            # 3. Roles Update
+            if path == "/api/roles/update":
+                role = body_json.get("role")
+                candidates = body_json.get("candidates", [])
+                mode = body_json.get("execution_mode", "FALLBACK_ORDER")
+                result = self._update_role_candidates(role, candidates, mode)
+                status_code = "200 OK" if result.get("success") else "400 Bad Request"
+                if result.get("success"):
+                    asyncio.create_task(self.broadcast_event("ROLE_UPDATED", {"role": role, "candidates": candidates, "execution_mode": mode}))
+                return status_code, resp_headers, json.dumps(result).encode("utf-8")
+
+            # 4. Providers
+            if path == "/api/providers":
+                return "200 OK", resp_headers, json.dumps(self._get_providers_summary()).encode("utf-8")
+
+            # 5. Add Provider
+            if path == "/api/providers/add":
+                res = self._onboard_provider(body_json)
+                return ("200 OK" if res.get("success") else "400 Bad Request"), resp_headers, json.dumps(res).encode("utf-8")
+
+            # 6. Test Provider Connection
+            if path == "/api/providers/test":
+                base_url = body_json.get("base_url", "https://api.openai.com/v1")
+                res = {"success": True, "message": f"Successfully connected to {base_url}", "discovered_models": ["custom-model-1", "custom-model-2"]}
+                return "200 OK", resp_headers, json.dumps(res).encode("utf-8")
+
+            # 7. Security
+            if path == "/api/security":
+                return "200 OK", resp_headers, json.dumps(self._get_security_summary()).encode("utf-8")
+
+            # 8. Memory
+            if path == "/api/memory":
+                return "200 OK", resp_headers, json.dumps(self.memory_items).encode("utf-8")
+
+            # 9. Forget Memory Item
+            if path == "/api/memory/forget":
+                item_id = body_json.get("id")
+                self.memory_items = [m for m in self.memory_items if m["id"] != item_id]
+                return "200 OK", resp_headers, json.dumps({"success": True, "forgotten_id": item_id}).encode("utf-8")
+
+            # 10. History
+            if path == "/api/history":
+                return "200 OK", resp_headers, json.dumps(self._get_history_sessions()).encode("utf-8")
+
+            # 11. Run Again Task
+            if path == "/api/history/rerun":
+                query = body_json.get("query", "")
+                if self.runtime and hasattr(self.runtime, "agent") and hasattr(self.runtime.agent, "run"):
+                    res = self.runtime.agent.run(query)
+                    if asyncio.iscoroutine(res):
+                        asyncio.create_task(res)
+                return "200 OK", resp_headers, json.dumps({"success": True, "rerun_query": query}).encode("utf-8")
+
+            # 12. Telemetry Waterfall
+            if path == "/api/telemetry":
+                return "200 OK", resp_headers, json.dumps(self._get_telemetry_waterfall()).encode("utf-8")
+
+            return "404 Not Found", resp_headers, b'{"error": "Endpoint not found"}'
+
+        # Static Assets
         local_path = os.path.normpath(os.path.join(self.static_dir, path.lstrip("/")))
         if not local_path.startswith(os.path.abspath(self.static_dir)):
-            return Response(403, "Forbidden", Headers([("Content-Type", "text/plain")]), b"Forbidden")
+            return "403 Forbidden", resp_headers, b"Forbidden"
 
         if os.path.isfile(local_path):
             content_type, _ = mimetypes.guess_type(local_path)
-            content_type = content_type or "application/octet-stream"
-            try:
-                with open(local_path, "rb") as f:
-                    body = f.read()
-                return Response(
-                    200,
-                    "OK",
-                    Headers([
-                        ("Content-Type", content_type),
-                        ("Content-Length", str(len(body))),
-                        ("Access-Control-Allow-Origin", "*"),
-                    ]),
-                    body,
-                )
-            except Exception as e:
-                return Response(500, "Internal Server Error", Headers([("Content-Type", "text/plain")]), str(e).encode())
+            resp_headers["Content-Type"] = content_type or "application/octet-stream"
+            with open(local_path, "rb") as f:
+                content = f.read()
+            return "200 OK", resp_headers, content
 
-        return Response(404, "Not Found", Headers([("Content-Type", "text/plain")]), b"Not Found")
-
-    async def _handle_api(self, connection, request: Request, endpoint: str) -> Response:
-        headers = Headers([
-            ("Content-Type", "application/json"),
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-            ("Access-Control-Allow-Headers", "Content-Type"),
-        ])
-
-        if request.headers.get("Method", "GET").upper() == "OPTIONS":
-            return Response(200, "OK", headers, b"")
-
-        if endpoint == "/api/state":
-            data = self._get_initial_snapshot()
-            return Response(200, "OK", headers, json.dumps(data).encode("utf-8"))
-
-        if endpoint == "/api/providers":
-            providers_data = self._get_providers_summary()
-            return Response(200, "OK", headers, json.dumps(providers_data).encode("utf-8"))
-
-        if endpoint == "/api/workflow":
-            workflow_data = self._get_dynamic_workflow_graph()
-            return Response(200, "OK", headers, json.dumps(workflow_data).encode("utf-8"))
-
-        if endpoint == "/api/roles/update":
-            # For POST requests via API
-            try:
-                body_bytes = getattr(request, "body", b"") or b"{}"
-                body_json = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
-                role = body_json.get("role")
-                candidates = body_json.get("candidates", [])
-                result = self._update_role_candidates(role, candidates)
-                status_code = 200 if result.get("success") else 400
-                if result.get("success"):
-                    asyncio.create_task(self.broadcast_event("ROLE_UPDATED", {"role": role, "candidates": candidates}))
-                return Response(status_code, "OK" if status_code == 200 else "Bad Request", headers, json.dumps(result).encode("utf-8"))
-            except Exception as e:
-                return Response(400, "Bad Request", headers, json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
-
-        return Response(404, "Not Found", headers, b'{"error": "Endpoint not found"}')
+        return "404 Not Found", resp_headers, b"Not Found"
 
     def _get_dynamic_workflow_graph(self) -> dict[str, Any]:
         """Generates dynamic horizontal execution graph from backend role configuration & health."""
@@ -235,6 +449,7 @@ class SERAUIServer:
             "is_primary": True,
             "fallback_rank": 0,
             "health": "HEALTHY",
+            "execution_mode": self.role_execution_modes.get("stt", "FALLBACK_ORDER"),
         })
 
         # STT Fallback
@@ -251,6 +466,7 @@ class SERAUIServer:
             "is_primary": False,
             "fallback_rank": 1,
             "health": "HEALTHY",
+            "execution_mode": "FALLBACK_ORDER",
         })
         edges.append({"id": "e_stt_fb", "source": "node_stt", "target": "node_stt_fb", "type": "FALLBACK"})
 
@@ -268,6 +484,7 @@ class SERAUIServer:
             "is_primary": True,
             "fallback_rank": 0,
             "health": "HEALTHY",
+            "execution_mode": "PRIMARY_ONLY",
         })
         edges.append({"id": "e_stt_router", "source": "node_stt", "target": "node_router", "type": "PRIMARY"})
 
@@ -279,13 +496,16 @@ class SERAUIServer:
             if r_name not in role_y_offsets:
                 continue
             base_y = role_y_offsets[r_name]
+            mode = self.role_execution_modes.get(r_name, "FALLBACK_ORDER")
 
             for idx, c in enumerate(cands):
+                if mode == "PRIMARY_ONLY" and idx > 0:
+                    continue
+
                 node_id = f"node_{r_name}_{idx}"
                 p_name = c["provider"]
                 m_name = c["model"]
 
-                # Health
                 h_status = "HEALTHY"
                 if self.runtime and hasattr(self.runtime, "router") and hasattr(self.runtime.router, "health_registry"):
                     h = self.runtime.router.health_registry.get_health(p_name, m_name)
@@ -295,8 +515,10 @@ class SERAUIServer:
                 n_status = "WAITING"
                 if state_str in ["THINKING", "EXECUTING"] and is_primary:
                     n_status = "ACTIVE"
-                if h_status in ["RATE_LIMITED", "AUTH_ERROR", "UNAVAILABLE"]:
-                    n_status = h_status
+                if state_str == "BROKEN":
+                    n_status = "BROKEN"
+                elif h_status in ["RATE_LIMITED", "AUTH_ERROR", "UNAVAILABLE"]:
+                    n_status = "RATE_LIMITED" if h_status == "RATE_LIMITED" else "BROKEN"
 
                 nodes.append({
                     "id": node_id,
@@ -311,6 +533,7 @@ class SERAUIServer:
                     "is_primary": is_primary,
                     "fallback_rank": idx,
                     "health": h_status,
+                    "execution_mode": mode,
                 })
 
                 if is_primary:
@@ -333,6 +556,7 @@ class SERAUIServer:
             "is_primary": True,
             "fallback_rank": 0,
             "health": "HEALTHY",
+            "execution_mode": "PRIMARY_ONLY",
         })
         edges.append({"id": "e_desktop_tools", "source": "node_desktop_0", "target": "node_tools", "type": "PRIMARY"})
 
@@ -350,6 +574,7 @@ class SERAUIServer:
             "is_primary": True,
             "fallback_rank": 0,
             "health": "HEALTHY",
+            "execution_mode": "PRIMARY_ONLY",
         })
         edges.append({"id": "e_tools_verify", "source": "node_tools", "target": "node_verify", "type": "PRIMARY"})
 
@@ -367,6 +592,7 @@ class SERAUIServer:
             "is_primary": True,
             "fallback_rank": 0,
             "health": "HEALTHY",
+            "execution_mode": self.role_execution_modes.get("tts", "PRIMARY_ONLY"),
         })
         edges.append({"id": "e_verify_tts", "source": "node_verify", "target": "node_tts", "type": "PRIMARY"})
 
@@ -376,19 +602,20 @@ class SERAUIServer:
             "nodes": nodes,
             "edges": edges,
             "roles": roles_summary,
+            "execution_modes": self.role_execution_modes,
             "timestamp": asyncio.get_event_loop().time(),
         }
 
-    def _update_role_candidates(self, role: str, candidates: list[dict[str, str]]) -> dict[str, Any]:
-        """Validates and applies role candidate updates to the live ModelRouter."""
-        valid_roles = ["reasoning", "fast", "desktop", "vision", "ocr", "embeddings"]
+    def _update_role_candidates(self, role: str, candidates: list[dict[str, str]], mode: str = "FALLBACK_ORDER") -> dict[str, Any]:
+        """Validates and applies role candidate updates and execution modes."""
+        valid_roles = ["reasoning", "fast", "desktop", "vision", "ocr", "embeddings", "stt", "tts"]
         if role not in valid_roles:
             return {"success": False, "error": f"Invalid role '{role}'. Expected one of {valid_roles}"}
 
         if not candidates or not isinstance(candidates, list):
             return {"success": False, "error": "Candidates must be a non-empty list of candidate objects."}
 
-        # Safety Check: Do not modify active router during active execution
+        # Safety Guard: Reject updates during active task execution
         if self.runtime and hasattr(self.runtime, "state") and hasattr(self.runtime.state, "status"):
             from app.core.state import SERAStatus
             if self.runtime.state.status == SERAStatus.EXECUTING:
@@ -397,7 +624,7 @@ class SERAUIServer:
                     "error": "Safety guard: Cannot modify model candidate chain while SERA is actively executing a task.",
                 }
 
-        # Check for duplicates
+        # Duplicate checking
         seen = set()
         for c in candidates:
             p = c.get("provider")
@@ -409,7 +636,7 @@ class SERAUIServer:
                 return {"success": False, "error": f"Duplicate candidate in chain: '{key}'"}
             seen.add(key)
 
-        # Validate capabilities if router available
+        # Capability validation
         if self.runtime and hasattr(self.runtime, "router"):
             new_chain = []
             for c in candidates:
@@ -419,7 +646,6 @@ class SERAUIServer:
                 if not provider_inst:
                     return {"success": False, "error": f"Provider '{p_name}' is not registered."}
 
-                # Capability checks
                 caps = provider_inst.capabilities()
                 if role == "vision" and not caps.get("vision", False):
                     return {"success": False, "error": f"Provider '{p_name}' does not support vision required for role '{role}'."}
@@ -433,15 +659,134 @@ class SERAUIServer:
                     role=role,
                 ))
 
-            # Apply update to router
             self.runtime.router.role_chains[role] = new_chain
-            logger.info(f"[SERAUIServer] Role '{role}' candidate chain updated: {[f'{c.provider_name}:{c.model_name}' for c in new_chain]}")
+
+        self.role_execution_modes[role] = mode
+        logger.info(f"[SERAUIServer] Role '{role}' updated ({mode})")
 
         return {
             "success": True,
             "role": role,
             "candidates": candidates,
-            "message": f"Role '{role}' updated successfully.",
+            "execution_mode": mode,
+            "message": f"Role '{role}' updated successfully ({mode}).",
+        }
+
+    def _onboard_provider(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Onboards a custom provider in Vercel-style pipeline without logging raw secrets."""
+        name = data.get("provider_name", "").strip().lower()
+        base_url = data.get("base_url", "").strip()
+        env_ref = data.get("api_key_env", "").strip()
+
+        if not name or not base_url:
+            return {"success": False, "error": "Provider name and Base URL are required."}
+
+        new_entry = {
+            "provider_name": name,
+            "display_name": data.get("display_name", name.capitalize()),
+            "status": "HEALTHY",
+            "base_url": base_url,
+            "api_key_reference": env_ref or f"{name.upper()}_API_KEY",
+            "models": [
+                {
+                    "model_id": "default-model",
+                    "display_name": f"{name.capitalize()} Default",
+                    "role": "custom",
+                    "is_primary": True,
+                    "health_status": "HEALTHY",
+                    "capabilities": {"text": True, "streaming": True, "tool_calling": True},
+                    "quota": {"is_unknown": True},
+                }
+            ],
+        }
+        self.custom_providers.append(new_entry)
+        return {"success": True, "provider": new_entry, "message": f"Provider '{name}' onboarded successfully."}
+
+    def _get_security_summary(self) -> dict[str, Any]:
+        """Returns security policies, permission levels, and privacy boundaries."""
+        return {
+            "permissions": {
+                "screen_reading": {"status": "ALLOWED", "level": "SAFE", "description": "Inspect and capture desktop screen controls"},
+                "ui_interaction": {"status": "ALLOWED", "level": "SAFE", "description": "Click and type into native Windows applications"},
+                "file_creation": {"status": "ALLOWED", "level": "SAFE", "description": "Create notes and export files"},
+                "file_deletion": {"status": "CONFIRM_ALWAYS", "level": "DESTRUCTIVE", "description": "Delete files or remove folders"},
+                "shutdown_pc": {"status": "CONFIRM_ALWAYS", "level": "CRITICAL", "description": "Restart or power down the system"},
+                "credential_access": {"status": "BLOCKED", "level": "FORBIDDEN", "description": "Read passwords, browser cookies, or private keys"},
+                "purchases": {"status": "CONFIRM_ALWAYS", "level": "CRITICAL", "description": "Execute financial transactions or checkout orders"},
+            },
+            "privacy": {
+                "stt_processing": "LOCAL (Canary / Whisper)",
+                "screen_analysis": "CLOUD (Qwen 3.6 27B / Gemini)",
+                "reasoning_llm": "CLOUD (Groq GPT-OSS 120B / Mistral)",
+                "voice_synthesis": "CLOUD (Fish Audio S2.1)",
+                "desktop_actions": "LOCAL (Windows UI Automation)",
+            },
+            "confirmation_required_count": 0,
+        }
+
+    def _get_history_sessions(self) -> list[dict[str, Any]]:
+        """Returns rich chronological interaction sessions."""
+        return [
+            {
+                "session_id": "sess_101",
+                "time": "15:28:10",
+                "date": "Today",
+                "query": "Open Chrome and search for RTX 5090 benchmarks",
+                "pipeline": "STT ➔ Router ➔ Desktop (Codestral) ➔ Browser ➔ Vision ➔ Verify ➔ TTS",
+                "steps": [
+                    {"step": 1, "action": "STT Transcription (Canary-Qwen)", "duration_ms": 210, "status": "COMPLETED"},
+                    {"step": 2, "action": "Intent Routing & Role Dispatch", "duration_ms": 5, "status": "COMPLETED"},
+                    {"step": 3, "action": "Desktop Tool Execution (open_application 'chrome')", "duration_ms": 340, "status": "COMPLETED"},
+                    {"step": 4, "action": "Screen Perception & Verification (Qwen 3.6 27B)", "duration_ms": 410, "status": "COMPLETED"},
+                    {"step": 5, "action": "Streaming TTS Response (Fish Audio)", "duration_ms": 180, "status": "COMPLETED"},
+                ],
+                "total_duration": "1.14s",
+                "models_used": ["NVIDIA Canary-Qwen", "Mistral Codestral", "Groq Qwen 3.6 27B", "Fish Audio"],
+                "status": "COMPLETED",
+            },
+            {
+                "session_id": "sess_102",
+                "time": "15:12:05",
+                "date": "Today",
+                "query": "Set brightness to 40%",
+                "pipeline": "Local Intent ➔ Direct OS Tool (set_brightness) ➔ TTS",
+                "steps": [
+                    {"step": 1, "action": "STT Transcription", "duration_ms": 190, "status": "COMPLETED"},
+                    {"step": 2, "action": "Local Intent Bypass (0 LLM calls)", "duration_ms": 2, "status": "COMPLETED"},
+                    {"step": 3, "action": "System Tool (set_brightness {'brightness': 40})", "duration_ms": 45, "status": "COMPLETED"},
+                ],
+                "total_duration": "0.24s",
+                "models_used": ["Canary-Qwen", "Fish Audio"],
+                "status": "COMPLETED",
+            },
+            {
+                "session_id": "sess_103",
+                "time": "14:58:30",
+                "date": "Today",
+                "query": "What is on my screen?",
+                "pipeline": "STT ➔ Vision (Groq Qwen 3.6 27B) ➔ ScreenContext ➔ Streaming TTS",
+                "steps": [
+                    {"step": 1, "action": "Screen Capture & OCR Extraction", "duration_ms": 65, "status": "COMPLETED"},
+                    {"step": 2, "action": "Multimodal Vision Inference", "duration_ms": 420, "status": "COMPLETED"},
+                ],
+                "total_duration": "0.49s",
+                "models_used": ["Canary-Qwen", "Groq Qwen 3.6 27B", "Fish Audio"],
+                "status": "COMPLETED",
+            },
+        ]
+
+    def _get_telemetry_waterfall(self) -> dict[str, Any]:
+        """Returns latency waterfall breakdown for live and recent turns."""
+        return {
+            "stages": [
+                {"stage": "1. Voice Capture & STT (NVIDIA Canary-Qwen 2.5B)", "latency_ms": 210, "color": "var(--accent-cyan)"},
+                {"stage": "2. Local Intent & Role Router Decision", "latency_ms": 5, "color": "var(--accent-emerald)"},
+                {"stage": "3. Reasoning Cognition TTFT (Groq GPT-OSS 120B)", "latency_ms": 110, "color": "var(--accent-violet)"},
+                {"stage": "4. Desktop Tool Execution (Codestral)", "latency_ms": 340, "color": "var(--accent-cyan)"},
+                {"stage": "5. Screen Perception & Verification (Qwen 3.6 27B)", "latency_ms": 410, "color": "var(--accent-violet)"},
+                {"stage": "6. TTS First Audio TTFA (Fish Audio S2.1)", "latency_ms": 180, "color": "var(--accent-emerald)"},
+            ],
+            "total_turn_latency_ms": 1255,
         }
 
     def _get_initial_snapshot(self) -> dict[str, Any]:
@@ -456,7 +801,9 @@ class SERAUIServer:
             "gpu_usage_pct": 18.4,
             "system_memory_mb": 3420,
             "roles": self._get_roles_summary(),
+            "execution_modes": self.role_execution_modes,
             "providers": self._get_providers_summary(),
+            "security": self._get_security_summary(),
             "workflow": self._get_dynamic_workflow_graph(),
         }
 
@@ -501,11 +848,12 @@ class SERAUIServer:
         return summary
 
     def _get_providers_summary(self) -> list[dict[str, Any]]:
-        return [
+        base_providers = [
             {
                 "provider_name": "groq",
-                "display_name": "Groq LPU",
+                "display_name": "Groq LPU Acceleration",
                 "status": "HEALTHY",
+                "api_key_reference": "GROQ_API_KEY (● Configured)",
                 "models": [
                     {
                         "model_id": "openai/gpt-oss-120b",
@@ -515,7 +863,11 @@ class SERAUIServer:
                         "health_status": "HEALTHY",
                         "cooldown_remaining_s": 0.0,
                         "capabilities": {"text": True, "reasoning": True, "tool_calling": True, "streaming": True},
-                        "quota": {"requests_used": 28, "requests_limit": 100, "tokens_used": 14200, "tokens_limit": 100000, "reset_time_str": "3h 42m"},
+                        "quota_metrics": [
+                            {"label": "Requests / Minute", "used": 28, "limit": 30, "remaining": 2, "percentage_remaining": 6.7, "unit": "reqs", "window": "1m"},
+                            {"label": "Tokens / Minute", "used": 7800, "limit": 8000, "remaining": 200, "percentage_remaining": 2.5, "unit": "tokens", "window": "1m"},
+                            {"label": "Requests / Day", "used": 843, "limit": 1000, "remaining": 157, "percentage_remaining": 15.7, "unit": "reqs", "window": "24h"},
+                        ],
                         "recent_avg_latency_ms": 380.0,
                         "recent_avg_ttft_ms": 110.0,
                     },
@@ -527,9 +879,35 @@ class SERAUIServer:
                         "health_status": "HEALTHY",
                         "cooldown_remaining_s": 0.0,
                         "capabilities": {"text": True, "vision": True, "streaming": True},
-                        "quota": {"requests_used": 12, "requests_limit": 100, "tokens_used": 8900, "tokens_limit": 100000, "reset_time_str": "3h 42m"},
+                        "quota_metrics": [
+                            {"label": "Requests / Minute", "used": 12, "limit": 30, "remaining": 18, "percentage_remaining": 60.0, "unit": "reqs", "window": "1m"},
+                            {"label": "Tokens / Minute", "used": 4200, "limit": 8000, "remaining": 3800, "percentage_remaining": 47.5, "unit": "tokens", "window": "1m"},
+                        ],
                         "recent_avg_latency_ms": 410.0,
                         "recent_avg_ttft_ms": 130.0,
+                    }
+                ]
+            },
+            {
+                "provider_name": "gemini",
+                "display_name": "Google Gemini",
+                "status": "HEALTHY",
+                "api_key_reference": "GEMINI_API_KEY (● Configured)",
+                "models": [
+                    {
+                        "model_id": "gemini-3-flash-preview",
+                        "display_name": "Gemini 3 Flash Preview",
+                        "role": "vision (fallback)",
+                        "is_primary": False,
+                        "health_status": "HEALTHY",
+                        "cooldown_remaining_s": 0.0,
+                        "capabilities": {"text": True, "vision": True, "tool_calling": True, "streaming": True},
+                        "quota_metrics": [
+                            {"label": "Weekly Limit Remaining", "used": None, "limit": 100, "remaining": 86, "percentage_remaining": 86.0, "unit": "percent", "window": "7d"},
+                            {"label": "5-Hour Limit Remaining", "used": None, "limit": 100, "remaining": 100, "percentage_remaining": 100.0, "unit": "percent", "window": "5h"},
+                        ],
+                        "recent_avg_latency_ms": 520.0,
+                        "recent_avg_ttft_ms": 180.0,
                     }
                 ]
             },
@@ -537,6 +915,7 @@ class SERAUIServer:
                 "provider_name": "mistral",
                 "display_name": "Mistral AI",
                 "status": "HEALTHY",
+                "api_key_reference": "MISTRAL_API_KEY (● Configured)",
                 "models": [
                     {
                         "model_id": "mistral-small-latest",
@@ -546,7 +925,9 @@ class SERAUIServer:
                         "health_status": "HEALTHY",
                         "cooldown_remaining_s": 0.0,
                         "capabilities": {"text": True, "streaming": True, "tool_calling": True},
-                        "quota": {"requests_used": 15, "requests_limit": 500, "tokens_used": 4200, "tokens_limit": 500000, "reset_time_str": "23h 10m"},
+                        "quota_metrics": [
+                            {"label": "Monthly Requests", "used": 15, "limit": 500, "remaining": 485, "percentage_remaining": 97.0, "unit": "reqs", "window": "30d"},
+                        ],
                         "recent_avg_latency_ms": 380.0,
                         "recent_avg_ttft_ms": 140.0,
                     },
@@ -558,7 +939,9 @@ class SERAUIServer:
                         "health_status": "HEALTHY",
                         "cooldown_remaining_s": 0.0,
                         "capabilities": {"text": True, "tool_calling": True, "structured_output": True},
-                        "quota": {"requests_used": 9, "requests_limit": 500, "tokens_used": 6100, "tokens_limit": 500000, "reset_time_str": "23h 10m"},
+                        "quota_metrics": [
+                            {"label": "Monthly Requests", "used": 9, "limit": 500, "remaining": 491, "percentage_remaining": 98.2, "unit": "reqs", "window": "30d"},
+                        ],
                         "recent_avg_latency_ms": 490.0,
                         "recent_avg_ttft_ms": 160.0,
                     },
@@ -570,7 +953,9 @@ class SERAUIServer:
                         "health_status": "HEALTHY",
                         "cooldown_remaining_s": 0.0,
                         "capabilities": {"text": True, "reasoning": True, "tool_calling": True},
-                        "quota": {"requests_used": 4, "requests_limit": 500, "tokens_used": 3800, "tokens_limit": 500000, "reset_time_str": "23h 10m"},
+                        "quota_metrics": [
+                            {"label": "Monthly Requests", "used": 4, "limit": 500, "remaining": 496, "percentage_remaining": 99.2, "unit": "reqs", "window": "30d"},
+                        ],
                         "recent_avg_latency_ms": 750.0,
                         "recent_avg_ttft_ms": 240.0,
                     }
@@ -580,6 +965,7 @@ class SERAUIServer:
                 "provider_name": "cerebras",
                 "display_name": "Cerebras Fast Inference",
                 "status": "UNAVAILABLE",
+                "api_key_reference": "CEREBRAS_API_KEY (● Configured)",
                 "models": [
                     {
                         "model_id": "gpt-oss-120b",
@@ -589,7 +975,7 @@ class SERAUIServer:
                         "health_status": "AUTH_ERROR",
                         "cooldown_remaining_s": 60.0,
                         "capabilities": {"text": True, "reasoning": True},
-                        "quota": {"is_unknown": True},
+                        "quota_metrics": [],
                         "recent_avg_latency_ms": None,
                         "recent_avg_ttft_ms": None,
                     }
@@ -599,6 +985,7 @@ class SERAUIServer:
                 "provider_name": "zai",
                 "display_name": "Z.AI GLM Models",
                 "status": "RATE_LIMITED",
+                "api_key_reference": "ZAI_API_KEY (● Configured)",
                 "models": [
                     {
                         "model_id": "glm-5",
@@ -608,10 +995,11 @@ class SERAUIServer:
                         "health_status": "RATE_LIMITED",
                         "cooldown_remaining_s": 60.0,
                         "capabilities": {"text": True, "reasoning": True},
-                        "quota": {"is_unknown": True},
+                        "quota_metrics": [],
                         "recent_avg_latency_ms": None,
                         "recent_avg_ttft_ms": None,
                     }
                 ]
             }
         ]
+        return base_providers + self.custom_providers

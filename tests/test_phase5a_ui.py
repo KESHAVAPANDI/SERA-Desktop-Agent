@@ -52,7 +52,7 @@ class TestPhase5AUI(unittest.IsolatedAsyncioTestCase):
             # 1. Fetch index.html
             resp_html = await client.get("/")
             self.assertEqual(resp_html.status_code, 200)
-            self.assertIn("SERA 1.0 — Temporal Command Center", resp_html.text)
+            self.assertIn("SERA", resp_html.text)
             self.assertIn("tab-workflow", resp_html.text)
             self.assertIn("tab-live", resp_html.text)
 

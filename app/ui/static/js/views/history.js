@@ -1,68 +1,79 @@
 /**
- * HistoryView — Chronological Session Stream & Replay
+ * HistoryView — Chronological Session Timeline, Turn Pipelines & Replay Actions
  */
+
 export class HistoryView {
-  constructor(viewSwitcher) {
+  constructor(onReplayWorkflow) {
     this.container = document.getElementById("history-stream");
-    this.switchView = viewSwitcher;
-    this.sessions = [
-      {
-        id: "s1",
-        time: "01:28:10",
-        date: "Today",
-        query: "Open Chrome and search for RTX 5090 benchmarks",
-        pipeline: "STT (Canary-Qwen) ➔ Router ➔ Desktop (Codestral) ➔ Browser ➔ Vision (Qwen) ➔ Verify ➔ TTS",
-        duration: "1.42s",
-        models: ["Canary-Qwen", "Codestral", "Qwen 3.6 27B", "Fish Audio"],
-        status: "COMPLETED",
-      },
-      {
-        id: "s2",
-        time: "01:15:22",
-        date: "Today",
-        query: "Set brightness to 40%",
-        pipeline: "Local Intent ➔ Direct OS Tool (set_brightness) ➔ TTS",
-        duration: "0.31s",
-        models: ["Canary-Qwen", "Fish Audio"],
-        status: "COMPLETED",
-      },
-      {
-        id: "s3",
-        time: "00:45:18",
-        date: "Today",
-        query: "Explain Python memory management and garbage collection",
-        pipeline: "STT ➔ Router ➔ Reasoning (Groq GPT-OSS 120B) ➔ Streaming TTS",
-        duration: "1.06s",
-        models: ["Canary-Qwen", "Groq GPT-OSS 120B", "Fish Audio"],
-        status: "COMPLETED",
-      },
-    ];
-    this.render();
+    this.onReplayWorkflow = onReplayWorkflow;
+    this.sessions = [];
+    this.init();
+  }
+
+  async init() {
+    await this.fetchHistory();
+  }
+
+  async fetchHistory() {
+    try {
+      const resp = await fetch("/api/history");
+      if (resp.ok) {
+        this.sessions = await resp.json();
+        this.render();
+      }
+    } catch (e) {
+      console.warn("[HistoryView] Failed to fetch history sessions.");
+    }
+  }
+
+  async rerunTask(query) {
+    try {
+      await fetch("/api/history/rerun", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query }),
+      });
+      if (this.onReplayWorkflow) this.onReplayWorkflow("live");
+    } catch (e) {
+      console.warn("[HistoryView] Task rerun failed:", e);
+    }
   }
 
   render() {
     if (!this.container) return;
     this.container.innerHTML = "";
-    this.sessions.forEach(s => {
+
+    this.sessions.forEach(sess => {
       const card = document.createElement("div");
       card.className = "history-session-card";
+
+      const stepsHtml = sess.steps.map(s => `
+        <div style="display: flex; justify-content: space-between;">
+          <span>Step ${s.step}: ${s.action}</span>
+          <span style="color: var(--text-muted);">${s.duration_ms}ms</span>
+        </div>
+      `).join("");
+
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong style="font-size: 1rem; color: var(--text-primary);">${s.query}</strong>
-          <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${s.date} • ${s.time}</span>
+          <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${sess.date} • ${sess.time}</span>
+          <span class="cap-pill health-healthy">${sess.status} (${sess.total_duration})</span>
         </div>
-        <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-cyan);">${s.pipeline}</div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.75rem; color: var(--text-secondary);">Duration: ${s.duration} • Models: ${s.models.join(', ')}</span>
-          <div class="history-actions">
-            <button class="btn-action btn-replay" data-action="replay">Replay Visualization</button>
-            <button class="btn-action" data-action="rerun">Run Again</button>
-          </div>
+        <div class="history-query-text">"${sess.query}"</div>
+        <div class="history-pipeline-tag">${sess.pipeline}</div>
+        <div class="history-steps-list">${stepsHtml}</div>
+        <div class="history-actions">
+          <button class="btn-action btn-replay" data-id="${sess.session_id}">Replay Visualization</button>
+          <button class="btn-action btn-rerun" data-query="${sess.query}">Run Again ➔</button>
         </div>
       `;
 
-      card.querySelector('[data-action="replay"]')?.addEventListener("click", () => {
-        if (this.switchView) this.switchView("workflow");
+      card.querySelector(".btn-replay")?.addEventListener("click", () => {
+        if (this.onReplayWorkflow) this.onReplayWorkflow("workflow");
+      });
+
+      card.querySelector(".btn-rerun")?.addEventListener("click", () => {
+        this.rerunTask(sess.query);
       });
 
       this.container.appendChild(card);

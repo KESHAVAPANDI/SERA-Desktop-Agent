@@ -1,33 +1,41 @@
-import { WorkflowView } from './views/workflow.js';
 import { LiveView } from './views/live.js';
+import { WorkflowView } from './views/workflow.js';
 import { AgentsView } from './views/agents.js';
 import { MemoryView } from './views/memory.js';
 import { ProvidersView } from './views/providers.js';
 import { HistoryView } from './views/history.js';
 import { DebugView } from './views/debug.js';
+import { SecurityView } from './views/security.js';
 
 class SERAApp {
   constructor() {
     this.ws = null;
-    this.currentView = "workflow";
+    this.currentView = "live";
     this.views = {};
     this.stateIndicator = document.getElementById("state-indicator");
     this.stateText = document.getElementById("state-text");
     this.taskTicker = document.getElementById("task-ticker");
+    this.captureBadge = document.getElementById("capture-countdown-badge");
+    this.privacyModeText = document.getElementById("privacy-mode-text");
+
     this.init();
   }
 
   init() {
-    // 1. Initialize Views
-    this.views.workflow = new WorkflowView(msg => this.sendMessage(msg));
+    // 1. Initialize 8 First-Class Views
     this.views.live = new LiveView(msg => this.sendMessage(msg));
+    this.views.workflow = new WorkflowView(msg => this.sendMessage(msg));
     this.views.agents = new AgentsView();
     this.views.memory = new MemoryView();
-    this.views.providers = new ProvidersView();
-    this.views.history = new HistoryView(viewName => this.switchView(viewName));
+    this.views.providers = new ProvidersView((provider, model) => {
+      this.switchView("workflow");
+      this.views.workflow?.highlightModel(provider, model);
+    });
+    this.views.history = new HistoryView(targetView => this.switchView(targetView));
     this.views.debug = new DebugView();
+    this.views.security = new SecurityView(msg => this.sendMessage(msg));
 
-    // 2. Setup Navigation
+    // 2. Setup Navigation (1 - 8)
     this.setupNavigation();
 
     // 3. Connect WebSocket Gateway
@@ -43,17 +51,18 @@ class SERAApp {
       });
     });
 
-    // Keyboard Shortcuts (1-7)
+    // Keyboard Shortcuts (1-8 across COMMAND, INTELLIGENCE, SYSTEM)
     window.addEventListener("keydown", e => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
       const keyMap = {
-        "1": "workflow",
-        "2": "live",
+        "1": "live",
+        "2": "workflow",
         "3": "agents",
         "4": "memory",
         "5": "providers",
         "6": "history",
         "7": "debug",
+        "8": "security",
       };
       if (keyMap[e.key]) {
         this.switchView(keyMap[e.key]);
@@ -64,12 +73,10 @@ class SERAApp {
   switchView(viewName) {
     if (this.currentView === viewName) return;
 
-    // Update Tab Buttons
     document.querySelectorAll(".nav-tab-btn").forEach(btn => {
       btn.classList.toggle("active", btn.getAttribute("data-view") === viewName);
     });
 
-    // Update Containers
     document.querySelectorAll(".view-container").forEach(c => {
       c.classList.toggle("active", c.id === `view-${viewName}`);
     });
@@ -102,7 +109,7 @@ class SERAApp {
         setTimeout(() => this.connectWebSocket(), 3000);
       };
     } catch (e) {
-      console.warn("[SERA UI] WebSocket connection unavailable. Operating in standalone demo mode.");
+      console.warn("[SERA UI] Standalone mode.");
     }
   }
 
@@ -118,18 +125,42 @@ class SERAApp {
 
     if (eventType === "SNAPSHOT") {
       this.updateRuntimeState(data.status, data.active_task);
-      if (data.providers) {
-        this.views.providers?.update(data.providers);
-      }
-      if (data.workflow) {
-        this.views.workflow?.updateGraphData(data.workflow);
-      }
+      if (data.providers) this.views.providers?.update(data.providers);
+      if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);
+      this.views.live?.setAuraState(data.status);
+    } else if (eventType === "CAPTURE_COUNTDOWN") {
+      this.views.live?.startCaptureCountdown(data.duration_seconds || 5.0, data.activation_method || "HOTKEY");
+      if (this.captureBadge) {
+        this.captureBadge.classList.remove("hidden");
+        let rem = data.duration_seconds || 5.0;
+        const intv = setInterval(() => {
+          rem -= 0.1;
+          if (rem <= 0) {
+            clearInterval(intv);
+            this.captureBadge.classList.add("hidden");
+          } else {
+            this.captureBadge.textContent = `${rem.toFixed(1)}s`;
+          }
+        }, 100);
+      }
     } else if (eventType === "TRANSCRIPT_RECEIVED") {
       this.views.live?.appendMessage("user", data.text);
+      this.views.live?.startTask(data.text);
     } else if (eventType === "AGENT_RESPONSE") {
       this.views.live?.appendMessage("sera", data.text);
+    } else if (eventType === "TOOL_STARTED") {
+      this.views.live?.updateTaskStep(2, 4, `Executing ${data.tool}`);
+    } else if (eventType === "VISION_STARTED") {
+      this.views.live?.updateTaskStep(3, 4, "Inspecting screen context");
+    } else if (eventType === "TASK_COMPLETED") {
+      this.views.live?.stopTask("Task completed");
+    } else if (eventType === "TASK_CANCELLED") {
+      this.views.live?.stopTask("Task cancelled");
+    } else if (eventType === "SECURITY_CONFIRMATION_REQUIRED") {
+      this.views.security?.showConfirmationRequest(data.action_id, data.tool_name, data.prompt, data.arguments);
+      this.updateRuntimeState("CONFIRMING_ACTION", `Confirmation required: ${data.tool_name}`);
     }
   }
 
@@ -137,7 +168,6 @@ class SERAApp {
     if (!status) return;
     const sLower = status.toLowerCase();
 
-    // Update Header Badge
     if (this.stateIndicator && this.stateText) {
       this.stateIndicator.className = `state-indicator state-${sLower}`;
       this.stateText.textContent = status.toUpperCase();
@@ -149,7 +179,6 @@ class SERAApp {
   }
 }
 
-// Bootstrap on DOM Ready
 window.addEventListener("DOMContentLoaded", () => {
   window.seraApp = new SERAApp();
 });

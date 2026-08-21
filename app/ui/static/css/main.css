@@ -22,20 +22,19 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle Sci-Fi Ambient Grid */
+/* Subtle Ambient Sci-Fi Grid */
 body::before {
   content: "";
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: 0;
 }
 
-/* Application Shell Layout */
 #app-shell {
   position: relative;
   display: flex;
@@ -46,7 +45,7 @@ body::before {
 }
 
 /* ===================================================================
-   1. GLOBAL PERSISTENT HEADER
+   1. GLOBAL PERSISTENT HEADER & NAVIGATION
    =================================================================== */
 #global-header {
   display: flex;
@@ -64,7 +63,7 @@ body::before {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .brand-badge {
@@ -107,46 +106,75 @@ body::before {
   transition: all var(--transition-smooth);
 }
 
-/* Aura Orb Pulse states */
+.countdown-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+
+/* State Aura Signatures */
 .state-idle .aura-orb-pip { background: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan); animation: pulse-slow 4s infinite; }
-.state-listening .aura-orb-pip { background: var(--accent-amber); box-shadow: 0 0 14px var(--accent-amber); animation: pulse-fast 1s infinite; }
+.state-listening .aura-orb-pip { background: var(--accent-cyan); box-shadow: 0 0 16px var(--accent-cyan); animation: pulse-fast 1s infinite; }
+.state-transcribing .aura-orb-pip { background: var(--accent-violet); box-shadow: 0 0 14px var(--accent-violet); animation: spin-orb 1.2s infinite linear; }
 .state-thinking .aura-orb-pip { background: var(--accent-violet); box-shadow: 0 0 14px var(--accent-violet); animation: spin-orb 2s infinite linear; }
 .state-executing .aura-orb-pip { background: var(--accent-emerald); box-shadow: 0 0 14px var(--accent-emerald); animation: pulse-fast 0.8s infinite; }
 .state-speaking .aura-orb-pip { background: var(--accent-cyan); box-shadow: 0 0 16px var(--accent-cyan); animation: wave-orb 1.2s infinite ease-in-out; }
-.state-error .aura-orb-pip { background: var(--accent-crimson); box-shadow: 0 0 14px var(--accent-crimson); }
+.state-confirming_action .aura-orb-pip { background: var(--accent-amber); box-shadow: 0 0 14px var(--accent-amber); animation: pulse-fast 0.6s infinite; }
+.state-broken .aura-orb-pip { background: var(--accent-broken); box-shadow: var(--glow-broken); animation: glitch-broken 0.4s infinite; }
+.state-cancelled .aura-orb-pip { background: var(--text-muted); box-shadow: none; }
 
 .task-ticker {
   font-family: var(--font-mono);
   font-size: 0.8rem;
   color: var(--text-secondary);
-  max-width: 320px;
+  max-width: 240px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Navigation Tabs */
+/* Navigation Tabs Across 3 Domains */
 .nav-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 4px;
-  border-radius: 8px;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 4px 8px;
+  border-radius: 10px;
   border: 1px solid var(--border-subtle);
+}
+
+.nav-group-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  padding: 0 4px;
+}
+
+.nav-group-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+  margin: 0 4px;
 }
 
 .nav-tab-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 5px;
+  padding: 5px 11px;
   background: transparent;
   border: none;
   border-radius: 6px;
   color: var(--text-secondary);
   font-family: var(--font-brand);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -154,13 +182,13 @@ body::before {
 
 .nav-tab-btn .tab-num {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   opacity: 0.5;
 }
 
 .nav-tab-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-tab-btn.active {
@@ -173,13 +201,33 @@ body::before {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+}
+
+.privacy-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent-cyan);
+}
+
+.privacy-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
 }
 
 .hardware-telemetry {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -199,7 +247,7 @@ body::before {
 }
 
 /* ===================================================================
-   2. MAIN VIEWPORT & VIEW CONTAINERS
+   2. MAIN VIEWPORT & SECTIONS
    =================================================================== */
 #main-viewport {
   position: relative;
@@ -228,8 +276,303 @@ body::before {
   transform: translateY(0);
 }
 
+.view-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.view-title {
+  font-family: var(--font-brand);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.view-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
 /* ===================================================================
-   3. VIEW 1: WORKFLOW GRAPH (TEMPORAL CANVAS & INSPECTOR DRAWER)
+   3. VIEW 1: LIVE VIEW (HUMAN-FACING CONVERSATIONAL PANEL)
+   =================================================================== */
+.live-layout {
+  display: flex;
+  gap: 24px;
+  height: 100%;
+}
+
+.live-orb-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  gap: 16px;
+}
+
+.aura-orb-large {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.35) 0%, rgba(138, 43, 226, 0.15) 60%, transparent 75%);
+  box-shadow: 0 0 60px rgba(0, 240, 255, 0.25), inset 0 0 40px rgba(138, 43, 226, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+}
+
+.aura-orb-rings {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 240, 255, 0.25);
+  animation: spin-orb 20s infinite linear;
+}
+
+.aura-orb-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+}
+
+.aura-brand-name {
+  font-family: var(--font-brand);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--accent-cyan);
+}
+
+.aura-status-subtext {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.capture-progress-container {
+  width: 280px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-active);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+}
+
+.capture-timer-label {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  display: flex;
+  justify-content: space-between;
+}
+
+.capture-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.capture-progress-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--accent-cyan);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+.activation-method-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.hotkey-assist-pill {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.hotkey-assist-pill kbd {
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Current Task Card */
+.current-task-card {
+  width: 320px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-card-tag {
+  font-family: var(--font-brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  letter-spacing: 0.05em;
+}
+
+.task-elapsed-timer {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.task-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.task-progress-bar-wrapper {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.task-step-fill {
+  height: 100%;
+  background: var(--accent-emerald);
+  border-radius: 3px;
+  transition: width var(--transition-smooth);
+}
+
+.task-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-interrupt {
+  background: rgba(255, 51, 102, 0.15);
+  border-color: rgba(255, 51, 102, 0.4);
+  color: var(--accent-crimson);
+}
+
+.btn-interrupt:hover {
+  background: var(--accent-crimson);
+  color: #fff;
+}
+
+/* Right Chat Stream */
+.live-chat-panel {
+  width: 440px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.model-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-cyan-dim);
+  color: var(--accent-cyan);
+}
+
+.chat-stream {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-bubble {
+  padding: 10px 14px;
+  border-radius: 10px;
+  max-width: 85%;
+  font-size: 0.9rem;
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  background: var(--accent-cyan-dim);
+  border: 1px solid var(--border-active);
+  color: var(--text-primary);
+}
+
+.chat-bubble.sera {
+  align-self: flex-start;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.chat-input-field {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.chat-input-field:focus {
+  border-color: var(--accent-cyan);
+}
+
+/* ===================================================================
+   4. VIEW 2: WORKFLOW GRAPH & CANDIDATE EDITOR
    =================================================================== */
 #view-workflow {
   padding: 0;
@@ -296,7 +639,7 @@ body::before {
 
 .temporal-node {
   position: absolute;
-  min-width: 200px;
+  min-width: 210px;
   padding: 14px 18px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -325,6 +668,12 @@ body::before {
 .temporal-node.node-ratelimited {
   border-color: var(--accent-amber);
   box-shadow: 0 0 16px var(--accent-amber-dim);
+}
+
+.temporal-node.node-broken {
+  border-color: var(--accent-broken);
+  box-shadow: var(--glow-broken);
+  animation: glitch-broken 1s infinite alternate;
 }
 
 .temporal-node.node-selected {
@@ -394,9 +743,7 @@ body::before {
   font-weight: 600;
 }
 
-/* ===================================================================
-   SLIDING ROLE INSPECTOR DRAWER
-   =================================================================== */
+/* Sliding Inspector Drawer */
 .inspector-drawer {
   position: absolute;
   top: 0; right: 0;
@@ -451,6 +798,34 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.mode-selector-group {
+  display: flex;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.mode-pill-btn {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 0.75rem;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mode-pill-btn.active {
+  background: var(--bg-card);
+  color: var(--accent-cyan);
+  border: 1px solid var(--border-active);
 }
 
 .candidate-item-card {
@@ -531,126 +906,22 @@ body::before {
   background: var(--accent-emerald-dim);
 }
 
-.btn-apply-chain {
-  background: var(--accent-cyan-dim);
-  border-color: var(--border-active);
-  color: var(--accent-cyan);
-  font-weight: 700;
+.cap-pill.health-ratelimited {
+  color: var(--accent-amber);
+  background: var(--accent-amber-dim);
 }
 
-.btn-apply-chain:hover {
-  background: var(--accent-cyan);
-  color: #000;
-  box-shadow: 0 0 16px var(--accent-cyan);
+.cap-pill.health-broken {
+  color: var(--accent-broken);
+  background: var(--accent-crimson-dim);
 }
 
 /* ===================================================================
-   4. VIEW 2: LIVE VOICE ORB & CHAT
-   =================================================================== */
-#view-live {
-  display: flex;
-  flex-direction: row;
-  gap: 24px;
-  height: 100%;
-}
-
-.live-orb-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.aura-orb-large {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: radial-gradient(circle at center, rgba(0, 240, 255, 0.4) 0%, rgba(138, 43, 226, 0.2) 60%, transparent 75%);
-  box-shadow: 0 0 60px rgba(0, 240, 255, 0.3), inset 0 0 40px rgba(138, 43, 226, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-smooth);
-}
-
-.aura-orb-rings {
-  position: absolute;
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  border: 1px dashed rgba(0, 240, 255, 0.25);
-  animation: spin-orb 20s infinite linear;
-}
-
-.live-chat-panel {
-  width: 440px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.chat-stream {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.chat-bubble {
-  padding: 10px 14px;
-  border-radius: 10px;
-  max-width: 85%;
-  font-size: 0.9rem;
-}
-
-.chat-bubble.user {
-  align-self: flex-end;
-  background: var(--accent-cyan-dim);
-  border: 1px solid var(--border-active);
-  color: var(--text-primary);
-}
-
-.chat-bubble.sera {
-  align-self: flex-start;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.chat-input-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
-}
-
-.chat-input-field {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
-  outline: none;
-}
-
-/* ===================================================================
-   5. VIEW 3: MULTI-AGENT HIERARCHY
+   5. VIEW 3: AGENTS (MULTI-AGENT HIERARCHY)
    =================================================================== */
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
   width: 100%;
 }
@@ -693,40 +964,64 @@ body::before {
 }
 
 /* ===================================================================
-   6. VIEW 4: MEMORY CORE & RAG
+   6. VIEW 4: MEMORY (NEURAL KNOWLEDGE CORE)
    =================================================================== */
-.memory-layout {
-  display: flex;
-  gap: 24px;
-  height: 100%;
+.search-field {
+  max-width: 240px;
+  background: var(--bg-secondary);
 }
 
-.memory-core-view {
-  flex: 1;
-  background: var(--bg-card);
+.form-select-sm {
+  background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  outline: none;
 }
 
 .memory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
 }
 
 .memory-item-card {
-  background: var(--bg-secondary);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  padding: 12px 16px;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-category-tag {
+  font-family: var(--font-brand);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-violet);
+}
+
+.memory-content-text {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.memory-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 
 /* ===================================================================
-   7. VIEW 5: PROVIDERS & QUOTA GAUGES
+   7. VIEW 5: PROVIDERS & DYNAMIC QUOTAS
    =================================================================== */
 .providers-grid {
   display: flex;
@@ -757,7 +1052,7 @@ body::before {
 
 .models-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 14px;
 }
 
@@ -766,10 +1061,22 @@ body::before {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .quota-bar-wrapper {
-  margin-top: 10px;
+  margin-top: 4px;
+}
+
+.quota-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 .quota-bar-track {
@@ -784,6 +1091,27 @@ body::before {
   height: 100%;
   background: var(--accent-cyan);
   border-radius: 3px;
+}
+
+.btn-show-workflow {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--border-active);
+  color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.btn-show-workflow:hover {
+  background: var(--accent-cyan-dim);
+}
+
+.btn-add-provider {
+  background: var(--accent-cyan-dim);
+  border-color: var(--border-active);
+  color: var(--accent-cyan);
+  font-weight: 700;
 }
 
 /* ===================================================================
@@ -806,6 +1134,30 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.history-query-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.history-pipeline-tag {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-cyan);
+  background: var(--accent-cyan-dim);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.history-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .history-actions {
@@ -836,6 +1188,11 @@ body::before {
   border-color: var(--border-active);
 }
 
+.btn-action.btn-rerun {
+  color: var(--accent-emerald);
+  border-color: rgba(0, 229, 153, 0.4);
+}
+
 /* ===================================================================
    9. VIEW 7: DEBUG TELEMETRY
    =================================================================== */
@@ -855,6 +1212,33 @@ body::before {
   gap: 12px;
 }
 
+.debug-card-title {
+  font-family: var(--font-brand);
+  font-size: 1rem;
+}
+
+.event-filter-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-pill {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.filter-pill.active {
+  background: var(--accent-cyan-dim);
+  border-color: var(--border-active);
+  color: var(--accent-cyan);
+}
+
 .event-trace-box {
   background: #000;
   border: 1px solid var(--border-subtle);
@@ -862,13 +1246,233 @@ body::before {
   padding: 12px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  height: 240px;
+  height: 280px;
   overflow-y: auto;
   color: var(--accent-emerald);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-/* Keyframe Animations */
+.latency-waterfall-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.waterfall-stage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.waterfall-stage-header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.waterfall-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.waterfall-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+/* ===================================================================
+   10. VIEW 8: SECURITY & PRIVACY
+   =================================================================== */
+.security-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.security-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.security-section-title {
+  font-family: var(--font-brand);
+  font-size: 1.1rem;
+}
+
+.permissions-list, .privacy-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.permission-item-card, .privacy-item-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.perm-badge-allowed {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: var(--accent-emerald-dim);
+  color: var(--accent-emerald);
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.perm-badge-confirm {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: var(--accent-amber-dim);
+  color: var(--accent-amber);
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.perm-badge-blocked {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  background: var(--accent-crimson-dim);
+  color: var(--accent-crimson);
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+/* ===================================================================
+   11. MODALS (ACTION CONFIRMATION & ADD PROVIDER)
+   =================================================================== */
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-backdrop.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-active);
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.25);
+  border-radius: 16px;
+  width: 460px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+
+.modal-card-lg {
+  width: 560px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-brand);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-confirm-action-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.btn-primary-glow {
+  background: var(--accent-cyan);
+  color: #000;
+  font-weight: 700;
+  border: none;
+}
+
+.btn-primary-glow:hover {
+  box-shadow: 0 0 16px var(--accent-cyan);
+}
+
+.btn-danger {
+  background: rgba(255, 51, 102, 0.2);
+  color: var(--accent-crimson);
+  border-color: rgba(255, 51, 102, 0.4);
+}
+
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-family: var(--font-brand);
+  font-weight: 600;
+}
+
+.test-result-box {
+  background: rgba(0, 229, 153, 0.1);
+  border: 1px solid rgba(0, 229, 153, 0.3);
+  color: var(--accent-emerald);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Animations */
 @keyframes pulse-slow { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.3); opacity: 1; } }
 @keyframes pulse-fast { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.4); } }
 @keyframes spin-orb { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes wave-orb { 0%, 100% { box-shadow: 0 0 10px var(--accent-cyan); } 50% { box-shadow: 0 0 24px var(--accent-cyan); } }
+@keyframes glitch-broken { 0% { filter: hue-rotate(0deg); } 50% { filter: hue-rotate(20deg) brightness(1.2); } 100% { filter: hue-rotate(-20deg); } }
