@@ -29,8 +29,12 @@ class AudioManager:
         stt_cfg = models_cfg.get("stt", {})
         tts_cfg = models_cfg.get("tts", {})
 
+        stt_model = stt_cfg.get("model", "small")
+        if "nvidia" in str(stt_model).lower() or "canary" in str(stt_model).lower() or "/" in str(stt_model):
+            stt_model = "small"
+
         self.stt = stt or SERA_STT(
-            model_size=stt_cfg.get("model", "small"),
+            model_size=stt_model,
             sample_rate=audio_cfg.get("sample_rate", 16000),
             energy_threshold=audio_cfg.get("energy_threshold", 0.03),
             silence_duration=audio_cfg.get("silence_duration", 0.8),

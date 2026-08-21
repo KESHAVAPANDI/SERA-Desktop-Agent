@@ -62,8 +62,9 @@ class SERA_STT:
         self.block_size = int(sample_rate * block_duration)
         self.silence_duration = silence_duration
         self.min_speech_duration_s = max(0.1, min_speech_duration_ms / 1000.0)
-        self.max_recording_duration = max_recording_duration
-        self.energy_threshold = energy_threshold
+        # Guard: If model_size is an API model identifier (e.g. nvidia/canary-qwen-2.5b), default Whisper to 'small'
+        if "nvidia" in str(model_size).lower() or "canary" in str(model_size).lower() or "/" in str(model_size):
+            model_size = "small"
 
         print("Loading SERA speech recognition model...")
 
