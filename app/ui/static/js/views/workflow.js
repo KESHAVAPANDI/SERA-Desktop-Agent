@@ -340,14 +340,111 @@ export class WorkflowView {
   }
 
   startParticleAnimation() {
+    const bgCanvas = document.getElementById("temporal-canvas-bg");
+    if (!bgCanvas) return;
+    const ctx = bgCanvas.getContext("2d");
+    bgCanvas.width = 6000;
+    bgCanvas.height = 4000;
+
+    // Ambient Space Filaments
+    const filaments = [
+      { y: 350, amp: 90, freq: 0.0012, speed: 0.0008, color: "rgba(0, 229, 255, 0.12)", width: 3 },
+      { y: 550, amp: 140, freq: 0.0008, speed: -0.0006, color: "rgba(139, 92, 246, 0.15)", width: 4 },
+      { y: 800, amp: 110, freq: 0.0015, speed: 0.001, color: "rgba(0, 122, 255, 0.10)", width: 2.5 },
+      { y: 1100, amp: 160, freq: 0.0006, speed: -0.0007, color: "rgba(245, 158, 11, 0.08)", width: 3 },
+      { y: 1450, amp: 120, freq: 0.001, speed: 0.0009, color: "rgba(16, 185, 129, 0.09)", width: 2.5 },
+    ];
+
+    // Background Depth Stars/Dust
+    const stars = [];
+    for (let i = 0; i < 280; i++) {
+      stars.push({
+        x: Math.random() * 6000,
+        y: Math.random() * 4000,
+        r: Math.random() * 1.8 + 0.4,
+        alpha: Math.random() * 0.7 + 0.2,
+        twinkleSpeed: Math.random() * 0.02 + 0.005,
+      });
+    }
+
+    let t = 0;
     const animate = () => {
-      this.particleOffset = (this.particleOffset + 0.8) % 100;
+      t += 1;
+      this.particleOffset = (this.particleOffset + 1.2) % 100;
+      
+      // Update SVG path dashoffset
       const paths = this.svg?.querySelectorAll(".active-particle-edge");
       if (paths) {
         paths.forEach(p => {
           p.style.strokeDashoffset = -this.particleOffset;
         });
       }
+
+      // Draw Temporal Backdrop
+      ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+      // Layer 1: Ambient Stars/Dust
+      stars.forEach(s => {
+        const a = s.alpha + Math.sin(t * s.twinkleSpeed) * 0.25;
+        ctx.fillStyle = `rgba(180, 220, 255, ${Math.max(0.05, a)})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Layer 1b: Flowing Dimensional Filaments
+      filaments.forEach(f => {
+        ctx.strokeStyle = f.color;
+        ctx.lineWidth = f.width;
+        ctx.beginPath();
+        for (let x = 0; x <= 6000; x += 40) {
+          const y = f.y + Math.sin(x * f.freq + t * f.speed) * f.amp + Math.cos(x * 0.0005 + t * 0.0005) * 40;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      });
+
+      // Layer 3: Volumetric Glow under Active / Broken Nodes
+      this.nodes.forEach(n => {
+        if (n.status === "ACTIVE" || n.status === "EXECUTING") {
+          const cx = n.x + 110;
+          const cy = n.y + 44;
+          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 180);
+          grad.addColorStop(0, "rgba(0, 229, 255, 0.28)");
+          grad.addColorStop(0.5, "rgba(0, 122, 255, 0.12)");
+          grad.addColorStop(1, "transparent");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 180, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (n.status === "BROKEN" || n.status === "FAILED") {
+          const cx = n.x + 110;
+          const cy = n.y + 44;
+          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 190);
+          grad.addColorStop(0, "rgba(255, 26, 75, 0.35)");
+          grad.addColorStop(0.6, "rgba(255, 0, 85, 0.12)");
+          grad.addColorStop(1, "transparent");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 190, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Electrical sparks
+          ctx.strokeStyle = "rgba(255, 80, 120, 0.8)";
+          ctx.lineWidth = 1.5;
+          for (let k = 0; k < 3; k++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 80 + 30;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(angle) * (dist * 0.5) + (Math.random() - 0.5) * 20, cy + Math.sin(angle) * (dist * 0.5) + (Math.random() - 0.5) * 20);
+            ctx.lineTo(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist);
+            ctx.stroke();
+          }
+        }
+      });
+
       requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
@@ -716,6 +813,27 @@ export class WorkflowView {
       const vNode = this.nodes.find(n => n.role === "vision" && n.is_primary);
       if (vNode) {
         vNode.status = "COMPLETED";
+        this.render();
+      }
+    } else if (event === "TASK_STARTED") {
+      this.nodes.forEach(n => {
+        if (n.status === "BROKEN" || n.status === "FAILED") {
+          n.status = "WAITING";
+        }
+      });
+      this.render();
+    } else if (event === "TASK_COMPLETED") {
+      this.nodes.forEach(n => {
+        if (n.status === "ACTIVE" || n.status === "EXECUTING") {
+          n.status = "COMPLETED";
+        }
+      });
+      this.render();
+    } else if (event === "TOOL_FAILED") {
+      const toolNode = this.nodes.find(n => n.id === "node_tools" || (n.role === "desktop" && n.is_primary));
+      if (toolNode) {
+        toolNode.status = "BROKEN";
+        toolNode.label = `FAILED: ${data.tool || 'Action'}`;
         this.render();
       }
     } else if (event === "TASK_CANCELLED") {

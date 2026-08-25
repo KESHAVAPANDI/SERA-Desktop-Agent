@@ -174,9 +174,11 @@ class SERAApp {
       this.views.live?.setAuraState(data.status, data);
       this.views.live?.logActivity("STATE", `State: ${data.status}`);
     } else if (eventType === "ACTIVATION_STARTED") {
+      this.updateRuntimeState("LISTENING");
       this.views.live?.setAuraState("LISTENING", data);
       this.views.live?.logActivity("ACTIVATION", `${data.source} (${data.mode || 'HOLD'})`);
     } else if (eventType === "ACTIVATION_RELEASED") {
+      this.updateRuntimeState("TRANSCRIBING");
       this.views.live?.setAuraState("TRANSCRIBING");
       this.views.live?.logActivity("ACTIVATION", `Released after ${data.duration_seconds?.toFixed(2)}s`);
     } else if (eventType === "WAKE_WORD_DETECTED") {

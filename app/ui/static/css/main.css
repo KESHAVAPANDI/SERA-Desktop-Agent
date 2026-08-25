@@ -69,19 +69,37 @@ body::before {
 .brand-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.brand-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-cyan);
+  filter: drop-shadow(0 0 10px var(--accent-cyan));
+}
+
+.brand-text-block {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-title {
   font-family: var(--font-brand);
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 800;
   letter-spacing: 0.15em;
   color: var(--text-primary);
 }
 
-.brand-icon {
-  width: 22px;
-  height: 22px;
+.brand-build {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--accent-cyan);
-  filter: drop-shadow(0 0 8px var(--accent-cyan));
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
 }
 
 .state-indicator {
@@ -722,23 +740,34 @@ body::before {
   will-change: transform;
 }
 
+.temporal-canvas-bg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .workflow-svg-layer {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
   pointer-events: none;
   overflow: visible;
+  z-index: 2;
 }
 
 .workflow-nodes-layer {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
+  z-index: 3;
 }
 
 .active-particle-edge {
-  stroke-dasharray: 8,8;
-  animation: particle-dash 1.5s linear infinite;
+  stroke-dasharray: 10, 10;
+  animation: particle-dash 1.2s linear infinite;
+  filter: drop-shadow(0 0 8px var(--accent-cyan));
 }
 
 @keyframes particle-dash {
@@ -749,25 +778,43 @@ body::before {
 
 .temporal-node {
   position: absolute;
-  min-width: 210px;
+  min-width: 220px;
   padding: 14px 18px;
-  background: var(--bg-card);
+  background: rgba(14, 18, 28, 0.88);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  box-shadow: var(--shadow-card);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-  cursor: pointer;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  cursor: grab;
+  user-select: none;
 }
 
 .temporal-node:hover {
-  border-color: var(--accent-cyan);
-  box-shadow: var(--glow-cyan);
+  transform: translateY(-2px);
+  border-color: rgba(0, 229, 255, 0.6);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 229, 255, 0.25);
+}
+
+.temporal-node:active {
+  cursor: grabbing;
 }
 
 .temporal-node.node-active {
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 24px rgba(0, 240, 255, 0.4);
-  background: var(--bg-card-hover);
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.5), inset 0 0 12px rgba(0, 229, 255, 0.15);
+  background: rgba(16, 26, 44, 0.92);
+  animation: node-active-pulse 2s infinite ease-in-out;
+}
+
+@keyframes node-active-pulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(0, 229, 255, 0.45); }
+  50% { box-shadow: 0 0 36px rgba(0, 229, 255, 0.75), inset 0 0 16px rgba(0, 229, 255, 0.25); }
+}
+
+.temporal-node.node-completed {
+  border-color: var(--accent-emerald);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
 }
 
 .temporal-node.node-fallback {

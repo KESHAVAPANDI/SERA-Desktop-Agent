@@ -76,7 +76,7 @@ export class MemoryView {
             </svg>
           </div>
           <div class="memory-empty-title">NEURAL KNOWLEDGE CORE</div>
-          <div class="memory-empty-subtext">No knowledge or document embeddings indexed yet.</div>
+          <div class="memory-empty-subtext">No knowledge indexed yet.</div>
           <div class="memory-empty-capabilities">
             <div>SERA can remember and synthesize:</div>
             <ul>

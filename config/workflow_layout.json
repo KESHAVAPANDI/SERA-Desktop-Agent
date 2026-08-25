@@ -2,15 +2,15 @@
   "workflow_layout": {
     "nodes": {
       "node_stt": {
-        "x": 0,
-        "y": 304
+        "x": 160,
+        "y": 400
       },
       "node_router": {
         "x": 336,
         "y": 336
       },
       "node_desktop_0": {
-        "x": 640,
+        "x": 672,
         "y": 336
       },
       "node_vision_2": {
@@ -46,7 +46,7 @@
         "y": 496
       },
       "node_reasoning_1": {
-        "x": 672,
+        "x": 688,
         "y": 0
       },
       "node_reasoning_3": {
@@ -67,7 +67,7 @@
       },
       "node_fast_1": {
         "x": 672,
-        "y": 112
+        "y": 256
       }
     }
   }
