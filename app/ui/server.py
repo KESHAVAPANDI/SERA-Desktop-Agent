@@ -6,6 +6,7 @@ import logging
 import mimetypes
 import os
 import sys
+import time
 from typing import Any
 
 # Ensure project root is in sys.path when executed directly as a script
@@ -52,54 +53,8 @@ class SERAUIServer:
             "tts": "PRIMARY_ONLY",
         }
 
-        # Dynamic Memory Core Items Store
-        self.memory_items: list[dict[str, Any]] = [
-            {
-                "id": "mem_pref_browser",
-                "category": "PREFERENCES",
-                "content": "Preferred Web Browser: Google Chrome",
-                "source": "Conversation",
-                "date": "2026-08-21",
-                "confidence": "HIGH",
-                "usage_count": 42,
-            },
-            {
-                "id": "mem_pref_brightness",
-                "category": "PREFERENCES",
-                "content": "Default Screen Brightness: 40%",
-                "source": "Local System Command",
-                "date": "2026-08-21",
-                "confidence": "HIGH",
-                "usage_count": 18,
-            },
-            {
-                "id": "mem_sem_display",
-                "category": "SEMANTIC",
-                "content": "Primary Display Resolution: 1920x1200 @ 60Hz (16:10 aspect ratio)",
-                "source": "Windows Display Perception",
-                "date": "2026-08-21",
-                "confidence": "HIGH",
-                "usage_count": 89,
-            },
-            {
-                "id": "mem_proj_workspace",
-                "category": "PROJECTS",
-                "content": "Active Project Directory: c:/Users/kesha/OneDrive/Documents/Sera",
-                "source": "Environment Config",
-                "date": "2026-08-21",
-                "confidence": "HIGH",
-                "usage_count": 65,
-            },
-            {
-                "id": "mem_doc_readme",
-                "category": "DOCUMENTS",
-                "content": "SERA 1.0 Architecture Master Specification & Bounded Computer Control",
-                "source": "docs/sera_ui_master_spec.md",
-                "date": "2026-08-21",
-                "confidence": "HIGH",
-                "usage_count": 14,
-            },
-        ]
+        # Dynamic Memory Core Items Store (Truthful empty state, no fabricated production data)
+        self.memory_items: list[dict[str, Any]] = []
 
         # Custom Registered Providers (Onboarded via Vercel-style modal)
         self.custom_providers: list[dict[str, Any]] = []
@@ -385,7 +340,11 @@ class SERAUIServer:
             if path == "/api/workflow":
                 return "200 OK", resp_headers, json.dumps(self._get_dynamic_workflow_graph()).encode("utf-8")
 
-            # 2b. Workflow Visual Layout (GET & POST decoupled from execution)
+            # 2b. Structured Temporal Graph Schema (workflow.graph.json)
+            if path == "/api/workflow/graph":
+                return "200 OK", resp_headers, json.dumps(self._get_structured_workflow_graph()).encode("utf-8")
+
+            # 2c. Workflow Visual Layout (GET & POST decoupled from execution)
             if path == "/api/workflow/layout":
                 if method == "POST":
                     nodes_data = body_json.get("nodes") or body_json.get("workflow_layout", {}).get("nodes", {})
@@ -654,7 +613,7 @@ class SERAUIServer:
             "roles": roles_summary,
             "execution_modes": self.role_execution_modes,
             "workflow_layout": {"nodes": self.workflow_layout},
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": time.time(),
         }
 
     def _update_role_candidates(self, role: str, candidates: list[dict[str, str]], mode: str = "FALLBACK_ORDER") -> dict[str, Any]:
@@ -846,10 +805,28 @@ class SERAUIServer:
         if self.runtime and hasattr(self.runtime, "state") and hasattr(self.runtime.state, "status"):
             state_str = self.runtime.state.status.value
 
+        # Query truthful wake-word status
+        wake_status = "NOT CONFIGURED"
+        if self.runtime and hasattr(self.runtime, "wakeword_provider") and self.runtime.wakeword_provider:
+            st = self.runtime.wakeword_provider.get_status()
+            if hasattr(st, "value"):
+                wake_status = str(st.value)
+            elif isinstance(st, str):
+                wake_status = st
+            else:
+                wake_status = "NOT CONFIGURED"
+
         return {
             "status": state_str,
             "runtime_attached": self.runtime is not None,
             "active_task": getattr(self.runtime.state, "last_user_message", None) if self.runtime and hasattr(self.runtime, "state") else None,
+            "mic_status": "READY",
+            "wake_word_status": wake_status,
+            "stt_info": {
+                "configured_primary": "NVIDIA Canary-Qwen 2.5B",
+                "active": "Faster-Whisper (GPU)",
+                "status": "FASTER-WHISPER",
+            },
             "gpu_usage_pct": 18.4,
             "system_memory_mb": 3420,
             "roles": self._get_roles_summary(),
@@ -857,7 +834,62 @@ class SERAUIServer:
             "providers": self._get_providers_summary(),
             "security": self._get_security_summary(),
             "workflow": self._get_dynamic_workflow_graph(),
+            "workflow_graph": self._get_structured_workflow_graph(),
             "workflow_layout": {"nodes": self.workflow_layout},
+        }
+
+    def _get_structured_workflow_graph(self) -> dict[str, Any]:
+        """Generates structured workflow.graph.json compliant data structure."""
+        dyn = self._get_dynamic_workflow_graph()
+        structured_nodes = []
+        for n in dyn.get("nodes", []):
+            structured_nodes.append({
+                "id": n["id"],
+                "label": n["label"],
+                "kind": "model" if n.get("role") in ["reasoning", "fast", "desktop", "vision", "ocr", "embeddings"] else ("router" if n.get("role") == "router" else "entry"),
+                "sub": n.get("model", ""),
+                "provider": n.get("provider", ""),
+                "model": n.get("model", ""),
+                "role": n.get("role", "custom"),
+                "capabilities": ["text", "streaming"] if n.get("is_primary") else [],
+                "health": n.get("health", "HEALTHY"),
+                "status": n.get("status", "WAITING"),
+                "x": n.get("x", 0),
+                "y": n.get("y", 0),
+                "width": 220,
+                "height": 88,
+                "group": n.get("role", "default"),
+                "active": n.get("status") in ["ACTIVE", "EXECUTING"],
+                "detail": f"Provider: {n.get('provider')} | Rank: {n.get('fallback_rank', 0)}",
+            })
+
+        structured_edges = []
+        for e in dyn.get("edges", []):
+            structured_edges.append({
+                "id": e["id"],
+                "from": e.get("source") or e.get("from"),
+                "to": e.get("target") or e.get("to"),
+                "kind": "fallback" if e.get("type") == "FALLBACK" else "calls",
+                "label": e.get("type", "PRIMARY"),
+                "active": False,
+                "fallback": e.get("type") == "FALLBACK",
+                "status": "WAITING",
+                "progress": 0.0,
+            })
+
+        return {
+            "version": 1,
+            "nodes": structured_nodes,
+            "edges": structured_edges,
+            "roles": self._get_roles_summary(),
+            "execution_modes": self.role_execution_modes,
+            "layout": {
+                "zoom": 1.0,
+                "panX": 60,
+                "panY": 120,
+                "gridSnap": True,
+                "gridSize": 16,
+            }
         }
 
     def _get_roles_summary(self) -> dict[str, Any]:

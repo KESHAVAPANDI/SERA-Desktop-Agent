@@ -45,8 +45,8 @@ class OpenApplicationTool(Tool):
             "required": ["application"],
         }
 
-    async def execute(self, application: str):
-        application = application.strip()
+    async def execute(self, application: str = "", app_name: str = "", **kwargs):
+        application = (application or app_name or kwargs.get("name", "")).strip()
         if not application:
             return {"success": False, "verified": False, "error": "Application name cannot be empty."}
 

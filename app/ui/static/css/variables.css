@@ -1,27 +1,35 @@
 /* ===================================================================
-   SERA 1.0 — DESIGN SYSTEM VARIABLES & TOKENS (TEMPORAL AURA)
+   SERA 1.0 — DESIGN SYSTEM VARIABLES & TOKENS (TEMPORAL AURA v2.0)
    =================================================================== */
 
 :root {
-  /* Surface Color Palette (Cinematic Deep Space / Void) */
-  --bg-void: #05070B;
+  /* Surface Color Palette (Cinematic Deep Dimensional Space) */
+  --bg-void: #06080D;
   --bg-primary: #0A0D14;
   --bg-secondary: #101520;
   --bg-card: rgba(16, 21, 32, 0.75);
   --bg-card-hover: rgba(22, 30, 48, 0.85);
-  --bg-surface-glass: rgba(10, 13, 20, 0.8);
+  --bg-surface-glass: rgba(10, 13, 20, 0.85);
 
-  /* Temporal Aura Energy Colors */
-  --accent-cyan: #00F0FF;
-  --accent-cyan-dim: rgba(0, 240, 255, 0.15);
-  --accent-violet: #8A2BE2;
-  --accent-violet-dim: rgba(138, 43, 226, 0.15);
-  --accent-emerald: #00E599;
-  --accent-emerald-dim: rgba(0, 229, 153, 0.15);
-  --accent-amber: #FFB800;
-  --accent-amber-dim: rgba(255, 184, 0, 0.15);
-  --accent-crimson: #FF3366;
-  --accent-crimson-dim: rgba(255, 51, 102, 0.15);
+  /* The 8-Color Semantic Temporal Aura System */
+  --accent-cyan: #00E5FF;
+  --accent-cyan-dim: rgba(0, 229, 255, 0.15);
+  --accent-blue: #007AFF;
+  --accent-blue-dim: rgba(0, 122, 255, 0.15);
+  --accent-violet: #8B5CF6;
+  --accent-violet-dim: rgba(139, 92, 246, 0.15);
+  --accent-purple: #D946EF;
+  --accent-purple-dim: rgba(217, 70, 239, 0.15);
+  --accent-amber: #F59E0B;
+  --accent-amber-dim: rgba(245, 158, 11, 0.15);
+  --accent-emerald: #10B981;
+  --accent-emerald-dim: rgba(16, 185, 129, 0.15);
+  --accent-magenta: #EC4899;
+  --accent-magenta-dim: rgba(236, 72, 153, 0.15);
+  --accent-gold: #EAB308;
+  --accent-gold-dim: rgba(234, 179, 8, 0.15);
+  --accent-crimson: #EF4444;
+  --accent-crimson-dim: rgba(239, 68, 68, 0.15);
   --accent-broken: #FF1A4B;
 
   /* Typography */
@@ -37,16 +45,20 @@
 
   /* Borders & Dividers */
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-active: rgba(0, 240, 255, 0.4);
+  --border-active: rgba(0, 229, 255, 0.4);
   --border-broken: rgba(255, 26, 75, 0.6);
 
   /* Shadows & Glows */
-  --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.3);
-  --glow-violet: 0 0 20px rgba(138, 43, 226, 0.3);
-  --glow-emerald: 0 0 20px rgba(0, 229, 153, 0.3);
-  --glow-amber: 0 0 20px rgba(255, 184, 0, 0.3);
-  --glow-broken: 0 0 24px rgba(255, 26, 75, 0.5);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --glow-cyan: 0 0 24px rgba(0, 229, 255, 0.35);
+  --glow-blue: 0 0 24px rgba(0, 122, 255, 0.35);
+  --glow-violet: 0 0 24px rgba(139, 92, 246, 0.35);
+  --glow-purple: 0 0 24px rgba(217, 70, 239, 0.35);
+  --glow-amber: 0 0 24px rgba(245, 158, 11, 0.35);
+  --glow-emerald: 0 0 24px rgba(16, 185, 129, 0.35);
+  --glow-magenta: 0 0 24px rgba(236, 72, 153, 0.35);
+  --glow-gold: 0 0 24px rgba(234, 179, 8, 0.35);
+  --glow-broken: 0 0 28px rgba(255, 26, 75, 0.55);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.55);
 
   /* Transitions */
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);

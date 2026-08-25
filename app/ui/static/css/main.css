@@ -201,8 +201,32 @@ body::before {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
+
+.telemetry-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.telemetry-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-green { background: var(--accent-emerald); box-shadow: 0 0 6px var(--accent-emerald); }
+.dot-gray { background: var(--text-muted); }
+.dot-cyan { background: var(--accent-cyan); box-shadow: 0 0 6px var(--accent-cyan); }
+.dot-amber { background: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
 
 .privacy-pill {
   display: flex;
@@ -210,8 +234,8 @@ body::before {
   gap: 6px;
   padding: 3px 8px;
   border-radius: 12px;
-  background: rgba(0, 240, 255, 0.08);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.2);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--accent-cyan);

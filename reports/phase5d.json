@@ -1,0 +1,66 @@
+{
+  "phase": "5D",
+  "name": "Temporal Aura Operating Interface & Full Production Rework",
+  "status": "COMPLETED",
+  "timestamp": "2026-08-25T21:51:00Z",
+  "branch": "feature/phase5d-temporal-aura",
+  "subsystems": {
+    "voice_control": {
+      "mode": "HOLD_TO_TALK",
+      "hotkey": "ctrl+space",
+      "capture_behavior": "KeyDown -> Continuous Record, KeyUp -> Stop & Transcribe",
+      "turn_cancellation": "Supported (Release < 0.25s)",
+      "microphone_ownership": "Single owner controller with state suppression"
+    },
+    "wake_word": {
+      "strategy": "LOCAL_CUSTOM_WAKEWORD",
+      "target_phrase": "Hey SERA",
+      "model_path": "models/wakeword/hey_sera.tflite",
+      "status": "NOT CONFIGURED",
+      "architecture": "DS-CNN int8 TFLite spec documented in docs/wakeword_training.md",
+      "cloud_calls": false,
+      "fake_inference": false
+    },
+    "runtime_truthfulness": {
+      "nvidia_canary_status": "Configured Primary (NVIDIA Canary-Qwen 2.5B), Active (Faster-Whisper GPU)",
+      "memory_core_initial_state": "Truthful empty state [] without fabricated entries",
+      "tool_execution_semantics": "Strict verified execution checking before returning success=True"
+    },
+    "temporal_motion_engine": {
+      "layers": 3,
+      "layer1": "Background Temporal Aura Field (animated drifting strands & depth particles)",
+      "layer2": "Horizontal 2D Structured Execution Graph & Conduits",
+      "layer3": "Event-Driven Energy Pulses (Model selected, tool execution, perception, broken, ripple)",
+      "palette": "8-color semantic system (Cyan, Blue, Violet, Purple, Amber, Emerald, Magenta, Gold, Crimson)"
+    },
+    "workflow_graph_schema": {
+      "format": "workflow.graph.json",
+      "schema_version": 1,
+      "nodes_count": 19,
+      "edges_count": 18,
+      "spatial_layout_decoupled": true
+    },
+    "domain_views": {
+      "live": "Aura Command Center with real-time hold-to-talk timer & auto-navigation",
+      "workflow": "2D Freeform Temporal Canvas with conduit particle stream and candidate editor",
+      "agents": "6 Agent identities (SERA Core, Desktop, Vision, Research, RAG, MCP) with active/planned status",
+      "providers": "8 Real providers (Groq, Gemini, Mistral, NVIDIA, Fish Audio, OpenRouter, Cerebras, Z.AI) with dynamic quotas",
+      "memory": "Truthful neural knowledge core with category filters and forget capability",
+      "history": "Trace visualizer with Replay (visual trace) vs Run Again (execution)",
+      "debug": "Structured event cards with latency breakdown and JSON payload viewer",
+      "security": "Safety tiers and interactive confirmation prompt modal"
+    }
+  },
+  "tests": {
+    "total_tests": 136,
+    "passed_tests": 136,
+    "failed_tests": 0,
+    "pass_rate_pct": 100.0,
+    "phase5d_suite": [
+      "tests/test_phase5d_wakeword_provider.py",
+      "tests/test_phase5d_runtime_truth.py",
+      "tests/test_phase5d_workflow_graph.py",
+      "tests/benchmark_phase5d_live.py"
+    ]
+  }
+}

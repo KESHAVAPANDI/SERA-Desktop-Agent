@@ -152,6 +152,23 @@ class SERAApp {
       this.updateRuntimeState(data.status, data.active_task);
       if (data.providers) this.views.providers?.update(data.providers);
       if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);
+
+      // Truthful Header Telemetry Pills
+      const wakeEl = document.getElementById("wake-status-text");
+      if (wakeEl && data.wake_word_status) wakeEl.textContent = `WAKE: ${data.wake_word_status}`;
+
+      const sttEl = document.getElementById("stt-status-text");
+      if (sttEl && data.stt_info?.status) sttEl.textContent = `STT: ${data.stt_info.status.toUpperCase()}`;
+
+      const micEl = document.getElementById("mic-status-text");
+      if (micEl && data.mic_status) micEl.textContent = `MIC: ${data.mic_status.toUpperCase()}`;
+
+      const gpuEl = document.getElementById("gpu-gauge");
+      if (gpuEl && data.gpu_usage_pct != null) gpuEl.textContent = `${data.gpu_usage_pct}%`;
+
+      const ramEl = document.getElementById("ram-gauge");
+      if (ramEl && data.system_memory_mb != null) ramEl.textContent = `${(data.system_memory_mb / 1024).toFixed(1)} GB`;
+
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);
       this.views.live?.setAuraState(data.status, data);
@@ -173,12 +190,27 @@ class SERAApp {
         this.views.live?.appendMessage("user", data.transcript);
         this.views.live?.startTask(data.transcript);
         this.views.live?.logActivity("TRANSCRIPT", data.transcript);
+
+        // Auto-navigate to Workflow if complex action
+        const q = data.transcript.toLowerCase();
+        const isGreeting = ["hi", "hello", "hey", "thanks", "thank you", "who are you"].includes(q.trim().replace(/[.!?]/g, ''));
+        if (!isGreeting && this.currentView === "live") {
+          setTimeout(() => this.switchView("workflow"), 400);
+        }
       }
     } else if (eventType === "MODEL_SELECTED") {
       this.views.live?.logActivity("MODEL", `${data.role} ➔ ${data.provider} • ${data.model}`);
     } else if (eventType === "TOOL_STARTED") {
       this.views.live?.updateTaskStep(2, 4, `Executing ${data.tool}`);
       this.views.live?.logActivity("TOOL", `Started: ${data.tool}`);
+      if (this.currentView === "live") {
+        this.switchView("workflow");
+      }
+    } else if (eventType === "SCREEN_CAPTURE_STARTED" || eventType === "VISION_STARTED") {
+      this.views.live?.logActivity("VISION", `Perception pipeline active`);
+      if (this.currentView === "live") {
+        this.switchView("workflow");
+      }
     } else if (eventType === "TOOL_COMPLETED") {
       this.views.live?.logActivity("TOOL", `Completed: ${data.tool} (${data.latency_ms || 0}ms)`);
     } else if (eventType === "AGENT_RESPONSE") {

@@ -120,21 +120,23 @@ class ModelRouter:
         """Generates response using role's candidate chain with model-level health failover."""
         candidates = self.role_chains.get(role, [])
         if not candidates:
-            # Fallback to legacy routing if role is not in role_chains
-            legacy_resp, used_role = await self.generate_with_fallback(
-                messages=messages,
-                tools=tools,
-                images=images,
-                preferred_role=role,
-                **kwargs,
-            )
-            syn_candidate = RoleCandidate(
-                provider_name=legacy_resp.provider or used_role,
-                model_name=legacy_resp.model or "unknown",
-                provider=self.legacy_providers.get(used_role, candidates[0].provider if candidates else None),
-                role=role,
-            )
-            return legacy_resp, syn_candidate
+            # Check legacy providers directly without cyclic recursion
+            legacy_provider = self.legacy_providers.get(role)
+            if legacy_provider:
+                resp = await legacy_provider.generate(
+                    messages=messages,
+                    tools=tools,
+                    images=images,
+                    **kwargs,
+                )
+                syn_candidate = RoleCandidate(
+                    provider_name=resp.provider or role,
+                    model_name=resp.model or "default",
+                    provider=legacy_provider,
+                    role=role,
+                )
+                return resp, syn_candidate
+            raise RuntimeError(f"No candidates or legacy provider configured for role '{role}'")
 
         last_error = None
 

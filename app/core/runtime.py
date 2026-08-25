@@ -27,7 +27,7 @@ from app.speech.audio_cues import get_audio_cues
 from app.speech.audio_manager import AudioManager
 from app.speech.recorder import AudioRecorder
 from app.speech.transcript_gate import TranscriptQualityGate
-from app.speech.wakeword import OpenWakeWordDetector
+from app.speech.wakeword import LocalCustomWakeWordProvider, OpenWakeWordDetector, WakeWordRegistry, WakeWordStatus
 from app.tools import create_tool_registry
 from app.tools.desktop.perception_router import DesktopPerceptionRouter
 from app.tools.desktop.ui_inspector import WindowsUIInspector
@@ -127,7 +127,12 @@ class SERARuntime:
 
         # Local Wake Word Detector ("SERA")
         self.wakeword_enabled = wake_cfg.get("enabled", True)
-        self.wakeword_phrase = wake_cfg.get("phrase", "SERA")
+        self.wakeword_phrase = wake_cfg.get("phrase", "Hey SERA")
+        self.wakeword_provider = WakeWordRegistry.create(
+            name=wake_cfg.get("provider", "local_custom"),
+            model_path=wake_cfg.get("model_path", "models/wakeword/hey_sera.tflite"),
+            enabled=wake_cfg.get("enabled", False),
+        )
         self.wakeword_detector = OpenWakeWordDetector(
             phrase=self.wakeword_phrase,
             sensitivity=wake_cfg.get("sensitivity", 0.5),

@@ -157,6 +157,11 @@ class TestPhase5CUI(unittest.IsolatedAsyncioTestCase):
 
     # 9. Memory Core & Forget Action
     async def test_09_memory_core_and_forget_action(self):
+        self.server.memory_items = [
+            {"id": "mem_1", "category": "PREFERENCES", "content": "Test Item 1"},
+            {"id": "mem_2", "category": "SEMANTIC", "content": "Test Item 2"},
+            {"id": "mem_3", "category": "PROJECTS", "content": "Test Item 3"},
+        ]
         async with httpx.AsyncClient(base_url="http://127.0.0.1:8775") as client:
             resp = await client.get("/api/memory")
             self.assertEqual(resp.status_code, 200)
