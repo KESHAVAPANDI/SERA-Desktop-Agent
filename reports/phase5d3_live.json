@@ -1,0 +1,60 @@
+{
+  "phase": "5D.3",
+  "name": "The SERA Live Experience",
+  "timestamp": "2026-08-26T18:41:40Z",
+  "status": "PASSED",
+  "summary": {
+    "e2e_tests_phase5d3_total": 5,
+    "e2e_tests_phase5d3_passed": 5,
+    "e2e_tests_phase5d2_total": 9,
+    "e2e_tests_phase5d2_passed": 9,
+    "unit_regression_total": 151,
+    "unit_regression_passed": 151,
+    "total_tests_verified": 165,
+    "pass_rate_percentage": 100.0
+  },
+  "scenarios": [
+    {
+      "id": "E2E-5D3-01",
+      "name": "Inline Work Cards & Embedded Interactive Artifacts",
+      "test_file": "tests/e2e/phase5d3/test_live_artifacts.py",
+      "status": "PASSED",
+      "screenshot": "artifacts/e2e/phase5d3/01_live_artifacts_stream.png"
+    },
+    {
+      "id": "E2E-5D3-02",
+      "name": "Context-Aware Interrupt States & Real Task Cancellation",
+      "test_file": "tests/e2e/phase5d3/test_live_interrupt.py",
+      "status": "PASSED",
+      "screenshot": "artifacts/e2e/phase5d3/02_live_contextual_interrupt.png"
+    },
+    {
+      "id": "E2E-5D3-03",
+      "name": "Data-Driven Capability Registry & Dynamic Context Actions",
+      "test_file": "tests/e2e/phase5d3/test_live_capabilities.py",
+      "status": "PASSED",
+      "screenshot": "artifacts/e2e/phase5d3/03_live_capabilities_registry.png"
+    },
+    {
+      "id": "E2E-5D3-04",
+      "name": "Live-Workflow Bidirectional Shared Task Lifecycle",
+      "test_file": "tests/e2e/phase5d3/test_live_sync.py",
+      "status": "PASSED",
+      "screenshot": "artifacts/e2e/phase5d3/04_live_workflow_sync.png"
+    },
+    {
+      "id": "E2E-5D3-05",
+      "name": "Live Assistant Token Streaming & Caret Animation",
+      "test_file": "tests/e2e/phase5d3/test_live_streaming.py",
+      "status": "PASSED",
+      "screenshot": "artifacts/e2e/phase5d3/05_live_streaming_response.png"
+    }
+  ],
+  "architecture_updates": {
+    "layout": "2-column layout (340px Left Cockpit, 1fr Right Conversational Operating Surface)",
+    "capabilities_backend": "CapabilityRegistry with contextual filtering in app/core/capabilities.py",
+    "telemetry_cleanup": "Removed redundant matrix and memory duplication from primary Live surface",
+    "navigation_cleanup": "Eliminated forced auto-switching to Workflow on task/tool trigger",
+    "interrupt_ux": "State-aware interrupt button (Cancel Capture / Interrupt / Stop Task / Stop Speaking)"
+  }
+}

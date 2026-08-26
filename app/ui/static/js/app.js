@@ -29,7 +29,7 @@ class SERAApp {
 
   init() {
     // 1. Initialize 8 First-Class Views
-    this.views.live = new LiveView(msg => this.sendMessage(msg));
+    this.views.live = new LiveView(msg => this.sendMessage(msg), targetView => this.switchView(targetView));
     this.views.workflow = new WorkflowView(msg => this.sendMessage(msg), targetView => this.switchView(targetView));
     this.views.agents = new AgentsView();
     this.views.memory = new MemoryView();
@@ -118,6 +118,7 @@ class SERAApp {
 
       this.ws.onclose = () => {
         this.setRuntimeConnectionStatus("DISCONNECTED");
+        this.views.live?.appendSystemNotice("init", "RUNTIME OFFLINE — Attempting automatic reconnect...");
         this.views.debug?.logEvent("GATEWAY_DISCONNECTED", { retry_in: "3s" });
         setTimeout(() => this.connectWebSocket(), 3000);
       };
@@ -160,6 +161,7 @@ class SERAApp {
       this.updateRuntimeState(data.status, data.active_task);
       if (data.providers) this.views.providers?.update(data.providers);
       if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);
+      if (data.capabilities) this.views.live?.renderCapabilities(data.capabilities);
 
       if (data.active_task_info && data.active_task_info.status === "EXECUTING") {
         this.views.live?.startTask(data.active_task_info);
@@ -181,73 +183,63 @@ class SERAApp {
       const ramEl = document.getElementById("ram-gauge");
       if (ramEl && data.system_memory_mb != null) ramEl.textContent = `${(data.system_memory_mb / 1024).toFixed(1)} GB`;
 
+    } else if (eventType === "CAPABILITIES_LIST") {
+      if (data.capabilities) this.views.live?.renderCapabilities(data.capabilities);
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);
       this.views.live?.setAuraState(data.status, data);
-      this.views.live?.logActivity("STATE", `State: ${data.status}`);
     } else if (eventType === "ACTIVATION_STARTED") {
       this.updateRuntimeState("LISTENING");
       this.views.live?.setAuraState("LISTENING", data);
-      this.views.live?.logActivity("ACTIVATION", `${data.source} (${data.mode || 'HOLD'})`);
     } else if (eventType === "ACTIVATION_RELEASED") {
       this.updateRuntimeState("TRANSCRIBING");
       this.views.live?.setAuraState("TRANSCRIBING");
-      this.views.live?.logActivity("ACTIVATION", `Released after ${data.duration_seconds?.toFixed(2)}s`);
     } else if (eventType === "WAKE_WORD_DETECTED") {
       this.views.live?.setAuraState("LISTENING", { source: "WAKE_WORD" });
-      this.views.live?.logActivity("WAKE", `Wake word '${data.phrase}' detected`);
     } else if (eventType === "TRANSCRIPTION_STARTED") {
       this.updateRuntimeState("TRANSCRIBING");
       this.views.live?.setAuraState("TRANSCRIBING");
     } else if (eventType === "TRANSCRIPTION_COMPLETED") {
       if (data.transcript) {
-        this.views.live?.appendMessage("user", data.transcript);
-        this.views.live?.logActivity("TRANSCRIPT", data.transcript);
+        this.views.live?.appendUserMessage(data.transcript, "VOICE");
       }
     } else if (eventType === "TASK_STARTED") {
       this.updateRuntimeState("EXECUTING", data.user_input);
       this.views.live?.startTask(data);
-      this.views.live?.logActivity("TASK", `Started: ${data.user_input || 'Task'}`);
-
-      // Auto-navigate to Workflow if complex action
-      const q = (data.user_input || "").toLowerCase();
-      const isGreeting = ["hi", "hello", "hey", "thanks", "thank you", "who are you"].includes(q.trim().replace(/[.!?]/g, ''));
-      if (!isGreeting && this.currentView === "live") {
-        setTimeout(() => this.switchView("workflow"), 400);
-      }
-    } else if (eventType === "MODEL_SELECTED") {
-      this.views.live?.logActivity("MODEL", `${data.role} ➔ ${data.provider} • ${data.model}`);
+      this.views.live?.setAuraState("EXECUTING");
     } else if (eventType === "TOOL_STARTED") {
       this.views.live?.updateTaskStep(2, 4, `Executing ${data.tool}`);
-      this.views.live?.logActivity("TOOL", `Started: ${data.tool}`);
-      if (this.currentView === "live") {
-        this.switchView("workflow");
-      }
-    } else if (eventType === "SCREEN_CAPTURE_STARTED" || eventType === "VISION_STARTED") {
-      this.views.live?.logActivity("VISION", `Perception pipeline active`);
-      if (this.currentView === "live") {
-        this.switchView("workflow");
-      }
+      this.views.live?.createInlineWorkCard(data.tool, data.arguments || data.params, data.call_id);
     } else if (eventType === "TOOL_COMPLETED") {
-      this.views.live?.logActivity("TOOL", `Completed: ${data.tool} (${data.latency_ms || 0}ms)`);
+      this.views.live?.completeInlineWorkCard(data.tool, data.result, data.latency_ms, data.call_id);
+    } else if (eventType === "TOOL_FAILED") {
+      this.views.live?.failInlineWorkCard(data.tool, data.error, data.call_id);
+    } else if (eventType === "SCREEN_CAPTURE_STARTED") {
+      this.views.live?.createInlineWorkCard("capture_screen", data);
+    } else if (eventType === "SCREEN_CAPTURED") {
+      this.views.live?.completeInlineWorkCard("capture_screen", data);
+    } else if (eventType === "VISION_STARTED") {
+      this.views.live?.createInlineWorkCard("inspect_screen", data);
+    } else if (eventType === "VISION_COMPLETED") {
+      this.views.live?.completeInlineWorkCard("inspect_screen", data);
+    } else if (eventType === "STREAM_TOKEN") {
+      this.views.live?.appendStreamToken(data.token || data.text);
     } else if (eventType === "AGENT_RESPONSE") {
-      this.views.live?.appendMessage("sera", data.text);
-      this.views.live?.logActivity("RESPONSE", data.text);
+      this.views.live?.completeAssistantResponse(data.text);
+    } else if (eventType === "TTS_STARTED") {
+      this.views.live?.setAuraState("SPEAKING");
     } else if (eventType === "TASK_COMPLETED") {
       this.updateRuntimeState("IDLE");
       this.views.live?.stopTask("✓ Completed", data);
-      this.views.live?.logActivity("STATUS", "✓ Task Completed");
       if (data.result) {
-        this.views.live?.appendMessage("sera", data.result);
+        this.views.live?.completeAssistantResponse(data.result);
       }
     } else if (eventType === "TASK_CANCELLED") {
       this.updateRuntimeState("IDLE");
       this.views.live?.stopTask("✕ Cancelled", data);
-      this.views.live?.logActivity("STATUS", "✕ Task Cancelled");
     } else if (eventType === "TASK_FAILED") {
       this.updateRuntimeState("IDLE");
       this.views.live?.stopTask("✗ Failed", data);
-      this.views.live?.logActivity("STATUS", `✗ Task Failed: ${data.error || ''}`);
     } else if (eventType === "SECURITY_CONFIRMATION_REQUIRED") {
       this.views.security?.showConfirmationRequest(data.action_id, data.tool_name, data.prompt, data.arguments);
       this.updateRuntimeState("CONFIRMING_ACTION", `Confirmation required: ${data.tool_name}`);

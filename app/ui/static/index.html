@@ -26,7 +26,7 @@
           </svg>
           <div class="brand-text-block">
             <span class="brand-title">SERA</span>
-            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.2</span>
+            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.3</span>
           </div>
         </div>
 
@@ -112,11 +112,11 @@
     <!-- Main Dynamic Multi-Domain Content Area -->
     <main id="main-content" class="main-content-viewport">
 
-      <!-- VIEW 1: LIVE (PRIMARY CONVERSATIONAL AURA & HOLD-TO-TALK COCKPIT) -->
+      <!-- VIEW 1: LIVE (PRIMARY CONVERSATIONAL AURA & DYNAMIC OPERATING SURFACE) -->
       <section id="view-live" class="view-container active">
         <div class="live-cockpit-layout">
           
-          <!-- Column 1: Voice & Temporal Aura Orb Cockpit -->
+          <!-- Column 1: Voice & Temporal Aura Cockpit (Left 340px) -->
           <div class="live-column live-aura-column">
             
             <!-- Aura Core Hologram Card -->
@@ -168,7 +168,7 @@
             <!-- Authoritative Current Task Status Card -->
             <div id="current-task-card" class="current-task-card">
               <div class="task-card-header">
-                <div class="task-card-badge"><span class="task-pulse-dot"></span> TASK EXECUTION</div>
+                <div class="task-card-badge"><span class="task-pulse-dot"></span> CURRENT TASK</div>
                 <span class="task-elapsed-timer" id="task-elapsed-timer">0.0s</span>
               </div>
               <div class="task-card-title-row">
@@ -181,15 +181,16 @@
                 </div>
                 <div class="task-step-meta">
                   <span id="task-step-label" class="task-step-label">Step 0 / 0</span>
-                  <button id="btn-interrupt-task" class="btn-interrupt" title="Cancel Running Task">Interrupt</button>
+                  <button id="btn-interrupt-task" class="btn-interrupt btn-interrupt-idle" title="Cancel Running Task">Interrupt</button>
                 </div>
               </div>
             </div>
 
-            <!-- Quick Action Command Chips -->
-            <div class="quick-chips-panel">
-              <div class="quick-chips-title">QUICK CAPABILITIES</div>
-              <div class="quick-chips-grid">
+            <!-- Data-Driven Dynamic Capabilities Panel -->
+            <div class="quick-chips-panel" id="quick-chips-panel">
+              <div class="quick-chips-title" id="quick-chips-title">CONTEXTUAL ACTIONS</div>
+              <div class="quick-chips-grid" id="quick-chips-grid">
+                <!-- Dynamically populated from backend CapabilityRegistry -->
                 <button class="quick-chip-btn" data-prompt="Take a screenshot of the current screen">
                   <span class="chip-icon">📸</span> Capture Screen
                 </button>
@@ -206,16 +207,16 @@
             </div>
           </div>
 
-          <!-- Column 2: Live Conversational Stream & Action Console -->
-          <div class="live-column live-chat-column">
+          <!-- Column 2: Full-Width Conversational Operating Surface & Action Console (1fr) -->
+          <div class="live-column live-conversation-column">
             <div class="chat-glass-card">
               <div class="chat-header">
                 <div class="chat-header-left">
                   <span class="chat-title-icon">💬</span>
-                  <span class="chat-title-text">CONVERSATION & EVENT LOG</span>
+                  <span class="chat-title-text">CONVERSATION & WORK STREAM</span>
                 </div>
                 <div class="chat-header-right">
-                  <span class="chat-status-pill"><span class="status-live-dot"></span> STREAM ACTIVE</span>
+                  <span class="chat-status-pill"><span class="status-live-dot"></span> LIVE ENGINE ACTIVE</span>
                 </div>
               </div>
               
@@ -226,10 +227,15 @@
                     <span class="bubble-time">SYSTEM ONLINE</span>
                   </div>
                   <div class="bubble-content">
-                    SERA Desktop Operating Interface online. Hold <kbd>Ctrl+Space</kbd> for voice commands or type below.
+                    SERA Desktop Operating Interface online. Hold <kbd>Ctrl+Space</kbd> for voice commands, click an action on the left, or type below.
                   </div>
                 </div>
               </div>
+
+              <!-- Floating Scroll to Bottom Anchor -->
+              <button id="scroll-anchor-btn" class="scroll-anchor-btn hidden" title="Scroll to Latest Activity">
+                <span>New Activity ↓</span>
+              </button>
 
               <form id="chat-form" class="chat-form">
                 <div class="chat-input-wrapper">
@@ -241,82 +247,6 @@
                 </div>
               </form>
             </div>
-          </div>
-
-          <!-- Column 3: Live Telemetry Radar & Activity Rail -->
-          <div class="live-column live-telemetry-column">
-            
-            <!-- Real-Time Activity Rail -->
-            <div class="telemetry-glass-card">
-              <div class="card-header-sm">
-                <span>⚡ LIVE ACTIVITY RAIL</span>
-                <span class="rail-counter" id="rail-counter">REAL-TIME</span>
-              </div>
-              <div id="live-activity-rail" class="live-activity-rail">
-                <div class="activity-rail-item">
-                  <span class="activity-time">READY</span>
-                  <span class="activity-badge badge-system">SYSTEM</span>
-                  <span class="activity-text">SERA Desktop Kernel initialized</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Active Provider Health & Matrix -->
-            <div class="telemetry-glass-card">
-              <div class="card-header-sm">
-                <span>🌐 PROVIDER HEALTH MATRIX</span>
-                <span class="provider-auto-pill">AUTO-FALLBACK</span>
-              </div>
-              <div class="provider-mini-grid">
-                <div class="provider-mini-item">
-                  <div class="p-item-top">
-                    <span class="p-name">Groq</span>
-                    <span class="p-status healthy">99.8%</span>
-                  </div>
-                  <span class="p-model">Llama-3.3 70B</span>
-                </div>
-                <div class="provider-mini-item">
-                  <div class="p-item-top">
-                    <span class="p-name">Mistral</span>
-                    <span class="p-status healthy">100%</span>
-                  </div>
-                  <span class="p-model">Codestral / Large</span>
-                </div>
-                <div class="provider-mini-item">
-                  <div class="p-item-top">
-                    <span class="p-name">Cerebras</span>
-                    <span class="p-status healthy">1800 t/s</span>
-                  </div>
-                  <span class="p-model">GPT-OSS 120B</span>
-                </div>
-                <div class="provider-mini-item">
-                  <div class="p-item-top">
-                    <span class="p-name">NVIDIA</span>
-                    <span class="p-status healthy">GPU ON</span>
-                  </div>
-                  <span class="p-model">Canary-Qwen 2.5B</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Neural Semantic Memory Snippet -->
-            <div class="telemetry-glass-card">
-              <div class="card-header-sm">
-                <span>🧠 MEMORY CORE CACHE</span>
-                <span class="privacy-tag">LOCAL ISOLATED</span>
-              </div>
-              <div class="memory-cache-meta">
-                <div class="mem-stat-box">
-                  <span class="mem-num" id="mem-stat-count">0</span>
-                  <span class="mem-label">Semantic Items</span>
-                </div>
-                <div class="mem-stat-box">
-                  <span class="mem-num">0.4 ms</span>
-                  <span class="mem-label">Vector Latency</span>
-                </div>
-              </div>
-            </div>
-
           </div>
 
         </div>

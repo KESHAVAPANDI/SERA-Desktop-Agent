@@ -15,6 +15,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from app.core.router import RoleCandidate
+from app.core.capabilities import CapabilityRegistry
 from app.utils.security import SecurityManager
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ class SERAUIServer:
         self.static_dir = static_dir or os.path.join(os.path.dirname(__file__), "static")
         self.runtime = runtime
         self.security_manager = SecurityManager()
+        self.capability_registry = CapabilityRegistry()
         self.clients: set = set()
         self._server = None
         self._is_running = False
@@ -314,6 +316,10 @@ class SERAUIServer:
                         action_id = msg_data.get("action_id")
                         allowed = bool(msg_data.get("allowed", False))
                         await self.broadcast_event("ACTION_CONFIRMED", {"action_id": action_id, "allowed": allowed})
+                    elif action == "GET_CAPABILITIES":
+                        context_dict = msg_data.get("context", {})
+                        caps = self.capability_registry.get_contextual_capabilities(context_dict)
+                        await self._ws_send(writer, {"event": "CAPABILITIES_LIST", "data": {"capabilities": caps}})
         except Exception as e:
             logger.debug(f"[SERAUIServer] WS frame exception: {e}")
         finally:
@@ -324,7 +330,7 @@ class SERAUIServer:
         resp_headers = {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, X-Context",
         }
 
         if method == "OPTIONS":
@@ -347,6 +353,16 @@ class SERAUIServer:
             # 1. State
             if path == "/api/state":
                 return "200 OK", resp_headers, json.dumps(self._get_initial_snapshot()).encode("utf-8")
+
+            # 1b. Contextual Capabilities Endpoint
+            if path.startswith("/api/capabilities"):
+                context_state = "IDLE"
+                if "context=" in raw_path:
+                    context_state = raw_path.split("context=")[-1].split("&")[0]
+                elif headers.get("x-context"):
+                    context_state = headers.get("x-context")
+                caps = self.capability_registry.get_contextual_capabilities({"state": context_state})
+                return "200 OK", resp_headers, json.dumps({"capabilities": caps}).encode("utf-8")
 
             # 1b. Canonical Task Endpoints
             if path == "/api/task/create" or path == "/api/task":
@@ -882,6 +898,7 @@ class SERAUIServer:
             "execution_modes": self.role_execution_modes,
             "providers": self._get_providers_summary(),
             "security": self._get_security_summary(),
+            "capabilities": self.capability_registry.get_contextual_capabilities({"state": state_str}),
             "workflow": self._get_dynamic_workflow_graph(),
             "workflow_graph": self._get_structured_workflow_graph(),
             "workflow_layout": {"nodes": self.workflow_layout},
