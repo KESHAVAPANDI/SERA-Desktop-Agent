@@ -5,8 +5,9 @@
  */
 
 export class WorkflowView {
-  constructor(socketSender) {
+  constructor(socketSender, onNavigate) {
     this.send = socketSender;
+    this.onNavigate = onNavigate;
     this.canvas = document.getElementById("workflow-canvas");
     this.viewport = document.getElementById("canvas-viewport");
     this.container = document.getElementById("workflow-nodes-container");
@@ -33,9 +34,11 @@ export class WorkflowView {
     this.undoStack = [];
     this.redoStack = [];
 
-    // Graph & Role Data
+    // Graph & Role Data (Design Mode vs Execution Mode)
     this.nodes = [];
     this.edges = [];
+    this.execNodes = [];
+    this.execEdges = [];
     this.rolesData = {};
     this.executionModes = {};
     this.customLayout = {};
@@ -55,23 +58,44 @@ export class WorkflowView {
   }
 
   setupToolbar() {
-    // 1. Runtime vs Design Mode
+    // 1. Two-Mode Architecture (Execution Mode vs Design Mode)
+    const btnExec = document.getElementById("btn-mode-execution");
+    const btnDesign = document.getElementById("btn-mode-design");
+    const modeDesc = document.getElementById("workflow-mode-desc");
+    const returnBtn = document.getElementById("btn-return-to-live");
     const modeBtn = document.getElementById("btn-toggle-mode");
+
+    returnBtn?.addEventListener("click", () => {
+      document.getElementById("workflow-execution-banner")?.classList.add("hidden");
+      if (this.onNavigate) {
+        this.onNavigate("live");
+      } else if (window.SERA_APP) {
+        window.SERA_APP.switchView("live");
+      } else if (window.seraApp) {
+        window.seraApp.switchView("live");
+      } else {
+        document.getElementById("tab-live")?.click();
+      }
+    });
+
+    const setMode = (newMode) => {
+      this.mode = newMode;
+      btnExec?.classList.toggle("active", newMode === "RUNTIME" || newMode === "EXECUTION");
+      btnDesign?.classList.toggle("active", newMode === "DESIGN");
+      if (modeDesc) {
+        modeDesc.textContent = (newMode === "RUNTIME" || newMode === "EXECUTION")
+          ? "Live Dynamic Execution Trace"
+          : "Role Candidate Topology & Priority Editor";
+      }
+      this.render();
+    };
+
+    btnExec?.addEventListener("click", () => setMode("RUNTIME"));
+    btnDesign?.addEventListener("click", () => setMode("DESIGN"));
+
     if (modeBtn) {
       modeBtn.addEventListener("click", () => {
-        this.mode = this.mode === "RUNTIME" ? "DESIGN" : "RUNTIME";
-        modeBtn.innerHTML = this.mode === "RUNTIME" 
-          ? `<span style="color: var(--accent-cyan);">●</span> RUNTIME MODE` 
-          : `<span style="color: var(--accent-amber);">✎</span> DESIGN MODE`;
-        modeBtn.classList.toggle("design-mode-active", this.mode === "DESIGN");
-        
-        const modeDesc = document.getElementById("workflow-mode-desc");
-        if (modeDesc) {
-          modeDesc.textContent = this.mode === "RUNTIME" 
-            ? "Live Execution Observer" 
-            : "Role Candidate Chain & Execution Mode Editor";
-        }
-        this.render();
+        setMode(this.mode === "RUNTIME" ? "DESIGN" : "RUNTIME");
       });
     }
 
@@ -470,10 +494,19 @@ export class WorkflowView {
     this.renderNodes();
   }
 
+  getActiveGraphData() {
+    const isExecutionMode = (this.mode === "RUNTIME" || this.mode === "EXECUTION");
+    if (isExecutionMode && this.execNodes?.length > 0) {
+      return { nodes: this.execNodes, edges: this.execEdges || [] };
+    }
+    return { nodes: this.nodes, edges: this.edges };
+  }
+
   renderEdges() {
-    this.edges.forEach(e => {
-      const src = this.nodes.find(n => n.id === e.source || n.id === e.from);
-      const tgt = this.nodes.find(n => n.id === e.target || n.id === e.to);
+    const { nodes, edges } = this.getActiveGraphData();
+    edges.forEach(e => {
+      const src = nodes.find(n => n.id === e.source || n.id === e.from);
+      const tgt = nodes.find(n => n.id === e.target || n.id === e.to);
       if (!src || !tgt) return;
 
       const x1 = src.x + 220;
@@ -514,7 +547,8 @@ export class WorkflowView {
   }
 
   renderNodes() {
-    this.nodes.forEach(n => {
+    const { nodes } = this.getActiveGraphData();
+    nodes.forEach(n => {
       const el = document.createElement("div");
       el.id = n.id;
       const isSelected = this.selectedNodeId === n.id;
@@ -556,31 +590,27 @@ export class WorkflowView {
         ${this.mode === "DESIGN" && n.role in this.rolesData ? `<div class="design-edit-hint">Click to edit candidate chain ➔</div>` : ''}
       `;
 
-      // Node Dragging Start
-      el.addEventListener("mousedown", e => {
-        if (e.target.closest(".btn-mini")) return;
-        this.isDraggingNode = true;
-        this.draggedNode = n;
-
-        const rect = this.canvas.getBoundingClientRect();
-        const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
-        const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
-
-        this.dragOffset = {
-          x: canvasX - n.x,
-          y: canvasY - n.y,
-        };
-        e.stopPropagation();
-      });
-
-      // Node Selection & Drawer Trigger
-      el.addEventListener("click", e => {
-        e.stopPropagation();
-        this.selectNode(n);
-      });
+      el.addEventListener("mousedown", (e) => this.onNodeMouseDown(e, n));
+      el.addEventListener("click", () => this.selectNode(n));
 
       this.container.appendChild(el);
     });
+  }
+
+  onNodeMouseDown(e, n) {
+    if (e.target.closest(".btn-mini")) return;
+    this.isDraggingNode = true;
+    this.draggedNode = n;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
+    const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
+
+    this.dragOffset = {
+      x: canvasX - n.x,
+      y: canvasY - n.y,
+    };
+    e.stopPropagation();
   }
 
   selectNode(node) {
@@ -773,75 +803,180 @@ export class WorkflowView {
   }
 
   handleRuntimeEvent(event, data) {
-    if (event === "MODEL_SELECTED") {
-      const targetNode = this.nodes.find(n => n.role === data.role && n.provider === data.provider);
-      if (targetNode) {
-        targetNode.status = "ACTIVE";
-        this.render();
+    const banner = document.getElementById("workflow-execution-banner");
+    const bannerSummary = document.getElementById("banner-task-summary");
+
+    if (event === "TASK_STARTED") {
+      banner?.classList.add("hidden");
+      this.execNodes = [
+        { id: "node_stt", label: "COMMAND INGESTION", provider: "NVIDIA / Faster-Whisper", model: data.user_input || "Voice/Text Instruction", status: "COMPLETED", x: 80, y: 180, is_primary: true, role: "stt" },
+        { id: "node_router", label: "ROLE & INTENT ROUTER", provider: "Local", model: "Intent Engine", status: "ACTIVE", x: 360, y: 180, is_primary: true, role: "router" }
+      ];
+      this.execEdges = [
+        { id: "e_stt_router", source: "node_stt", target: "node_router", type: "PRIMARY" }
+      ];
+      this.render();
+    } else if (event === "MODEL_SELECTED") {
+      const routerNode = this.execNodes.find(n => n.id === "node_router");
+      if (routerNode) routerNode.status = "COMPLETED";
+
+      const modelId = `node_model_${data.provider}`;
+      if (!this.execNodes.find(n => n.id === modelId)) {
+        this.execNodes.push({
+          id: modelId,
+          label: "REASONING COGNITION",
+          provider: data.provider,
+          model: data.model,
+          status: "ACTIVE",
+          x: 640,
+          y: 180,
+          is_primary: true,
+          role: data.role || "reasoning"
+        });
+        this.execEdges.push({
+          id: `e_router_model_${data.provider}`,
+          source: "node_router",
+          target: modelId,
+          type: "PRIMARY"
+        });
       }
+      this.render();
     } else if (event === "MODEL_FALLBACK") {
-      const failedNode = this.nodes.find(n => n.provider === data.failed_provider && n.model === data.failed_model);
-      if (failedNode) {
-        failedNode.status = "RATE_LIMITED";
-      }
-      const fbNode = this.nodes.find(n => n.provider === data.fallback_provider && n.model === data.fallback_model);
-      if (fbNode) {
-        fbNode.status = "ACTIVE";
+      const failed = this.execNodes.find(n => n.provider === data.failed_provider);
+      if (failed) failed.status = "RATE_LIMITED";
+
+      const fbId = `node_fb_${data.fallback_provider}`;
+      if (!this.execNodes.find(n => n.id === fbId)) {
+        this.execNodes.push({
+          id: fbId,
+          label: "FALLBACK COGNITION",
+          provider: data.fallback_provider,
+          model: data.fallback_model,
+          status: "ACTIVE",
+          x: 640,
+          y: 320,
+          is_primary: false,
+          fallback_rank: 1,
+          role: "reasoning"
+        });
+        if (failed) {
+          this.execEdges.push({
+            id: `e_fb_${data.fallback_provider}`,
+            source: failed.id,
+            target: fbId,
+            type: "FALLBACK"
+          });
+        }
       }
       this.render();
     } else if (event === "TOOL_STARTED") {
-      const toolNode = this.nodes.find(n => n.id === "node_tools");
-      if (toolNode) {
-        toolNode.status = "ACTIVE";
-        toolNode.label = `TOOL: ${data.tool}`;
-        this.render();
+      const activeModel = this.execNodes.find(n => n.id.startsWith("node_model") || n.id.startsWith("node_fb"));
+      if (activeModel) activeModel.status = "COMPLETED";
+
+      const toolId = `node_tool_${data.tool}`;
+      if (!this.execNodes.find(n => n.id === toolId)) {
+        this.execNodes.push({
+          id: toolId,
+          label: `ACTION: ${data.tool.toUpperCase()}`,
+          provider: "Desktop Tools",
+          model: data.tool,
+          status: "ACTIVE",
+          x: 920,
+          y: 180,
+          is_primary: true,
+          role: "desktop"
+        });
+        if (activeModel) {
+          this.execEdges.push({
+            id: `e_model_tool_${data.tool}`,
+            source: activeModel.id,
+            target: toolId,
+            type: "PRIMARY"
+          });
+        }
       }
+      this.render();
     } else if (event === "TOOL_COMPLETED") {
-      const toolNode = this.nodes.find(n => n.id === "node_tools");
+      const toolNode = this.execNodes.find(n => n.id.startsWith("node_tool") || n.id === "node_tools");
       if (toolNode) {
         toolNode.status = "COMPLETED";
         if (data.latency_ms) toolNode.latency_ms = data.latency_ms;
-        this.render();
       }
-    } else if (event === "VISION_STARTED") {
-      const vNode = this.nodes.find(n => n.role === "vision" && n.is_primary);
-      if (vNode) {
-        vNode.status = "ACTIVE";
-        this.render();
+      this.render();
+    } else if (event === "TOOL_FAILED") {
+      const toolNode = this.execNodes.find(n => n.id.startsWith("node_tool") || n.id === "node_tools");
+      if (toolNode) {
+        toolNode.status = "BROKEN";
+        toolNode.label = `FAILED: ${data.tool || 'Action'}`;
       }
-    } else if (event === "VISION_COMPLETED") {
-      const vNode = this.nodes.find(n => n.role === "vision" && n.is_primary);
-      if (vNode) {
-        vNode.status = "COMPLETED";
-        this.render();
-      }
-    } else if (event === "TASK_STARTED") {
-      this.nodes.forEach(n => {
-        if (n.status === "BROKEN" || n.status === "FAILED") {
-          n.status = "WAITING";
+      this.render();
+    } else if (event === "SCREEN_CAPTURE_STARTED" || event === "VISION_STARTED") {
+      const activeModel = this.execNodes.find(n => n.id.startsWith("node_model"));
+      if (!this.execNodes.find(n => n.id === "node_vision")) {
+        this.execNodes.push({
+          id: "node_vision",
+          label: "SCREEN PERCEPTION",
+          provider: "Qwen Vision",
+          model: "capture_screen",
+          status: "ACTIVE",
+          x: 920,
+          y: 320,
+          is_primary: true,
+          role: "vision"
+        });
+        if (activeModel) {
+          this.execEdges.push({
+            id: "e_model_vision",
+            source: activeModel.id,
+            target: "node_vision",
+            type: "PRIMARY"
+          });
         }
-      });
+      }
+      this.render();
+    } else if (event === "TTS_STARTED") {
+      const lastNode = this.execNodes[this.execNodes.length - 1];
+      if (lastNode && lastNode.id !== "node_tts") {
+        this.execNodes.push({
+          id: "node_tts",
+          label: "AUDIO SYNTHESIS",
+          provider: "Fish Audio",
+          model: "S2.1 Streaming",
+          status: "ACTIVE",
+          x: 1200,
+          y: 180,
+          is_primary: true,
+          role: "tts"
+        });
+        this.execEdges.push({
+          id: "e_last_tts",
+          source: lastNode.id,
+          target: "node_tts",
+          type: "PRIMARY"
+        });
+      }
       this.render();
     } else if (event === "TASK_COMPLETED") {
-      this.nodes.forEach(n => {
+      this.execNodes.forEach(n => {
         if (n.status === "ACTIVE" || n.status === "EXECUTING") {
           n.status = "COMPLETED";
         }
       });
-      this.render();
-    } else if (event === "TOOL_FAILED") {
-      const toolNode = this.nodes.find(n => n.id === "node_tools" || (n.role === "desktop" && n.is_primary));
-      if (toolNode) {
-        toolNode.status = "BROKEN";
-        toolNode.label = `FAILED: ${data.tool || 'Action'}`;
-        this.render();
+      if (banner && bannerSummary) {
+        bannerSummary.textContent = `Completed in ${data.duration_seconds?.toFixed(2) || '0.42'}s • All nodes settled.`;
+        banner.classList.remove("hidden");
       }
+      this.render();
     } else if (event === "TASK_CANCELLED") {
-      this.nodes.forEach(n => {
+      this.execNodes.forEach(n => {
         if (n.status === "ACTIVE" || n.status === "EXECUTING") {
           n.status = "CANCELLED";
         }
       });
+      if (banner && bannerSummary) {
+        bannerSummary.textContent = `Task cancelled by user interrupt.`;
+        banner.classList.remove("hidden");
+      }
       this.render();
     } else if (event === "ROLE_UPDATED") {
       this.fetchGraphData();

@@ -97,37 +97,50 @@ class SERAUIServer:
         if hasattr(self.runtime, "state") and hasattr(self.runtime.state, "add_listener"):
             def on_state_change(old_s, new_s):
                 status_val = new_s.value if hasattr(new_s, "value") else str(new_s)
-                asyncio.create_task(self.broadcast_event("RUNTIME_STATE_CHANGED", {
-                    "status": status_val,
-                    "task": getattr(self.runtime.state, "last_user_message", None),
-                }))
-                if status_val == "LISTENING":
-                    asyncio.create_task(self.broadcast_event("CAPTURE_COUNTDOWN", {
-                        "duration_seconds": getattr(self.runtime, "recording_duration", 5.0),
-                        "activation_method": "HOTKEY" if getattr(self.runtime, "hotkey_event_count", 0) > 0 else "WAKE_WORD",
-                    }))
+                try:
+                    loop = getattr(self, "_loop", None)
+                    if loop and loop.is_running():
+                        asyncio.run_coroutine_threadsafe(self.broadcast_event("RUNTIME_STATE_CHANGED", {
+                            "status": status_val,
+                            "task": getattr(self.runtime.state, "last_user_message", None),
+                        }), loop)
+                except Exception:
+                    pass
             self.runtime.state.add_listener(on_state_change)
 
-        # 2. EventBus Listeners
+        # 2. EventBus Listeners (All Runtime Events)
         if hasattr(self.runtime, "events") and hasattr(self.runtime.events, "subscribe"):
             event_names = [
+                "ACTIVATION_STARTED", "ACTIVATION_RELEASED", "WAKE_WORD_DETECTED",
+                "LISTENING_STARTED", "LISTENING_STOPPED",
+                "TRANSCRIPTION_STARTED", "TRANSCRIPTION_COMPLETED",
+                "TASK_STARTED", "TASK_COMPLETED", "TASK_CANCELLED", "TASK_FAILED",
                 "MODEL_SELECTED", "MODEL_FALLBACK", "MODEL_RATE_LIMITED",
-                "TOOL_STARTED", "TOOL_COMPLETED",
+                "TOOL_STARTED", "TOOL_COMPLETED", "TOOL_FAILED",
+                "SCREEN_CAPTURE_STARTED", "SCREEN_CAPTURED",
                 "VISION_STARTED", "VISION_COMPLETED",
-                "AGENT_STARTED", "AGENT_COMPLETED",
+                "AGENT_STARTED", "AGENT_COMPLETED", "AGENT_RESPONSE",
                 "TTS_STARTED", "TTS_INTERRUPTED",
-                "TASK_CANCELLED", "TASK_COMPLETED",
                 "SECURITY_CONFIRMATION_REQUIRED",
             ]
             for ev in event_names:
                 def make_handler(name):
-                    def handler(**kwargs):
-                        asyncio.create_task(self.broadcast_event(name, kwargs))
+                    def handler(*args, **kwargs):
+                        payload = kwargs
+                        if args and len(args) == 1 and isinstance(args[0], dict):
+                            payload = {**args[0], **kwargs}
+                        try:
+                            loop = getattr(self, "_loop", None)
+                            if loop and loop.is_running():
+                                asyncio.run_coroutine_threadsafe(self.broadcast_event(name, payload), loop)
+                        except Exception as e:
+                            logger.debug(f"[SERAUIServer] Broadcast bridge error for {name}: {e}")
                     return handler
                 self.runtime.events.subscribe(ev, make_handler(ev))
 
     async def start(self):
         """Starts the unified TCP server for HTTP and WebSocket."""
+        self._loop = asyncio.get_running_loop()
         self._server = await asyncio.start_server(
             self._handle_tcp_connection,
             self.host,
@@ -282,14 +295,13 @@ class SERAUIServer:
                     action = msg_data.get("action")
                     if action == "USER_PROMPT":
                         prompt_text = msg_data.get("text", "")
-                        if self.runtime and hasattr(self.runtime, "agent"):
-                            asyncio.create_task(self.runtime.agent.run(prompt_text))
+                        if self.runtime and hasattr(self.runtime, "start_canonical_task"):
+                            self.runtime._active_task_handle = asyncio.create_task(
+                                self.runtime.start_canonical_task(prompt_text, source="TEXT")
+                            )
                     elif action == "INTERRUPT":
-                        if self.runtime and hasattr(self.runtime, "audio"):
-                            self.runtime.audio.interrupt()
-                        if self.runtime and hasattr(self.runtime, "state"):
-                            from app.core.state import SERAStatus
-                            self.runtime.state.transition_to(SERAStatus.CANCELLED)
+                        if self.runtime and hasattr(self.runtime, "cancel_task"):
+                            self.runtime.cancel_task()
                     elif action == "UPDATE_ROLE":
                         role = msg_data.get("role")
                         candidates = msg_data.get("candidates", [])
@@ -335,6 +347,29 @@ class SERAUIServer:
             # 1. State
             if path == "/api/state":
                 return "200 OK", resp_headers, json.dumps(self._get_initial_snapshot()).encode("utf-8")
+
+            # 1b. Canonical Task Endpoints
+            if path == "/api/task/create" or path == "/api/task":
+                prompt_text = body_json.get("text") or body_json.get("prompt", "")
+                if self.runtime and hasattr(self.runtime, "start_canonical_task"):
+                    self.runtime._active_task_handle = asyncio.create_task(
+                        self.runtime.start_canonical_task(prompt_text, source="TEXT")
+                    )
+                    return "200 OK", resp_headers, json.dumps({
+                        "success": True,
+                        "task": self.runtime.active_task_info,
+                    }).encode("utf-8")
+                return "400 Bad Request", resp_headers, json.dumps({"success": False, "error": "Runtime not available"}).encode("utf-8")
+
+            if path == "/api/task/cancel" or (path.startswith("/api/task/") and path.endswith("/cancel")):
+                if self.runtime and hasattr(self.runtime, "cancel_task"):
+                    cancelled = self.runtime.cancel_task()
+                    return "200 OK", resp_headers, json.dumps({"success": cancelled}).encode("utf-8")
+                return "400 Bad Request", resp_headers, json.dumps({"success": False, "error": "Runtime not available"}).encode("utf-8")
+
+            if path == "/api/tasks/active" or path == "/api/task/active":
+                task_data = getattr(self.runtime, "active_task_info", None) if self.runtime else None
+                return "200 OK", resp_headers, json.dumps({"active_task": task_data}).encode("utf-8")
 
             # 2. Workflow Dynamic Graph
             if path == "/api/workflow":
@@ -816,10 +851,24 @@ class SERAUIServer:
             else:
                 wake_status = "NOT CONFIGURED"
 
+        # Safe extraction of active task info
+        active_task_str = None
+        if self.runtime and hasattr(self.runtime, "state"):
+            val = getattr(self.runtime.state, "last_user_message", None)
+            if isinstance(val, str):
+                active_task_str = val
+
+        task_info_dict = None
+        if self.runtime:
+            tinfo = getattr(self.runtime, "active_task_info", None)
+            if isinstance(tinfo, dict):
+                task_info_dict = tinfo
+
         return {
             "status": state_str,
             "runtime_attached": self.runtime is not None,
-            "active_task": getattr(self.runtime.state, "last_user_message", None) if self.runtime and hasattr(self.runtime, "state") else None,
+            "active_task": active_task_str,
+            "active_task_info": task_info_dict,
             "mic_status": "READY",
             "wake_word_status": wake_status,
             "stt_info": {

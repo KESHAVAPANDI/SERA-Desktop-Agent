@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="./css/variables.css?v=5d1">
-  <link rel="stylesheet" href="./css/main.css?v=5d1">
+  <link rel="stylesheet" href="./css/variables.css?v=5d2">
+  <link rel="stylesheet" href="./css/main.css?v=5d2">
 </head>
 <body>
   <div id="app-shell">
@@ -26,7 +26,7 @@
           </svg>
           <div class="brand-text-block">
             <span class="brand-title">SERA</span>
-            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.1</span>
+            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.2</span>
           </div>
         </div>
 
@@ -39,44 +39,41 @@
         <div id="task-ticker" class="task-ticker">Ready • Awaiting Command</div>
       </div>
 
-      <!-- Navigation Tabs (1 - 8) Across 3 Domains: COMMAND, INTELLIGENCE, SYSTEM -->
+      <!-- Simplified Primary Navigation Tabs with MORE Dropdown -->
       <nav class="nav-tabs" role="tablist">
-        <!-- DOMAIN 1: COMMAND -->
-        <div class="nav-group-label">COMMAND</div>
         <button class="nav-tab-btn active" data-view="live" id="tab-live">
           <span class="tab-num">1</span> LIVE
         </button>
         <button class="nav-tab-btn" data-view="workflow" id="tab-workflow">
           <span class="tab-num">2</span> WORKFLOW
         </button>
-
-        <div class="nav-group-divider"></div>
-
-        <!-- DOMAIN 2: INTELLIGENCE -->
-        <div class="nav-group-label">INTEL</div>
         <button class="nav-tab-btn" data-view="agents" id="tab-agents">
           <span class="tab-num">3</span> AGENTS
         </button>
-        <button class="nav-tab-btn" data-view="memory" id="tab-memory">
-          <span class="tab-num">4</span> MEMORY
-        </button>
-
-        <div class="nav-group-divider"></div>
-
-        <!-- DOMAIN 3: SYSTEM -->
-        <div class="nav-group-label">SYSTEM</div>
         <button class="nav-tab-btn" data-view="providers" id="tab-providers">
-          <span class="tab-num">5</span> PROVIDERS
+          <span class="tab-num">4</span> PROVIDERS
         </button>
-        <button class="nav-tab-btn" data-view="history" id="tab-history">
-          <span class="tab-num">6</span> HISTORY
-        </button>
-        <button class="nav-tab-btn" data-view="debug" id="tab-debug">
-          <span class="tab-num">7</span> DEBUG
-        </button>
-        <button class="nav-tab-btn" data-view="security" id="tab-security">
-          <span class="tab-num">8</span> SECURITY
-        </button>
+
+        <!-- MORE Dropdown Submenu -->
+        <div class="nav-more-container" id="nav-more-container">
+          <button class="nav-tab-btn nav-more-btn" id="tab-more-btn">
+            MORE <span class="dropdown-arrow">▾</span>
+          </button>
+          <div class="nav-more-dropdown" id="nav-more-dropdown">
+            <button class="dropdown-item" data-view="memory" id="tab-memory">
+              <span class="item-icon">🧠</span> MEMORY
+            </button>
+            <button class="dropdown-item" data-view="history" id="tab-history">
+              <span class="item-icon">📜</span> HISTORY
+            </button>
+            <button class="dropdown-item" data-view="debug" id="tab-debug">
+              <span class="item-icon">⚡</span> DEBUG
+            </button>
+            <button class="dropdown-item" data-view="security" id="tab-security">
+              <span class="item-icon">🛡️</span> SECURITY
+            </button>
+          </div>
+        </div>
       </nav>
 
       <div class="header-right">
@@ -112,84 +109,232 @@
       </div>
     </header>
 
-    <!-- 2. MAIN VIEWPORT CONTAINERS (8 FIRST-CLASS VIEWS) -->
-    <main id="main-viewport">
-      
-      <!-- VIEW 1: LIVE VIEW (HUMAN-FACING CONVERSATIONAL COMMAND CENTER) -->
+    <!-- Main Dynamic Multi-Domain Content Area -->
+    <main id="main-content" class="main-content-viewport">
+
+      <!-- VIEW 1: LIVE (PRIMARY CONVERSATIONAL AURA & HOLD-TO-TALK COCKPIT) -->
       <section id="view-live" class="view-container active">
-        <div class="live-layout">
-          <!-- Left: Reactive Central Aura Orb Panel -->
-          <div class="live-orb-panel">
-            <div id="aura-orb-main" class="aura-orb-large">
-              <div class="aura-orb-rings"></div>
-              <div class="aura-orb-core">
-                <div class="aura-brand-name">SERA</div>
-                <div id="aura-status-subtext" class="aura-status-subtext">IDLE</div>
+        <div class="live-cockpit-layout">
+          
+          <!-- Column 1: Voice & Temporal Aura Orb Cockpit -->
+          <div class="live-column live-aura-column">
+            
+            <!-- Aura Core Hologram Card -->
+            <div class="aura-glass-card">
+              <div class="card-glow-bg"></div>
+              <div class="aura-orb-wrapper">
+                <div id="aura-orb-main" class="aura-orb-main state-idle" title="Click or Hold Ctrl+Space to Speak">
+                  <div class="aura-ring ring-outer"></div>
+                  <div class="aura-ring ring-middle"></div>
+                  <div class="aura-ring ring-inner"></div>
+                  <div class="aura-core-sphere">
+                    <span class="aura-symbol">✦</span>
+                  </div>
+                  <div class="aura-pulse-wave wave-1"></div>
+                  <div class="aura-pulse-wave wave-2"></div>
+                  <div class="aura-pulse-wave wave-3"></div>
+                </div>
+              </div>
+
+              <!-- Audio Spectrum Visualizer -->
+              <div class="audio-spectrum-bars" id="audio-spectrum-bars">
+                <span class="bar bar-1"></span>
+                <span class="bar bar-2"></span>
+                <span class="bar bar-3"></span>
+                <span class="bar bar-4"></span>
+                <span class="bar bar-5"></span>
+                <span class="bar bar-6"></span>
+                <span class="bar bar-7"></span>
+                <span class="bar bar-8"></span>
+              </div>
+
+              <div class="aura-status-subtext" id="aura-status-subtext">IDLE • READY</div>
+              <div class="hotkey-instruction">
+                <kbd>Ctrl</kbd> + <kbd>Space</kbd> <span>Hold to Talk</span>
               </div>
             </div>
 
-            <!-- 5-Second Voice Capture Countdown Progress -->
+            <!-- Hold-To-Talk & Wake-Word Audio Countdown Visualizer -->
             <div id="capture-progress-container" class="capture-progress-container hidden">
-              <div class="capture-timer-label">VOICE CAPTURE: <strong id="capture-timer-val">5.0s</strong></div>
+              <div class="capture-progress-header">
+                <span id="activation-method-label" class="activation-label">HOLD TO TALK</span>
+                <span id="capture-timer-val" class="timer-value">00:00.00</span>
+              </div>
               <div class="capture-progress-track">
                 <div id="capture-progress-fill" class="capture-progress-fill"></div>
               </div>
-              <div class="activation-method-label" id="activation-method-label">Activation: Ctrl+Space Hotkey</div>
             </div>
 
-            <!-- Hotkey Hint -->
-            <div class="hotkey-assist-pill">
-              Hold <kbd>Ctrl+Space</kbd> to talk (release to send) or say <strong style="color: var(--accent-cyan);">"SERA"</strong>
-            </div>
-
-            <!-- Current Task Panel -->
+            <!-- Authoritative Current Task Status Card -->
             <div id="current-task-card" class="current-task-card">
               <div class="task-card-header">
-                <span class="task-card-tag">CURRENT TASK</span>
-                <span id="task-elapsed-timer" class="task-elapsed-timer">0.0s</span>
+                <div class="task-card-badge"><span class="task-pulse-dot"></span> TASK EXECUTION</div>
+                <span class="task-elapsed-timer" id="task-elapsed-timer">0.0s</span>
               </div>
-              <div id="task-card-title" class="task-card-title">Awaiting User Instruction</div>
-              <div class="task-progress-bar-wrapper">
-                <div id="task-step-fill" class="task-step-fill" style="width: 0%;"></div>
+              <div class="task-card-title-row">
+                <span class="task-card-icon">⚡</span>
+                <span class="task-card-title" id="task-card-title">Awaiting User Instruction</span>
               </div>
-              <div class="task-card-footer">
-                <span id="task-step-label" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary);">Step 0 / 0</span>
-                <button id="btn-interrupt-task" class="btn-mini btn-interrupt">Interrupt</button>
+              <div class="task-card-body">
+                <div class="task-step-track">
+                  <div id="task-step-fill" class="task-step-fill"></div>
+                </div>
+                <div class="task-step-meta">
+                  <span id="task-step-label" class="task-step-label">Step 0 / 0</span>
+                  <button id="btn-interrupt-task" class="btn-interrupt" title="Cancel Running Task">Interrupt</button>
+                </div>
               </div>
             </div>
 
-            <!-- Activity Rail -->
-            <div class="activity-rail-card">
-              <div class="activity-rail-header">LIVE RUNTIME ACTIVITY</div>
-              <div id="live-activity-rail" class="activity-rail-stream"></div>
+            <!-- Quick Action Command Chips -->
+            <div class="quick-chips-panel">
+              <div class="quick-chips-title">QUICK CAPABILITIES</div>
+              <div class="quick-chips-grid">
+                <button class="quick-chip-btn" data-prompt="Take a screenshot of the current screen">
+                  <span class="chip-icon">📸</span> Capture Screen
+                </button>
+                <button class="quick-chip-btn" data-prompt="Search the web for latest AI benchmarks">
+                  <span class="chip-icon">🌐</span> Web Search
+                </button>
+                <button class="quick-chip-btn" data-prompt="Open Chrome application">
+                  <span class="chip-icon">🖥️</span> Launch Chrome
+                </button>
+                <button class="quick-chip-btn" data-prompt="Check current system health and hardware telemetry">
+                  <span class="chip-icon">⚡</span> Health Audit
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Right: Live Conversation Stream -->
-          <div class="live-chat-panel">
-            <div class="chat-header">
-              <span>INTERACTION STREAM</span>
-              <span id="stt-model-badge" class="model-badge">Faster-Whisper (Active Fallback)</span>
+          <!-- Column 2: Live Conversational Stream & Action Console -->
+          <div class="live-column live-chat-column">
+            <div class="chat-glass-card">
+              <div class="chat-header">
+                <div class="chat-header-left">
+                  <span class="chat-title-icon">💬</span>
+                  <span class="chat-title-text">CONVERSATION & EVENT LOG</span>
+                </div>
+                <div class="chat-header-right">
+                  <span class="chat-status-pill"><span class="status-live-dot"></span> STREAM ACTIVE</span>
+                </div>
+              </div>
+              
+              <div id="chat-stream" class="chat-stream">
+                <div class="chat-bubble sera">
+                  <div class="bubble-sender">
+                    <span class="sender-badge">SERA</span>
+                    <span class="bubble-time">SYSTEM ONLINE</span>
+                  </div>
+                  <div class="bubble-content">
+                    SERA Desktop Operating Interface online. Hold <kbd>Ctrl+Space</kbd> for voice commands or type below.
+                  </div>
+                </div>
+              </div>
+
+              <form id="chat-form" class="chat-form">
+                <div class="chat-input-wrapper">
+                  <span class="input-prompt-symbol">❯</span>
+                  <input type="text" id="chat-input" class="chat-input-field" placeholder="Ask SERA anything or give a desktop command..." autocomplete="off">
+                  <button type="submit" class="btn-action btn-send-glow">
+                    <span>Send</span> <span class="send-arrow">➔</span>
+                  </button>
+                </div>
+              </form>
             </div>
-            <div id="chat-stream" class="chat-stream">
-              <div class="chat-bubble sera">
-                Hello! I am SERA, your desktop AI companion. Hold <kbd>Ctrl+Space</kbd> to talk or say "SERA".
+          </div>
+
+          <!-- Column 3: Live Telemetry Radar & Activity Rail -->
+          <div class="live-column live-telemetry-column">
+            
+            <!-- Real-Time Activity Rail -->
+            <div class="telemetry-glass-card">
+              <div class="card-header-sm">
+                <span>⚡ LIVE ACTIVITY RAIL</span>
+                <span class="rail-counter" id="rail-counter">REAL-TIME</span>
+              </div>
+              <div id="live-activity-rail" class="live-activity-rail">
+                <div class="activity-rail-item">
+                  <span class="activity-time">READY</span>
+                  <span class="activity-badge badge-system">SYSTEM</span>
+                  <span class="activity-text">SERA Desktop Kernel initialized</span>
+                </div>
               </div>
             </div>
-            <form id="chat-form" class="chat-input-bar">
-              <input type="text" id="chat-input" class="chat-input-field" placeholder="Type a command or ask a question..." autocomplete="off">
-              <button type="submit" class="btn-action">Send</button>
-            </form>
+
+            <!-- Active Provider Health & Matrix -->
+            <div class="telemetry-glass-card">
+              <div class="card-header-sm">
+                <span>🌐 PROVIDER HEALTH MATRIX</span>
+                <span class="provider-auto-pill">AUTO-FALLBACK</span>
+              </div>
+              <div class="provider-mini-grid">
+                <div class="provider-mini-item">
+                  <div class="p-item-top">
+                    <span class="p-name">Groq</span>
+                    <span class="p-status healthy">99.8%</span>
+                  </div>
+                  <span class="p-model">Llama-3.3 70B</span>
+                </div>
+                <div class="provider-mini-item">
+                  <div class="p-item-top">
+                    <span class="p-name">Mistral</span>
+                    <span class="p-status healthy">100%</span>
+                  </div>
+                  <span class="p-model">Codestral / Large</span>
+                </div>
+                <div class="provider-mini-item">
+                  <div class="p-item-top">
+                    <span class="p-name">Cerebras</span>
+                    <span class="p-status healthy">1800 t/s</span>
+                  </div>
+                  <span class="p-model">GPT-OSS 120B</span>
+                </div>
+                <div class="provider-mini-item">
+                  <div class="p-item-top">
+                    <span class="p-name">NVIDIA</span>
+                    <span class="p-status healthy">GPU ON</span>
+                  </div>
+                  <span class="p-model">Canary-Qwen 2.5B</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Neural Semantic Memory Snippet -->
+            <div class="telemetry-glass-card">
+              <div class="card-header-sm">
+                <span>🧠 MEMORY CORE CACHE</span>
+                <span class="privacy-tag">LOCAL ISOLATED</span>
+              </div>
+              <div class="memory-cache-meta">
+                <div class="mem-stat-box">
+                  <span class="mem-num" id="mem-stat-count">0</span>
+                  <span class="mem-label">Semantic Items</span>
+                </div>
+                <div class="mem-stat-box">
+                  <span class="mem-num">0.4 ms</span>
+                  <span class="mem-label">Vector Latency</span>
+                </div>
+              </div>
+            </div>
+
           </div>
+
         </div>
       </section>
 
-      <!-- VIEW 2: WORKFLOW GRAPH (TEMPORAL AURA EXECUTION GRAPH & CANDIDATE EDITOR) -->
+      <!-- VIEW 2: WORKFLOW GRAPH (TWO-MODE TEMPORAL AURA: EXECUTION VIEW & DESIGN VIEW) -->
       <section id="view-workflow" class="view-container">
         <div class="workflow-toolbar">
-          <button class="btn-action" id="btn-toggle-mode" style="font-weight: 700;">
-            <span style="color: var(--accent-cyan);">●</span> RUNTIME MODE
-          </button>
+          <!-- Execution Mode vs Design Mode Switcher -->
+          <div class="workflow-mode-tabs">
+            <button class="btn-action mode-tab-btn active" id="btn-mode-execution" title="Show Live Dynamic Execution Trace">
+              <span style="color: var(--accent-cyan);">●</span> EXECUTION
+            </button>
+            <button class="btn-action mode-tab-btn" id="btn-mode-design" title="Configure Persistent Architecture & Candidate Priority">
+              <span style="color: var(--accent-amber);">✎</span> DESIGN
+            </button>
+          </div>
+
           <div class="toolbar-divider"></div>
           <button class="btn-action btn-icon-sm" id="btn-zoom-in" title="Zoom In (+)">+</button>
           <span id="zoom-level-text" class="zoom-level-text">100%</span>
@@ -214,9 +359,16 @@
             <svg id="workflow-svg" class="workflow-svg-layer"></svg>
             <div id="workflow-nodes-container" class="workflow-nodes-layer"></div>
           </div>
+
+          <!-- Execution View Completion Banner Overlay -->
+          <div id="workflow-execution-banner" class="workflow-execution-banner hidden">
+            <div class="banner-title"><span class="check-icon">✓</span> TASK COMPLETED</div>
+            <div class="banner-sub" id="banner-task-summary">Execution trace recorded successfully.</div>
+            <button class="btn-action btn-primary-glow" id="btn-return-to-live">RETURN TO LIVE</button>
+          </div>
         </div>
 
-        <!-- Sliding Inspector Drawer for Candidate Chains & Execution Modes -->
+        <!-- Sliding Inspector Drawer for Candidate Chains & Execution Modes (Design Mode) -->
         <aside id="workflow-inspector-drawer" class="inspector-drawer">
           <div class="drawer-header">
             <div id="drawer-title" class="drawer-title">ROLE INSPECTOR</div>
@@ -393,9 +545,9 @@
 
   <!-- Scripts -->
   <script>
-    window.SERA_BUILD_ID = "5D.1";
+    window.SERA_BUILD_ID = "5D.2";
     console.log("[SERA] Loaded Temporal Aura Build:", window.SERA_BUILD_ID);
   </script>
-  <script type="module" src="./js/app.js?v=5d1"></script>
+  <script type="module" src="./js/app.js?v=5d2"></script>
 </body>
 </html>

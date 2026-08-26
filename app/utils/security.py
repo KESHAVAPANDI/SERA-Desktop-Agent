@@ -56,6 +56,27 @@ class SecurityManager:
             # Safe Power
             "lock_computer",
             "sleep_computer",
+
+            # Screen Perception & Vision
+            "capture_screen",
+            "screen_reading",
+            "inspect_screen",
+
+            # Web Search & Browser Navigation
+            "web_search",
+            "browser_open",
+            "browser_search",
+            "browser_read",
+            "browser_click",
+            "browser_type",
+            "browser_scroll",
+            "browser_close",
+
+            # Files & Folders (Read-only / Safe Exploration)
+            "open_folder",
+            "open_file",
+            "list_folder_contents",
+            "read_file",
         }
 
         # Level 3: Destructive actions that affect user session or data.

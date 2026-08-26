@@ -204,6 +204,8 @@ class SERARuntime:
 
         self._hold_activation_time = 0.0
         self._is_holding_hotkey = False
+        self.active_task_info: dict[str, Any] | None = None
+        self._active_task_handle: asyncio.Task | None = None
 
         self._transition_state(SERAStatus.IDLE)
         print("=" * 60)
@@ -498,16 +500,106 @@ class SERARuntime:
             self.recorder.cancel()
 
         tasks_to_cancel = set()
-        for t in (self._active_agent_task, self._active_listen_task, self._active_task):
-            if t and not t.done():
+        for t in (
+            getattr(self, "_active_agent_task", None),
+            getattr(self, "_active_listen_task", None),
+            getattr(self, "_active_task", None),
+            getattr(self, "_active_task_handle", None),
+        ):
+            if t and hasattr(t, "done") and not t.done():
                 tasks_to_cancel.add(t)
 
         self._active_agent_task = None
         self._active_listen_task = None
         self._active_task = None
+        self._active_task_handle = None
 
         for t in tasks_to_cancel:
             t.cancel()
+
+    def cancel_task(self, task_id: str | None = None) -> bool:
+        """Cancels the active task and stops audio playback."""
+        if hasattr(self, "audio") and hasattr(self.audio, "stop_speaking"):
+            self.audio.stop_speaking()
+        if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
+            self.audio_cues.play_interrupted_cue()
+
+        if self.active_task_info:
+            self.active_task_info["status"] = "CANCELLED"
+            self.active_task_info["completed_at"] = time.time()
+            self._emit_event("TASK_CANCELLED", {
+                "task_id": self.active_task_info.get("task_id"),
+                "reason": "Cancelled by user interrupt",
+            })
+
+        self._cancel_active_agent_task()
+        self._transition_state(SERAStatus.IDLE)
+        return True
+
+    async def start_canonical_task(self, text: str, source: str = "TEXT") -> dict[str, Any]:
+        """Unified canonical task execution pipeline for both Text and Voice inputs."""
+        task_id = f"task_{uuid.uuid4().hex[:8]}"
+        started_at = time.time()
+        self.active_task_info = {
+            "task_id": task_id,
+            "user_input": text,
+            "source": source,
+            "status": "EXECUTING",
+            "current_step": 1,
+            "total_steps": 4,
+            "current_node": "Router",
+            "started_at": started_at,
+            "completed_at": None,
+            "result": None,
+            "error": None,
+        }
+        self.state.last_user_message = text
+        self._emit_event("TASK_STARTED", {
+            "task_id": task_id,
+            "user_input": text,
+            "source": source,
+            "started_at": started_at,
+        })
+
+        try:
+            resp = await self.process_text(text, turn_id=task_id)
+            duration = time.time() - started_at
+            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                self.active_task_info["status"] = "COMPLETED"
+                self.active_task_info["completed_at"] = time.time()
+                self.active_task_info["result"] = resp
+            self._emit_event("TASK_COMPLETED", {
+                "task_id": task_id,
+                "result": resp,
+                "duration_seconds": duration,
+            })
+            return {"success": True, "task_id": task_id, "result": resp, "duration_seconds": duration}
+        except asyncio.CancelledError:
+            duration = time.time() - started_at
+            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                self.active_task_info["status"] = "CANCELLED"
+                self.active_task_info["completed_at"] = time.time()
+            self._emit_event("TASK_CANCELLED", {
+                "task_id": task_id,
+                "reason": "Cancelled by user interrupt",
+                "duration_seconds": duration,
+            })
+            self._transition_state(SERAStatus.IDLE)
+            return {"success": False, "task_id": task_id, "cancelled": True}
+        except Exception as e:
+            duration = time.time() - started_at
+            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                self.active_task_info["status"] = "FAILED"
+                self.active_task_info["error"] = str(e)
+            self._emit_event("TASK_FAILED", {
+                "task_id": task_id,
+                "error": str(e),
+                "duration_seconds": duration,
+            })
+            self._transition_state(SERAStatus.IDLE)
+            return {"success": False, "task_id": task_id, "error": str(e)}
+        finally:
+            self._active_task_handle = None
 
     async def _process_voice_turn(
         self,

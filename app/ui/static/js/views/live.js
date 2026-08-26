@@ -45,12 +45,35 @@ export class LiveView {
       this.appendMessage("user", text);
       this.chatInput.value = "";
       this.send({ action: "USER_PROMPT", text: text });
-      this.startTask(text, 4);
     });
 
-    this.btnInterrupt?.addEventListener("click", () => {
+    this.btnInterrupt?.addEventListener("click", async () => {
+      if (this.btnInterrupt) this.btnInterrupt.textContent = "CANCELLING...";
       this.send({ action: "INTERRUPT" });
-      this.stopTask("Cancelled by user");
+      try {
+        await fetch("/api/task/cancel", { method: "POST" });
+      } catch (e) {
+        console.warn("Error calling task cancel API:", e);
+      }
+      setTimeout(() => {
+        if (this.btnInterrupt) this.btnInterrupt.textContent = "Interrupt";
+      }, 1500);
+    });
+
+    // Quick Command Capability Chips
+    document.querySelectorAll(".quick-chip-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const prompt = btn.getAttribute("data-prompt");
+        if (prompt) {
+          this.appendMessage("user", prompt);
+          this.send({ action: "USER_PROMPT", text: prompt });
+        }
+      });
+    });
+
+    // Click on Aura Orb to focus or trigger
+    this.auraOrb?.addEventListener("click", () => {
+      this.chatInput?.focus();
     });
   }
 
@@ -101,6 +124,10 @@ export class LiveView {
       this.auraOrb?.classList.add("aura-broken");
     } else {
       this.auraOrb?.classList.remove("aura-broken");
+    }
+
+    if (status === "IDLE" && !this.activeTaskId) {
+      clearInterval(this.taskTimerInterval);
     }
   }
 
@@ -158,17 +185,24 @@ export class LiveView {
     this.captureContainer?.classList.add("hidden");
   }
 
-  startTask(name, totalSteps = 4) {
-    if (this.taskTitle) this.taskTitle.textContent = name;
-    if (this.taskStepLabel) this.taskStepLabel.textContent = `Step 1 / ${totalSteps}`;
-    if (this.taskStepFill) this.taskStepFill.style.width = "25%";
+  startTask(data) {
+    const taskName = typeof data === "string" ? data : (data.user_input || data.task || "Executing Task");
+    this.activeTaskId = (typeof data === "object" && data.task_id) ? data.task_id : `task_${Date.now()}`;
+    const startedAtSec = (typeof data === "object" && data.started_at) ? data.started_at : (Date.now() / 1000);
+    this.startedAt = startedAtSec * 1000;
+
+    if (this.taskTitle) this.taskTitle.textContent = taskName;
+    if (this.taskStepLabel) this.taskStepLabel.textContent = `Step 1 / 4: Intent & Routing`;
+    if (this.taskStepFill) {
+      this.taskStepFill.style.width = "25%";
+      this.taskStepFill.style.background = "var(--accent-cyan)";
+    }
     
-    this.elapsedSeconds = 0.0;
     clearInterval(this.taskTimerInterval);
     this.taskTimerInterval = setInterval(() => {
-      this.elapsedSeconds += 0.1;
+      const elapsed = ((Date.now() - this.startedAt) / 1000).toFixed(1);
       if (this.taskElapsedTimer) {
-        this.taskElapsedTimer.textContent = `${this.elapsedSeconds.toFixed(1)}s`;
+        this.taskElapsedTimer.textContent = `${elapsed}s`;
       }
     }, 100);
   }
@@ -183,17 +217,27 @@ export class LiveView {
     }
   }
 
-  stopTask(reason = "✓ Completed") {
+  stopTask(reason = "✓ Completed", data = {}) {
     clearInterval(this.taskTimerInterval);
+    this.activeTaskId = null;
     if (this.taskStepLabel) this.taskStepLabel.textContent = reason;
-    if (this.taskStepFill) this.taskStepFill.style.width = "100%";
+    if (this.taskStepFill) {
+      this.taskStepFill.style.width = "100%";
+      this.taskStepFill.style.background = reason.includes("Cancelled") || reason.includes("Failed") ? "var(--accent-broken)" : "var(--accent-emerald)";
+    }
 
-    // Auto-clear after 2.5s settling
+    if (data.duration_seconds && this.taskElapsedTimer) {
+      this.taskElapsedTimer.textContent = `${data.duration_seconds.toFixed(1)}s`;
+    }
+
+    // Auto-clear after 4s settling
     setTimeout(() => {
-      if (this.taskTitle) this.taskTitle.textContent = "Awaiting User Instruction";
-      if (this.taskStepLabel) this.taskStepLabel.textContent = "Step 0 / 0";
-      if (this.taskStepFill) this.taskStepFill.style.width = "0%";
-      if (this.taskElapsedTimer) this.taskElapsedTimer.textContent = "0.0s";
-    }, 2500);
+      if (!this.activeTaskId) {
+        if (this.taskTitle) this.taskTitle.textContent = "Awaiting User Instruction";
+        if (this.taskStepLabel) this.taskStepLabel.textContent = "Step 0 / 0";
+        if (this.taskStepFill) this.taskStepFill.style.width = "0%";
+        if (this.taskElapsedTimer) this.taskElapsedTimer.textContent = "0.0s";
+      }
+    }, 4000);
   }
 }
