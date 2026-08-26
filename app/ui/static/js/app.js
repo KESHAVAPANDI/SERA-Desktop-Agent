@@ -1,5 +1,6 @@
 import { LiveView } from './views/live.js';
 import { WorkflowView } from './views/workflow.js';
+import { ArchitectView } from './views/architect.js';
 import { AgentsView } from './views/agents.js';
 import { MemoryView } from './views/memory.js';
 import { ProvidersView } from './views/providers.js';
@@ -28,9 +29,10 @@ class SERAApp {
   }
 
   init() {
-    // 1. Initialize 8 First-Class Views
+    // 1. Initialize Views with First-Class Live/Workflow/Architect Separation
     this.views.live = new LiveView(msg => this.sendMessage(msg), targetView => this.switchView(targetView));
     this.views.workflow = new WorkflowView(msg => this.sendMessage(msg), targetView => this.switchView(targetView));
+    this.views.architect = new ArchitectView(msg => this.sendMessage(msg));
     this.views.agents = new AgentsView();
     this.views.memory = new MemoryView();
     this.views.providers = new ProvidersView((provider, model) => {
@@ -41,7 +43,7 @@ class SERAApp {
     this.views.debug = new DebugView();
     this.views.security = new SecurityView(msg => this.sendMessage(msg));
 
-    // 2. Setup Navigation (1 - 8)
+    // 2. Setup Navigation (1 - 9)
     this.setupNavigation();
 
     // 3. Connect WebSocket Gateway
@@ -51,24 +53,30 @@ class SERAApp {
   setupNavigation() {
     const tabs = document.querySelectorAll(".nav-tab-btn, .dropdown-item");
     tabs.forEach(tab => {
-      tab.addEventListener("click", () => {
-        const targetView = tab.getAttribute("data-view");
+      tab.addEventListener("click", e => {
+        const btn = e.target.closest(".nav-tab-btn, .dropdown-item") || tab;
+        const targetView = btn.getAttribute("data-view");
         if (targetView) this.switchView(targetView);
       });
     });
 
-    // Keyboard Shortcuts (1-8 across primary and dropdown views)
+    document.getElementById("btn-mode-design")?.addEventListener("click", () => {
+      this.switchView("architect");
+    });
+
+    // Keyboard Shortcuts (1-9 across primary and dropdown views)
     window.addEventListener("keydown", e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
       const keyMap = {
         "1": "live",
         "2": "workflow",
-        "3": "agents",
-        "4": "providers",
-        "5": "memory",
-        "6": "history",
-        "7": "debug",
-        "8": "security",
+        "3": "architect",
+        "4": "agents",
+        "5": "providers",
+        "6": "memory",
+        "7": "history",
+        "8": "debug",
+        "9": "security",
       };
       if (keyMap[e.key]) {
         this.switchView(keyMap[e.key]);
@@ -160,8 +168,14 @@ class SERAApp {
 
       this.updateRuntimeState(data.status, data.active_task);
       if (data.providers) this.views.providers?.update(data.providers);
-      if (data.workflow) this.views.workflow?.updateGraphData(data.workflow);
+      if (data.architect) this.views.architect?.loadConfigData(data.architect);
       if (data.capabilities) this.views.live?.renderCapabilities(data.capabilities);
+
+      // Dev Unrestricted Pill
+      const devPill = document.getElementById("dev-unrestricted-pill");
+      if (devPill) {
+        devPill.classList.toggle("hidden", !Boolean(data.dev_mode_unrestricted));
+      }
 
       if (data.active_task_info && data.active_task_info.status === "EXECUTING") {
         this.views.live?.startTask(data.active_task_info);
@@ -183,6 +197,12 @@ class SERAApp {
       const ramEl = document.getElementById("ram-gauge");
       if (ramEl && data.system_memory_mb != null) ramEl.textContent = `${(data.system_memory_mb / 1024).toFixed(1)} GB`;
 
+    } else if (eventType === "ARCHITECT_CONFIG" || eventType === "ARCHITECT_CONFIG_SAVED") {
+      this.views.architect?.loadConfigData(data.config || data);
+    } else if (eventType === "CONFIG_UPDATED") {
+      this.views.architect?.loadConfigData(data);
+    } else if (eventType === "ARCHITECT_TEST_RESULT") {
+      this.views.architect?.visualizeSimulationTrace(data);
     } else if (eventType === "CAPABILITIES_LIST") {
       if (data.capabilities) this.views.live?.renderCapabilities(data.capabilities);
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
@@ -225,7 +245,8 @@ class SERAApp {
     } else if (eventType === "STREAM_TOKEN") {
       this.views.live?.appendStreamToken(data.token || data.text);
     } else if (eventType === "AGENT_RESPONSE") {
-      this.views.live?.completeAssistantResponse(data.text);
+      const respContent = data.content || data.text || data.result;
+      this.views.live?.completeAssistantResponse(respContent);
     } else if (eventType === "TTS_STARTED") {
       this.views.live?.setAuraState("SPEAKING");
     } else if (eventType === "TASK_COMPLETED") {

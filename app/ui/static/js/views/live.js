@@ -31,9 +31,18 @@ export class LiveView {
     this.taskElapsedTimer = document.getElementById("task-elapsed-timer");
     this.btnInterrupt = document.getElementById("btn-interrupt-task");
 
-    // Capabilities Container
+    // Task In Progress Minimization Overlay Elements
+    this.taskOverlay = document.getElementById("live-task-overlay");
+    this.taskOverlayTitle = document.getElementById("task-overlay-title");
+    this.taskOverlayStep = document.getElementById("task-overlay-step");
+    this.taskOverlayTimer = document.getElementById("task-overlay-timer");
+    this.btnOverlayExpand = document.getElementById("btn-overlay-expand");
+    this.btnOverlayStop = document.getElementById("btn-overlay-stop");
+    this.btnOverlayWorkflow = document.getElementById("btn-overlay-workflow");
+    this.isChatMinimized = false;
+
+    // Data-Driven Contextual Capabilities Grid
     this.capabilitiesGrid = document.getElementById("quick-chips-grid");
-    this.capabilitiesTitle = document.getElementById("quick-chips-title");
 
     // Internal State
     this.activeTaskId = null;
@@ -67,6 +76,17 @@ export class LiveView {
     // 2. Context-Aware Interrupt Button
     this.btnInterrupt?.addEventListener("click", () => this.handleInterruptClick());
 
+    // 2b. Task Overlay Buttons
+    this.btnOverlayStop?.addEventListener("click", () => this.handleInterruptClick());
+    this.btnOverlayWorkflow?.addEventListener("click", () => this.switchView("workflow"));
+    this.btnOverlayExpand?.addEventListener("click", () => {
+      this.isChatMinimized = !this.isChatMinimized;
+      this.chatStream?.classList.toggle("chat-compact-mode", this.isChatMinimized);
+      if (this.btnOverlayExpand) {
+        this.btnOverlayExpand.textContent = this.isChatMinimized ? "Expand Conversation" : "Compact Mode";
+      }
+    });
+
     // 3. Scroll Anchoring
     this.chatStream?.addEventListener("scroll", () => {
       if (!this.chatStream) return;
@@ -86,9 +106,24 @@ export class LiveView {
       this.chatInput?.focus();
     });
 
-    // 5. Initial Contextual Capabilities Query
+    // 5. Setup static chip click handlers
+    this.setupStaticChips();
+
+    // 6. Initial Contextual Capabilities Query
     this.fetchCapabilities("IDLE");
     this.updateInterruptButton("IDLE");
+  }
+
+  setupStaticChips() {
+    this.capabilitiesGrid?.querySelectorAll(".quick-chip-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const prompt = btn.getAttribute("data-prompt") || btn.textContent.trim();
+        if (prompt) {
+          this.appendUserMessage(prompt, "TEXT");
+          this.send({ action: "USER_PROMPT", text: prompt });
+        }
+      });
+    });
   }
 
   /* ===================================================================
@@ -566,6 +601,11 @@ export class LiveView {
       this.taskStepFill.style.background = "var(--accent-cyan)";
     }
 
+    // Update Compact Task Overlay
+    if (this.taskOverlay) this.taskOverlay.classList.remove("hidden");
+    if (this.taskOverlayTitle) this.taskOverlayTitle.textContent = taskName;
+    if (this.taskOverlayStep) this.taskOverlayStep.textContent = "CURRENT STEP: Initializing task routing...";
+
     this.updateInterruptButton("EXECUTING");
     
     clearInterval(this.taskTimerInterval);
@@ -573,6 +613,9 @@ export class LiveView {
       const elapsed = ((Date.now() - this.startedAt) / 1000).toFixed(1);
       if (this.taskElapsedTimer) {
         this.taskElapsedTimer.textContent = `${elapsed}s`;
+      }
+      if (this.taskOverlayTimer) {
+        this.taskOverlayTimer.textContent = `${elapsed}s`;
       }
     }, 100);
   }
@@ -584,6 +627,9 @@ export class LiveView {
     if (this.taskStepFill) {
       const pct = (currentStep / totalSteps) * 100;
       this.taskStepFill.style.width = `${pct}%`;
+    }
+    if (this.taskOverlayStep && actionDescription) {
+      this.taskOverlayStep.textContent = `CURRENT STEP: ${actionDescription}`;
     }
   }
 
@@ -600,6 +646,10 @@ export class LiveView {
 
     if (data.duration_seconds && this.taskElapsedTimer) {
       this.taskElapsedTimer.textContent = `${data.duration_seconds.toFixed(1)}s`;
+    }
+
+    if (this.taskOverlayStep) {
+      this.taskOverlayStep.textContent = reason;
     }
 
     this.updateInterruptButton("IDLE");
@@ -619,12 +669,18 @@ export class LiveView {
       });
     }
 
+    // Ensure any streaming bubble settles into completed state
+    if (this.activeStreamBubble) {
+      this.completeAssistantResponse(data.result || null);
+    }
+
     setTimeout(() => {
       if (!this.activeTaskId) {
         if (this.taskTitle) this.taskTitle.textContent = "Awaiting User Instruction";
         if (this.taskStepLabel) this.taskStepLabel.textContent = "Step 0 / 0";
         if (this.taskStepFill) this.taskStepFill.style.width = "0%";
         if (this.taskElapsedTimer) this.taskElapsedTimer.textContent = "0.0s";
+        if (this.taskOverlay) this.taskOverlay.classList.add("hidden");
       }
     }, 4000);
   }

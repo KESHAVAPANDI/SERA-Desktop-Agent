@@ -169,6 +169,11 @@ class SERAUIServer:
     async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         """Broadcasts real-time runtime events to all connected UI clients."""
         if not self.clients:
+            for _ in range(6):
+                await asyncio.sleep(0.05)
+                if self.clients:
+                    break
+        if not self.clients:
             return
         payload = {"event": event_type, "data": data, "timestamp": asyncio.get_event_loop().time()}
         dead = []
@@ -320,6 +325,16 @@ class SERAUIServer:
                         context_dict = msg_data.get("context", {})
                         caps = self.capability_registry.get_contextual_capabilities(context_dict)
                         await self._ws_send(writer, {"event": "CAPABILITIES_LIST", "data": {"capabilities": caps}})
+                    elif action == "GET_ARCHITECT_CONFIG":
+                        cfg = self._get_architect_config()
+                        await self._ws_send(writer, {"event": "ARCHITECT_CONFIG", "data": cfg})
+                    elif action == "SAVE_ARCHITECT_CONFIG":
+                        save_res = self._save_architect_config(msg_data.get("config", {}))
+                        await self._ws_send(writer, {"event": "ARCHITECT_CONFIG_SAVED", "data": save_res})
+                        await self.broadcast_event("CONFIG_UPDATED", save_res.get("config", {}))
+                    elif action == "TEST_ARCHITECT_CONFIG":
+                        test_res = self._test_architect_simulation(msg_data.get("config", {}))
+                        await self._ws_send(writer, {"event": "ARCHITECT_TEST_RESULT", "data": test_res})
         except Exception as e:
             logger.debug(f"[SERAUIServer] WS frame exception: {e}")
         finally:
@@ -363,6 +378,19 @@ class SERAUIServer:
                     context_state = headers.get("x-context")
                 caps = self.capability_registry.get_contextual_capabilities({"state": context_state})
                 return "200 OK", resp_headers, json.dumps({"capabilities": caps}).encode("utf-8")
+
+            # 1c. Architect Configuration Endpoints
+            if path == "/api/architect/config":
+                if method == "POST":
+                    res = self._save_architect_config(body_json)
+                    if res.get("success"):
+                        asyncio.create_task(self.broadcast_event("CONFIG_UPDATED", res.get("config", {})))
+                    return "200 OK", resp_headers, json.dumps(res).encode("utf-8")
+                return "200 OK", resp_headers, json.dumps(self._get_architect_config()).encode("utf-8")
+
+            if path == "/api/architect/test":
+                res = self._test_architect_simulation(body_json)
+                return "200 OK", resp_headers, json.dumps(res).encode("utf-8")
 
             # 1b. Canonical Task Endpoints
             if path == "/api/task/create" or path == "/api/task":
@@ -545,11 +573,12 @@ class SERAUIServer:
         role_y_offsets = {"reasoning": 80, "fast": 220, "vision": 360, "desktop": 500}
         curr_x = 640
 
-        for r_name, cands in roles_summary.items():
+        for r_name, r_info in roles_summary.items():
             if r_name not in role_y_offsets:
                 continue
             base_y = role_y_offsets[r_name]
             mode = self.role_execution_modes.get(r_name, "FALLBACK_ORDER")
+            cands = r_info.get("candidates", []) if isinstance(r_info, dict) else (r_info if isinstance(r_info, list) else [])
 
             for idx, c in enumerate(cands):
                 if mode == "PRIMARY_ONLY" and idx > 0:
@@ -783,7 +812,175 @@ class SERAUIServer:
                 "desktop_actions": "LOCAL (Windows UI Automation)",
             },
             "confirmation_required_count": 0,
+            "dev_mode_unrestricted": self.security_manager.is_dev_unrestricted(),
         }
+
+    def _get_roles_summary(self) -> dict[str, Any]:
+        """Returns structured role candidates from runtime router or configured defaults."""
+        if self.runtime and hasattr(self.runtime, "router") and hasattr(self.runtime.router, "role_chains"):
+            summary = {}
+            for role_name, chain in self.runtime.router.role_chains.items():
+                cands = []
+                for idx, cand in enumerate(chain):
+                    cands.append({
+                        "provider": cand.provider_name,
+                        "model": cand.model_name,
+                        "latency_ms": 350,
+                        "is_primary": idx == 0,
+                        "fallback_rank": idx,
+                        "health": "HEALTHY",
+                    })
+                summary[role_name] = {
+                    "role": role_name,
+                    "candidates": cands,
+                    "execution_mode": self.role_execution_modes.get(role_name, "FALLBACK_ORDER"),
+                }
+            return summary
+
+        # Standalone / Default topology
+        return {
+            "reasoning": {
+                "role": "reasoning",
+                "candidates": [
+                    {"provider": "Groq", "model": "openai/gpt-oss-120b", "latency_ms": 380, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                    {"provider": "Mistral", "model": "mistral-large-2411", "latency_ms": 520, "is_primary": False, "fallback_rank": 1, "health": "HEALTHY"},
+                ],
+                "execution_mode": self.role_execution_modes.get("reasoning", "FALLBACK_ORDER"),
+            },
+            "fast": {
+                "role": "fast",
+                "candidates": [
+                    {"provider": "Groq", "model": "llama-3.3-70b-versatile", "latency_ms": 190, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": self.role_execution_modes.get("fast", "PRIMARY_ONLY"),
+            },
+            "desktop": {
+                "role": "desktop",
+                "candidates": [
+                    {"provider": "Mistral", "model": "codestral-2501", "latency_ms": 340, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": self.role_execution_modes.get("desktop", "PRIMARY_ONLY"),
+            },
+            "vision": {
+                "role": "vision",
+                "candidates": [
+                    {"provider": "Groq", "model": "qwen-2.5-32b", "latency_ms": 410, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": self.role_execution_modes.get("vision", "PRIMARY_ONLY"),
+            },
+            "ocr": {
+                "role": "ocr",
+                "candidates": [
+                    {"provider": "Groq", "model": "qwen-2.5-32b", "latency_ms": 420, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": "PRIMARY_ONLY",
+            },
+            "embeddings": {
+                "role": "embeddings",
+                "candidates": [
+                    {"provider": "Local", "model": "all-MiniLM-L6-v2", "latency_ms": 40, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": "PRIMARY_ONLY",
+            },
+            "stt": {
+                "role": "stt",
+                "candidates": [
+                    {"provider": "NVIDIA", "model": "Canary-Qwen 2.5B", "latency_ms": 210, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                    {"provider": "Faster-Whisper", "model": "small", "latency_ms": 190, "is_primary": False, "fallback_rank": 1, "health": "HEALTHY"},
+                ],
+                "execution_mode": "FALLBACK_ORDER",
+            },
+            "tts": {
+                "role": "tts",
+                "candidates": [
+                    {"provider": "Fish Audio", "model": "s2.1-pro-free", "latency_ms": 180, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+                ],
+                "execution_mode": "PRIMARY_ONLY",
+            },
+        }
+
+    def _get_architect_config(self) -> dict[str, Any]:
+        """Returns persistent configuration of Temporal Framework roles, modes, and candidate priorities."""
+        roles_summary = self._get_roles_summary()
+        return {
+            "roles": roles_summary,
+            "execution_modes": self.role_execution_modes,
+            "dev_mode_unrestricted": self.security_manager.is_dev_unrestricted(),
+            "layout": {"nodes": self.workflow_layout},
+            "available_roles": ["stt", "fast", "reasoning", "desktop", "vision", "ocr", "embeddings", "tts"],
+            "future_roles": ["agents", "rag", "mcp", "browser"],
+        }
+
+    def _save_architect_config(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validates and persists updated role execution modes and candidate priorities."""
+        modes = payload.get("execution_modes", {})
+        roles_payload = payload.get("roles", {})
+        layout_nodes = payload.get("layout", {}).get("nodes", {})
+
+        if isinstance(modes, dict):
+            for r, m in modes.items():
+                if m in ["PRIMARY_ONLY", "FALLBACK_ORDER", "CUSTOM"]:
+                    self.role_execution_modes[r] = m
+
+        if isinstance(roles_payload, dict):
+            for r_name, r_info in roles_payload.items():
+                if isinstance(r_info, dict) and "candidates" in r_info:
+                    self._update_role_candidates(r_name, r_info["candidates"], self.role_execution_modes.get(r_name, "FALLBACK_ORDER"))
+
+        if layout_nodes:
+            self._save_workflow_layout(layout_nodes)
+
+        return {
+            "success": True,
+            "config": self._get_architect_config(),
+            "message": "Architect configuration successfully saved and persisted.",
+        }
+
+    def _test_architect_simulation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Runs a safe simulated routing trace through the configured topology."""
+        test_role = payload.get("role", "reasoning")
+        simulate_outage = bool(payload.get("simulate_outage", True))
+        
+        mode = self.role_execution_modes.get(test_role, "FALLBACK_ORDER")
+        roles_summary = self._get_roles_summary()
+        candidates = roles_summary.get(test_role, {}).get("candidates", [])
+        
+        steps = []
+        steps.append({"step": 1, "action": "STT Transcription (Canary-Qwen)", "status": "COMPLETED", "node": "node_stt"})
+        steps.append({"step": 2, "action": "Intent Routing & Policy Dispatch", "status": "COMPLETED", "node": "node_router"})
+
+        if not candidates:
+            steps.append({"step": 3, "action": f"Role '{test_role}' has no configured candidates", "status": "BROKEN"})
+            return {"success": False, "trace": steps, "status": "BROKEN"}
+
+        primary = candidates[0]
+        if simulate_outage and len(candidates) > 1 and mode in ["FALLBACK_ORDER", "CUSTOM"]:
+            steps.append({
+                "step": 3,
+                "action": f"Primary Candidate ({primary.get('provider')}/{primary.get('model')}) Rate-Limited (429)",
+                "status": "RATE_LIMITED",
+                "node": f"arch_node_{test_role}_0",
+            })
+            fallback = candidates[1]
+            steps.append({
+                "step": 4,
+                "action": f"Fallback Candidate Activated: {fallback.get('provider')}/{fallback.get('model')}",
+                "status": "FALLBACK_ACTIVE",
+                "node": f"arch_node_{test_role}_1",
+            })
+            steps.append({"step": 5, "action": "Verification & Output Synthesis", "status": "COMPLETED", "node": "arch_node_verify"})
+            steps.append({"step": 6, "action": "Audio Synthesis (Fish Audio)", "status": "COMPLETED", "node": "arch_node_tts"})
+            return {"success": True, "trace": steps, "status": "FALLBACK_COMPLETED", "selected_model": fallback.get("model")}
+        else:
+            steps.append({
+                "step": 3,
+                "action": f"Primary Candidate Dispatched: {primary.get('provider')}/{primary.get('model')}",
+                "status": "COMPLETED",
+                "node": f"arch_node_{test_role}_0",
+            })
+            steps.append({"step": 4, "action": "Verification & Output Synthesis", "status": "COMPLETED", "node": "arch_node_verify"})
+            steps.append({"step": 5, "action": "Audio Synthesis (Fish Audio)", "status": "COMPLETED", "node": "arch_node_tts"})
+            return {"success": True, "trace": steps, "status": "COMPLETED", "selected_model": primary.get("model")}
 
     def _get_history_sessions(self) -> list[dict[str, Any]]:
         """Returns rich chronological interaction sessions."""
@@ -898,6 +1095,8 @@ class SERAUIServer:
             "execution_modes": self.role_execution_modes,
             "providers": self._get_providers_summary(),
             "security": self._get_security_summary(),
+            "dev_mode_unrestricted": self.security_manager.is_dev_unrestricted(),
+            "architect": self._get_architect_config(),
             "capabilities": self.capability_registry.get_contextual_capabilities({"state": state_str}),
             "workflow": self._get_dynamic_workflow_graph(),
             "workflow_graph": self._get_structured_workflow_graph(),
@@ -957,46 +1156,6 @@ class SERAUIServer:
                 "gridSize": 16,
             }
         }
-
-    def _get_roles_summary(self) -> dict[str, Any]:
-        if not self.runtime or not hasattr(self.runtime, "router"):
-            return {
-                "reasoning": [
-                    {"provider": "groq", "model": "openai/gpt-oss-120b"},
-                    {"provider": "mistral", "model": "mistral-large-latest"},
-                    {"provider": "mistral", "model": "mistral-medium-3.5"},
-                    {"provider": "openrouter", "model": "openrouter/free"},
-                ],
-                "fast": [
-                    {"provider": "mistral", "model": "mistral-small-latest"},
-                    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-                    {"provider": "openrouter", "model": "openrouter/free"},
-                ],
-                "desktop": [
-                    {"provider": "mistral", "model": "codestral-latest"},
-                    {"provider": "groq", "model": "openai/gpt-oss-120b"},
-                    {"provider": "openrouter", "model": "openrouter/free"},
-                ],
-                "vision": [
-                    {"provider": "groq", "model": "qwen/qwen3.6-27b"},
-                    {"provider": "gemini", "model": "gemini-3-flash-preview"},
-                    {"provider": "openrouter", "model": "openrouter/free"},
-                ],
-                "ocr": [
-                    {"provider": "mistral", "model": "mistral-ocr-latest"},
-                ],
-                "embeddings": [
-                    {"provider": "mistral", "model": "mistral-embed"},
-                ],
-            }
-        summary = {}
-        for r_name in ["reasoning", "fast", "desktop", "vision", "ocr", "embeddings"]:
-            cands = self.runtime.router.get_role_candidates(r_name)
-            summary[r_name] = [
-                {"provider": c.provider_name, "model": c.model_name}
-                for c in cands
-            ]
-        return summary
 
     def _get_providers_summary(self) -> list[dict[str, Any]]:
         base_providers = [

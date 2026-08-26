@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 
@@ -10,7 +11,13 @@ class SecurityDecision:
 
 class SecurityManager:
 
-    def __init__(self):
+    def __init__(self, unrestricted: bool | None = None):
+        # Development Unrestricted Mode flag
+        env_val = os.environ.get("SERA_DEV_UNRESTRICTED", "").strip().lower()
+        if unrestricted is not None:
+            self.unrestricted = unrestricted
+        else:
+            self.unrestricted = env_val in ("true", "1", "yes", "on")
 
         # Level 0 & Level 1: Completely safe / non-destructive actions.
         self.safe_tools = {
@@ -94,6 +101,11 @@ class SecurityManager:
             "format_drive",
         }
 
+    def is_dev_unrestricted(self) -> bool:
+        """Returns True if the runtime is operating in development unrestricted security mode."""
+        env_val = os.environ.get("SERA_DEV_UNRESTRICTED", "").strip().lower()
+        return self.unrestricted or env_val in ("true", "1", "yes", "on")
+
     def check(
         self,
         tool_name: str,
@@ -105,6 +117,15 @@ class SecurityManager:
                 allowed=True,
                 requires_confirmation=False,
             )
+
+        # In Development Unrestricted mode, bypass confirmation for registered tools
+        if self.is_dev_unrestricted():
+            if tool_name in self.safe_tools or tool_name in self.confirmation_tools:
+                return SecurityDecision(
+                    allowed=True,
+                    requires_confirmation=False,
+                    reason="Development Mode: Unrestricted execution for registered tools.",
+                )
 
         if tool_name in self.safe_tools:
             return SecurityDecision(

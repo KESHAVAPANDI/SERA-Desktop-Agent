@@ -26,7 +26,7 @@
           </svg>
           <div class="brand-text-block">
             <span class="brand-title">SERA</span>
-            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.3</span>
+            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.2 / 5D.4</span>
           </div>
         </div>
 
@@ -39,7 +39,7 @@
         <div id="task-ticker" class="task-ticker">Ready • Awaiting Command</div>
       </div>
 
-      <!-- Simplified Primary Navigation Tabs with MORE Dropdown -->
+      <!-- Primary Navigation Tabs with ARCHITECT separation and MORE Dropdown -->
       <nav class="nav-tabs" role="tablist">
         <button class="nav-tab-btn active" data-view="live" id="tab-live">
           <span class="tab-num">1</span> LIVE
@@ -47,11 +47,14 @@
         <button class="nav-tab-btn" data-view="workflow" id="tab-workflow">
           <span class="tab-num">2</span> WORKFLOW
         </button>
+        <button class="nav-tab-btn" data-view="architect" id="tab-architect">
+          <span class="tab-num">3</span> ARCHITECT
+        </button>
         <button class="nav-tab-btn" data-view="agents" id="tab-agents">
-          <span class="tab-num">3</span> AGENTS
+          <span class="tab-num">4</span> AGENTS
         </button>
         <button class="nav-tab-btn" data-view="providers" id="tab-providers">
-          <span class="tab-num">4</span> PROVIDERS
+          <span class="tab-num">5</span> PROVIDERS
         </button>
 
         <!-- MORE Dropdown Submenu -->
@@ -77,6 +80,12 @@
       </nav>
 
       <div class="header-right">
+        <!-- Development Unrestricted Security Indicator -->
+        <div id="dev-unrestricted-pill" class="dev-unrestricted-pill hidden" title="Development Mode: Safe tools execute without approval popups">
+          <span class="dev-pulse-dot"></span>
+          <span id="dev-mode-text">DEV MODE: UNRESTRICTED TOOLS</span>
+        </div>
+
         <div id="runtime-indicator" class="runtime-badge runtime-online" title="SERA Voice Runtime Connection">
           <span class="runtime-dot"></span>
           <span id="runtime-text">RUNTIME: ONLINE</span>
@@ -220,6 +229,21 @@
                 </div>
               </div>
               
+              <!-- Compact Task In Progress Overlay (Automatic Minimization during Execution) -->
+              <div id="live-task-overlay" class="live-task-overlay hidden">
+                <div class="task-overlay-header">
+                  <div class="task-overlay-badge"><span class="task-pulse-dot"></span> TASK IN PROGRESS</div>
+                  <span id="task-overlay-timer" class="task-overlay-timer">0.0s</span>
+                </div>
+                <div class="task-overlay-title" id="task-overlay-title">Executing Command...</div>
+                <div class="task-overlay-step" id="task-overlay-step">CURRENT STEP: Initializing task routing...</div>
+                <div class="task-overlay-actions">
+                  <button type="button" id="btn-overlay-expand" class="btn-overlay-action">Expand Task</button>
+                  <button type="button" id="btn-overlay-stop" class="btn-overlay-action btn-overlay-stop">Stop Task</button>
+                  <button type="button" id="btn-overlay-workflow" class="btn-overlay-action btn-overlay-workflow">View Workflow ➔</button>
+                </div>
+              </div>
+
               <div id="chat-stream" class="chat-stream">
                 <div class="chat-bubble sera">
                   <div class="bubble-sender">
@@ -252,38 +276,36 @@
         </div>
       </section>
 
-      <!-- VIEW 2: WORKFLOW GRAPH (TWO-MODE TEMPORAL AURA: EXECUTION VIEW & DESIGN VIEW) -->
+      <!-- VIEW 2: WORKFLOW (DYNAMIC TEMPORAL EXECUTION THEATER) -->
       <section id="view-workflow" class="view-container">
-        <div class="workflow-toolbar">
-          <!-- Execution Mode vs Design Mode Switcher -->
-          <div class="workflow-mode-tabs">
-            <button class="btn-action mode-tab-btn active" id="btn-mode-execution" title="Show Live Dynamic Execution Trace">
-              <span style="color: var(--accent-cyan);">●</span> EXECUTION
+        <div id="btn-mode-execution" class="active" style="position: absolute; opacity: 0; pointer-events: none;"></div>
+        <div class="workflow-theater-hud">
+          <div class="hud-left">
+            <button class="btn-action btn-return-live" id="btn-return-to-live">
+              <span>← RETURN TO LIVE</span>
             </button>
-            <button class="btn-action mode-tab-btn" id="btn-mode-design" title="Configure Persistent Architecture & Candidate Priority">
-              <span style="color: var(--accent-amber);">✎</span> DESIGN
-            </button>
+            <div class="hud-divider"></div>
+            <div id="workflow-task-badge" class="workflow-task-badge">
+              <span class="hud-dot"></span>
+              <span id="workflow-task-label">IDLE • AWAITING TASK</span>
+            </div>
+            <div id="workflow-step-badge" class="workflow-step-badge hidden">
+              <span id="workflow-step-label">Step 0/0</span>
+            </div>
           </div>
 
-          <div class="toolbar-divider"></div>
-          <button class="btn-action btn-icon-sm" id="btn-zoom-in" title="Zoom In (+)">+</button>
-          <span id="zoom-level-text" class="zoom-level-text">100%</span>
-          <button class="btn-action btn-icon-sm" id="btn-zoom-out" title="Zoom Out (-)">-</button>
-          <button class="btn-action" id="btn-reset-view" title="Reset Pan/Zoom">Reset View</button>
-          <button class="btn-action" id="btn-fit-screen" title="Fit Graph to Screen">Fit</button>
-          <button class="btn-action" id="btn-center-active" title="Center on Active Step">Center Active</button>
-          <div class="toolbar-divider"></div>
-          <button class="btn-action" id="btn-toggle-snap" title="Toggle 16px Grid Snapping">Snap: ON</button>
-          <button class="btn-action" id="btn-undo-layout" title="Undo Layout Move (Ctrl+Z)">↶ Undo</button>
-          <button class="btn-action" id="btn-redo-layout" title="Redo Layout Move (Ctrl+Y)">↷ Redo</button>
-          <button class="btn-action btn-danger" id="btn-reset-layout" title="Reset Node Layout Coordinates">Reset Layout</button>
-          <div class="toolbar-divider"></div>
-          <span id="workflow-mode-desc" style="color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono);">
-            Live Execution Observer
-          </span>
+          <div class="hud-right">
+            <button class="btn-action btn-sm" id="btn-mode-design" data-view="architect" title="Open Architect Configuration">⚙ Architect</button>
+            <button class="btn-action btn-icon-sm" id="btn-zoom-in" title="Zoom In (+)">+</button>
+            <span id="zoom-level-text" class="zoom-level-text">100%</span>
+            <button class="btn-action btn-icon-sm" id="btn-zoom-out" title="Zoom Out (-)">-</button>
+            <button class="btn-action btn-sm" id="btn-reset-view" title="Reset View">Reset View</button>
+            <button class="btn-action btn-sm" id="btn-fit-screen" title="Fit to Screen">Fit</button>
+            <button class="btn-action btn-sm" id="btn-center-active" title="Center Active Step">Center Active</button>
+          </div>
         </div>
 
-        <div id="workflow-canvas" class="workflow-canvas">
+        <div id="workflow-canvas" class="workflow-canvas temporal-black-canvas">
           <div id="canvas-viewport" class="canvas-viewport">
             <canvas id="temporal-canvas-bg" class="temporal-canvas-bg"></canvas>
             <svg id="workflow-svg" class="workflow-svg-layer"></svg>
@@ -294,18 +316,113 @@
           <div id="workflow-execution-banner" class="workflow-execution-banner hidden">
             <div class="banner-title"><span class="check-icon">✓</span> TASK COMPLETED</div>
             <div class="banner-sub" id="banner-task-summary">Execution trace recorded successfully.</div>
-            <button class="btn-action btn-primary-glow" id="btn-return-to-live">RETURN TO LIVE</button>
+            <button class="btn-action btn-primary-glow" id="btn-banner-return-live">RETURN TO LIVE</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: ARCHITECT (PERSISTENT TEMPORAL FRAMEWORK CONFIGURATION) -->
+      <section id="view-architect" class="view-container">
+        <div class="architect-toolbar">
+          <div class="toolbar-left">
+            <span class="architect-title">TEMPORAL ARCHITECT</span>
+            <span class="architect-sub">Persistent Role Topology & Candidate Priority Designer</span>
+            <span id="architect-dirty-badge" class="architect-dirty-badge hidden">● UNSAVED CHANGES</span>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn-action btn-test-sim" id="btn-architect-test" title="Run Safe Routing Simulation">
+              <span>⚡ Test Configuration</span>
+            </button>
+            <button class="btn-action btn-secondary" id="btn-architect-discard" title="Discard Unsaved Changes">
+              <span>Discard</span>
+            </button>
+            <button class="btn-action btn-primary-glow" id="btn-architect-save" title="Preview & Save Temporal Architecture">
+              <span>Save Changes</span>
+            </button>
+            <div class="toolbar-divider"></div>
+            <button class="btn-action btn-sm" id="btn-architect-reset-layout" title="Reset Node Coordinates">Reset Layout</button>
           </div>
         </div>
 
-        <!-- Sliding Inspector Drawer for Candidate Chains & Execution Modes (Design Mode) -->
-        <aside id="workflow-inspector-drawer" class="inspector-drawer">
-          <div class="drawer-header">
-            <div id="drawer-title" class="drawer-title">ROLE INSPECTOR</div>
-            <button id="drawer-close-btn" class="btn-close-drawer" title="Close Drawer (Esc)">✕</button>
+        <div class="architect-layout">
+          <!-- Left: Persistent Configuration Canvas -->
+          <div id="architect-canvas" class="architect-canvas">
+            <div id="architect-viewport" class="architect-viewport">
+              <canvas id="architect-canvas-bg" class="architect-canvas-bg"></canvas>
+              <svg id="architect-svg" class="architect-svg-layer"></svg>
+              <div id="architect-nodes-container" class="architect-nodes-layer"></div>
+            </div>
           </div>
-          <div id="drawer-content" class="drawer-body"></div>
-        </aside>
+
+          <!-- Right: Role & Candidate Execution Mode Inspector Drawer -->
+          <aside id="workflow-inspector-drawer" class="architect-drawer hidden"></aside>
+          <aside id="architect-inspector-drawer" class="architect-drawer">
+            <div class="drawer-header">
+              <div class="drawer-header-left">
+                <span class="drawer-icon">⚙️</span>
+                <span id="architect-role-title" class="drawer-title">ROLE: REASONING</span>
+              </div>
+              <button id="architect-drawer-close" class="btn-close-drawer" title="Close Drawer">✕</button>
+            </div>
+
+            <div class="drawer-body">
+              <!-- Three Execution Modes per Role -->
+              <div class="architect-section">
+                <label class="architect-section-label">EXECUTION MODE</label>
+                <div class="mode-switcher-group">
+                  <button type="button" class="mode-switch-btn" data-mode="PRIMARY_ONLY" id="btn-role-mode-primary">
+                    PRIMARY ONLY
+                  </button>
+                  <button type="button" class="mode-switch-btn active" data-mode="FALLBACK_ORDER" id="btn-role-mode-fallback">
+                    FALLBACK ORDER
+                  </button>
+                  <button type="button" class="mode-switch-btn" data-mode="CUSTOM" id="btn-role-mode-custom">
+                    CUSTOM
+                  </button>
+                </div>
+                <div id="mode-explanation-text" class="mode-explanation-text">
+                  Dispatches Primary. If primary fails or is rate-limited, automatically cascades to secondary fallback candidates in order.
+                </div>
+              </div>
+
+              <!-- Candidate Priority Drag List -->
+              <div class="architect-section">
+                <div class="section-header-row">
+                  <label class="architect-section-label">CANDIDATE PRIORITY CHAIN</label>
+                  <span class="drag-hint-text">Drag items to change execution priority</span>
+                </div>
+                <div id="architect-candidates-list" class="architect-candidates-list">
+                  <!-- Dynamically populated candidate items with drag handles -->
+                </div>
+              </div>
+
+              <!-- Add Candidate to Role -->
+              <div class="architect-section">
+                <label class="architect-section-label">ADD CANDIDATE MODEL</label>
+                <div class="add-candidate-row">
+                  <select id="architect-provider-select" class="form-select-sm"></select>
+                  <select id="architect-model-select" class="form-select-sm"></select>
+                  <button type="button" id="btn-architect-add-cand" class="btn-action btn-sm">+ Add</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Pre-Save Configuration Preview Modal -->
+        <div id="architect-preview-modal" class="architect-modal-backdrop hidden">
+          <div class="architect-modal-card">
+            <div class="modal-header">
+              <span class="modal-title">CONFIGURATION PREVIEW</span>
+              <span class="modal-sub">Review changes before persisting to Temporal Framework</span>
+            </div>
+            <div id="architect-preview-body" class="modal-body"></div>
+            <div class="modal-footer">
+              <button type="button" id="btn-preview-cancel" class="btn-action btn-secondary">Cancel</button>
+              <button type="button" id="btn-preview-apply" class="btn-action btn-primary-glow">Apply & Persist</button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- VIEW 3: AGENTS (MULTI-AGENT HIERARCHY) -->

@@ -568,6 +568,17 @@ class SERARuntime:
                 self.active_task_info["status"] = "COMPLETED"
                 self.active_task_info["completed_at"] = time.time()
                 self.active_task_info["result"] = resp
+            
+            # Authoritative Assistant Response Object Contract
+            self._emit_event("AGENT_RESPONSE", {
+                "task_id": task_id,
+                "turn_id": task_id,
+                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                "type": "ASSISTANT_MESSAGE",
+                "content": resp if isinstance(resp, str) else str(resp),
+                "status": "COMPLETED",
+            })
+
             self._emit_event("TASK_COMPLETED", {
                 "task_id": task_id,
                 "result": resp,

@@ -1,144 +1,92 @@
 /**
- * WorkflowView — Temporal Aura Freeform 2D Execution Graph & Candidate Editor
- * Implements DaVinci Resolve-inspired freeform node positioning, pan, zoom, grid snapping,
- * undo/redo, layout persistence, and decoupling of visual movement from execution priority.
+ * WorkflowView — Dynamic Temporal Execution Theater & Plasma Pipeline Engine
+ * Phase 5D.4: Real-time event-driven node materialization, multi-filament plasma channels,
+ * directional energy flow, fallback ignition, and cancellation collapse on a pure black canvas.
  */
 
 export class WorkflowView {
   constructor(socketSender, onNavigate) {
     this.send = socketSender;
     this.onNavigate = onNavigate;
+
+    // DOM Elements
     this.canvas = document.getElementById("workflow-canvas");
     this.viewport = document.getElementById("canvas-viewport");
-    this.container = document.getElementById("workflow-nodes-container");
+    this.nodesContainer = document.getElementById("workflow-nodes-container");
     this.svg = document.getElementById("workflow-svg");
-    this.drawer = document.getElementById("workflow-inspector-drawer");
+    this.canvasBg = document.getElementById("temporal-canvas-bg");
+    this.taskLabel = document.getElementById("workflow-task-label");
+    this.stepBadge = document.getElementById("workflow-step-badge");
+    this.stepLabel = document.getElementById("workflow-step-label");
+    this.executionBanner = document.getElementById("workflow-execution-banner");
+    this.bannerSummary = document.getElementById("banner-task-summary");
     this.zoomText = document.getElementById("zoom-level-text");
-    this.snapBtn = document.getElementById("btn-toggle-snap");
+    this.container = document.getElementById("temporal-theater-container");
 
-    this.mode = "RUNTIME"; // "RUNTIME" | "DESIGN"
+    // Canvas Transform State
     this.scale = 1.0;
-    this.panX = 60;
-    this.panY = 120;
-    this.snapEnabled = true;
-    this.gridSize = 16;
-
-    this.selectedNodeId = null;
-    this.activeRole = null;
+    this.panX = 80;
+    this.panY = 160;
     this.isPanning = false;
-    this.isDraggingNode = false;
-    this.draggedNode = null;
-    this.dragOffset = { x: 0, y: 0 };
 
-    // Layout Undo/Redo Stacks
-    this.undoStack = [];
-    this.redoStack = [];
+    // Dynamic Execution Graph State
+    this.activeTaskId = null;
+    this.currentTurnId = null;
+    this.nodes = []; // Array of dynamically materialized node objects
+    this.edges = []; // Array of dynamically materialized edge objects
+    this.activeNodeId = null;
+    this.activeEdgeId = null;
 
-    // Graph & Role Data (Design Mode vs Execution Mode)
-    this.nodes = [];
-    this.edges = [];
-    this.execNodes = [];
-    this.execEdges = [];
-    this.rolesData = {};
-    this.executionModes = {};
-    this.customLayout = {};
+    // Plasma Animation State
+    this.animFrameId = null;
     this.particleOffset = 0;
+    this.ambientParticles = [];
 
     this.init();
   }
 
   init() {
-    this.setupToolbar();
     this.setupPanZoom();
-    this.setupNodeDragEvents();
-    this.setupKeyboardShortcuts();
-    this.setupDrawer();
-    this.fetchGraphData();
-    this.startParticleAnimation();
+    this.setupHUDControls();
+    this.setupPlasmaDefs();
+    this.initAmbientCanvas();
+    this.startPlasmaAnimation();
   }
 
-  setupToolbar() {
-    // 1. Two-Mode Architecture (Execution Mode vs Design Mode)
-    const btnExec = document.getElementById("btn-mode-execution");
-    const btnDesign = document.getElementById("btn-mode-design");
-    const modeDesc = document.getElementById("workflow-mode-desc");
-    const returnBtn = document.getElementById("btn-return-to-live");
-    const modeBtn = document.getElementById("btn-toggle-mode");
-
-    returnBtn?.addEventListener("click", () => {
-      document.getElementById("workflow-execution-banner")?.classList.add("hidden");
+  setupHUDControls() {
+    // 1. Return to Live
+    const returnLive = () => {
+      this.executionBanner?.classList.add("hidden");
       if (this.onNavigate) {
         this.onNavigate("live");
       } else if (window.SERA_APP) {
         window.SERA_APP.switchView("live");
-      } else if (window.seraApp) {
-        window.seraApp.switchView("live");
       } else {
         document.getElementById("tab-live")?.click();
       }
-    });
-
-    const setMode = (newMode) => {
-      this.mode = newMode;
-      btnExec?.classList.toggle("active", newMode === "RUNTIME" || newMode === "EXECUTION");
-      btnDesign?.classList.toggle("active", newMode === "DESIGN");
-      if (modeDesc) {
-        modeDesc.textContent = (newMode === "RUNTIME" || newMode === "EXECUTION")
-          ? "Live Dynamic Execution Trace"
-          : "Role Candidate Topology & Priority Editor";
-      }
-      this.render();
     };
 
-    btnExec?.addEventListener("click", () => setMode("RUNTIME"));
-    btnDesign?.addEventListener("click", () => setMode("DESIGN"));
-
-    if (modeBtn) {
-      modeBtn.addEventListener("click", () => {
-        setMode(this.mode === "RUNTIME" ? "DESIGN" : "RUNTIME");
-      });
-    }
+    document.getElementById("btn-return-to-live")?.addEventListener("click", returnLive);
+    document.getElementById("btn-banner-return-live")?.addEventListener("click", returnLive);
 
     // 2. Zoom Controls
     document.getElementById("btn-zoom-in")?.addEventListener("click", () => this.zoomAt(1.15));
     document.getElementById("btn-zoom-out")?.addEventListener("click", () => this.zoomAt(0.85));
     document.getElementById("btn-reset-view")?.addEventListener("click", () => {
       this.scale = 1.0;
-      this.panX = 60;
-      this.panY = 120;
+      this.panX = 80;
+      this.panY = 160;
       this.updateViewportTransform();
     });
-
-    // 3. Fit to Screen & Center Active
     document.getElementById("btn-fit-screen")?.addEventListener("click", () => this.fitToScreen());
     document.getElementById("btn-center-active")?.addEventListener("click", () => this.centerOnActiveNode());
-
-    // 4. Snap Grid Toggle
-    this.snapBtn?.addEventListener("click", () => {
-      this.snapEnabled = !this.snapEnabled;
-      if (this.snapBtn) this.snapBtn.textContent = `Snap: ${this.snapEnabled ? 'ON' : 'OFF'}`;
-      this.snapBtn?.classList.toggle("btn-active-glow", this.snapEnabled);
-    });
-
-    // 5. Undo & Redo
-    document.getElementById("btn-undo-layout")?.addEventListener("click", () => this.undoLayout());
-    document.getElementById("btn-redo-layout")?.addEventListener("click", () => this.redoLayout());
-
-    // 6. Reset Layout
-    document.getElementById("btn-reset-layout")?.addEventListener("click", async () => {
-      if (confirm("Reset all node coordinates to standard horizontal layout?")) {
-        this.customLayout = {};
-        await this.saveLayout({});
-        await this.fetchGraphData();
-      }
-    });
   }
 
   setupPanZoom() {
     let startX = 0, startY = 0;
 
     this.canvas?.addEventListener("mousedown", e => {
-      if (e.target.closest(".temporal-node") || e.target.closest(".workflow-toolbar") || e.target.closest("#workflow-inspector-drawer")) return;
+      if (e.target.closest(".workflow-theater-hud") || e.target.closest("#workflow-execution-banner")) return;
       this.isPanning = true;
       startX = e.clientX - this.panX;
       startY = e.clientY - this.panY;
@@ -154,102 +102,20 @@ export class WorkflowView {
     });
 
     window.addEventListener("mouseup", () => {
-      if (this.isPanning) {
-        this.isPanning = false;
-        if (this.canvas) this.canvas.style.cursor = "grab";
-      }
+      this.isPanning = false;
+      if (this.canvas) this.canvas.style.cursor = "default";
     });
 
-    // Wheel Zoom Centered at Cursor
     this.canvas?.addEventListener("wheel", e => {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      const newScale = Math.max(0.3, Math.min(2.5, this.scale * zoomFactor));
-
-      // Adjust Pan so zoom focuses towards cursor
-      this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
-      this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
-      this.scale = newScale;
-
+      this.scale = Math.min(Math.max(this.scale * zoomFactor, 0.4), 2.2);
       this.updateViewportTransform();
-    }, { passive: false });
-  }
-
-  setupNodeDragEvents() {
-    window.addEventListener("mousemove", e => {
-      if (this.isDraggingNode && this.draggedNode) {
-        const rect = this.canvas.getBoundingClientRect();
-        const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
-        const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
-
-        let newX = canvasX - this.dragOffset.x;
-        let newY = canvasY - this.dragOffset.y;
-
-        if (this.snapEnabled) {
-          newX = Math.round(newX / this.gridSize) * this.gridSize;
-          newY = Math.round(newY / this.gridSize) * this.gridSize;
-        }
-
-        this.draggedNode.x = Math.max(0, newX);
-        this.draggedNode.y = Math.max(0, newY);
-
-        const nodeEl = document.getElementById(this.draggedNode.id);
-        if (nodeEl) {
-          nodeEl.style.left = `${this.draggedNode.x}px`;
-          nodeEl.style.top = `${this.draggedNode.y}px`;
-        }
-
-        this.renderEdges();
-      }
-    });
-
-    window.addEventListener("mouseup", () => {
-      if (this.isDraggingNode && this.draggedNode) {
-        this.isDraggingNode = false;
-        const nid = this.draggedNode.id;
-        const currentPos = { x: this.draggedNode.x, y: this.draggedNode.y };
-
-        this.customLayout[nid] = currentPos;
-        this.pushLayoutHistory({ [nid]: currentPos });
-        this.saveLayout({ [nid]: currentPos });
-        this.draggedNode = null;
-      }
-    });
-  }
-
-  setupKeyboardShortcuts() {
-    window.addEventListener("keydown", e => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
-        e.preventDefault();
-        this.undoLayout();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) {
-        e.preventDefault();
-        this.redoLayout();
-      }
-    });
-  }
-
-  setupDrawer() {
-    document.getElementById("drawer-close-btn")?.addEventListener("click", () => this.closeDrawer());
-    window.addEventListener("keydown", e => {
-      if (e.key === "Escape") this.closeDrawer();
     });
   }
 
   zoomAt(factor) {
-    if (!this.canvas) return;
-    const cx = this.canvas.clientWidth / 2;
-    const cy = this.canvas.clientHeight / 2;
-    const newScale = Math.max(0.3, Math.min(2.5, this.scale * factor));
-
-    this.panX = cx - (cx - this.panX) * (newScale / this.scale);
-    this.panY = cy - (cy - this.panY) * (newScale / this.scale);
-    this.scale = newScale;
+    this.scale = Math.min(Math.max(this.scale * factor, 0.4), 2.2);
     this.updateViewportTransform();
   }
 
@@ -263,732 +129,487 @@ export class WorkflowView {
   }
 
   fitToScreen() {
-    if (!this.nodes.length || !this.canvas) return;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    this.nodes.forEach(n => {
-      minX = Math.min(minX, n.x);
-      minY = Math.min(minY, n.y);
-      maxX = Math.max(maxX, n.x + 240);
-      maxY = Math.max(maxY, n.y + 120);
-    });
+    if (this.nodes.length === 0) return;
+    const minX = Math.min(...this.nodes.map(n => n.x));
+    const maxX = Math.max(...this.nodes.map(n => n.x + 220));
+    const minY = Math.min(...this.nodes.map(n => n.y));
+    const maxY = Math.max(...this.nodes.map(n => n.y + 80));
 
-    const graphWidth = maxX - minX;
-    const graphHeight = maxY - minY;
-    const canvasWidth = this.canvas.clientWidth;
-    const canvasHeight = this.canvas.clientHeight;
+    const w = maxX - minX + 160;
+    const h = maxY - minY + 160;
+    const canvasW = this.canvas?.clientWidth || 1200;
+    const canvasH = this.canvas?.clientHeight || 800;
 
-    const scaleX = (canvasWidth - 160) / graphWidth;
-    const scaleY = (canvasHeight - 160) / graphHeight;
-    this.scale = Math.max(0.4, Math.min(1.2, Math.min(scaleX, scaleY)));
-
-    this.panX = (canvasWidth / 2) - ((minX + graphWidth / 2) * this.scale);
-    this.panY = (canvasHeight / 2) - ((minY + graphHeight / 2) * this.scale);
+    this.scale = Math.min(Math.max(Math.min(canvasW / w, canvasH / h), 0.5), 1.2);
+    this.panX = (canvasW - (maxX + minX) * this.scale) / 2;
+    this.panY = (canvasH - (maxY + minY) * this.scale) / 2;
     this.updateViewportTransform();
   }
 
   centerOnActiveNode() {
-    const activeNode = this.nodes.find(n => n.status === "ACTIVE" || n.status === "EXECUTING");
-    if (activeNode && this.canvas) {
-      this.panX = (this.canvas.clientWidth / 2) - ((activeNode.x + 110) * this.scale);
-      this.panY = (this.canvas.clientHeight / 2) - ((activeNode.y + 45) * this.scale);
-      this.updateViewportTransform();
-    }
-  }
-
-  pushLayoutHistory(change) {
-    this.undoStack.push(change);
-    this.redoStack = [];
-  }
-
-  async undoLayout() {
-    if (!this.undoStack.length) return;
-    const last = this.undoStack.pop();
-    this.redoStack.push(last);
-
-    Object.keys(last).forEach(nid => {
-      const node = this.nodes.find(n => n.id === nid);
-      if (node) {
-        // Reset or step back
-        node.x = Math.max(40, node.x - 40);
-      }
-    });
-    this.render();
-  }
-
-  async redoLayout() {
-    if (!this.redoStack.length) return;
-    const next = this.redoStack.pop();
-    this.undoStack.push(next);
-    Object.entries(next).forEach(([nid, pos]) => {
-      const node = this.nodes.find(n => n.id === nid);
-      if (node) {
-        node.x = pos.x;
-        node.y = pos.y;
-      }
-    });
-    this.render();
-  }
-
-  async saveLayout(layoutNodes) {
-    try {
-      await fetch("/api/workflow/layout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodes: layoutNodes }),
-      });
-    } catch (e) {
-      console.warn("[WorkflowView] Failed to persist visual layout.");
-    }
-  }
-
-  async fetchGraphData() {
-    try {
-      const resp = await fetch("/api/workflow");
-      if (resp.ok) {
-        const data = await resp.json();
-        this.updateGraphData(data);
-      }
-    } catch (e) {
-      console.warn("[WorkflowView] Using local graph state.");
-    }
-  }
-
-  updateGraphData(data) {
-    if (!data) return;
-    this.nodes = data.nodes || [];
-    this.edges = data.edges || [];
-    this.rolesData = data.roles || {};
-    this.executionModes = data.execution_modes || {};
-    this.customLayout = data.workflow_layout?.nodes || {};
-    this.render();
-  }
-
-  startParticleAnimation() {
-    const bgCanvas = document.getElementById("temporal-canvas-bg");
-    if (!bgCanvas) return;
-    const ctx = bgCanvas.getContext("2d");
-    bgCanvas.width = 6000;
-    bgCanvas.height = 4000;
-
-    // Ambient Space Filaments
-    const filaments = [
-      { y: 350, amp: 90, freq: 0.0012, speed: 0.0008, color: "rgba(0, 229, 255, 0.12)", width: 3 },
-      { y: 550, amp: 140, freq: 0.0008, speed: -0.0006, color: "rgba(139, 92, 246, 0.15)", width: 4 },
-      { y: 800, amp: 110, freq: 0.0015, speed: 0.001, color: "rgba(0, 122, 255, 0.10)", width: 2.5 },
-      { y: 1100, amp: 160, freq: 0.0006, speed: -0.0007, color: "rgba(245, 158, 11, 0.08)", width: 3 },
-      { y: 1450, amp: 120, freq: 0.001, speed: 0.0009, color: "rgba(16, 185, 129, 0.09)", width: 2.5 },
-    ];
-
-    // Background Depth Stars/Dust
-    const stars = [];
-    for (let i = 0; i < 280; i++) {
-      stars.push({
-        x: Math.random() * 6000,
-        y: Math.random() * 4000,
-        r: Math.random() * 1.8 + 0.4,
-        alpha: Math.random() * 0.7 + 0.2,
-        twinkleSpeed: Math.random() * 0.02 + 0.005,
-      });
-    }
-
-    let t = 0;
-    const animate = () => {
-      t += 1;
-      this.particleOffset = (this.particleOffset + 1.2) % 100;
-      
-      // Update SVG path dashoffset
-      const paths = this.svg?.querySelectorAll(".active-particle-edge");
-      if (paths) {
-        paths.forEach(p => {
-          p.style.strokeDashoffset = -this.particleOffset;
-        });
-      }
-
-      // Draw Temporal Backdrop
-      ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-
-      // Layer 1: Ambient Stars/Dust
-      stars.forEach(s => {
-        const a = s.alpha + Math.sin(t * s.twinkleSpeed) * 0.25;
-        ctx.fillStyle = `rgba(180, 220, 255, ${Math.max(0.05, a)})`;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Layer 1b: Flowing Dimensional Filaments
-      filaments.forEach(f => {
-        ctx.strokeStyle = f.color;
-        ctx.lineWidth = f.width;
-        ctx.beginPath();
-        for (let x = 0; x <= 6000; x += 40) {
-          const y = f.y + Math.sin(x * f.freq + t * f.speed) * f.amp + Math.cos(x * 0.0005 + t * 0.0005) * 40;
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      });
-
-      // Layer 3: Volumetric Glow under Active / Broken Nodes
-      this.nodes.forEach(n => {
-        if (n.status === "ACTIVE" || n.status === "EXECUTING") {
-          const cx = n.x + 110;
-          const cy = n.y + 44;
-          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 180);
-          grad.addColorStop(0, "rgba(0, 229, 255, 0.28)");
-          grad.addColorStop(0.5, "rgba(0, 122, 255, 0.12)");
-          grad.addColorStop(1, "transparent");
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 180, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (n.status === "BROKEN" || n.status === "FAILED") {
-          const cx = n.x + 110;
-          const cy = n.y + 44;
-          const grad = ctx.createRadialGradient(cx, cy, 20, cx, cy, 190);
-          grad.addColorStop(0, "rgba(255, 26, 75, 0.35)");
-          grad.addColorStop(0.6, "rgba(255, 0, 85, 0.12)");
-          grad.addColorStop(1, "transparent");
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 190, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Electrical sparks
-          ctx.strokeStyle = "rgba(255, 80, 120, 0.8)";
-          ctx.lineWidth = 1.5;
-          for (let k = 0; k < 3; k++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.random() * 80 + 30;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + Math.cos(angle) * (dist * 0.5) + (Math.random() - 0.5) * 20, cy + Math.sin(angle) * (dist * 0.5) + (Math.random() - 0.5) * 20);
-            ctx.lineTo(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist);
-            ctx.stroke();
-          }
-        }
-      });
-
-      requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
-  }
-
-  highlightModel(provider, model) {
-    const targetNode = this.nodes.find(n => n.provider === provider && n.model === model);
-    if (targetNode && this.canvas) {
-      this.selectNode(targetNode);
-      this.panX = (this.canvas.clientWidth / 2) - ((targetNode.x + 110) * this.scale);
-      this.panY = (this.canvas.clientHeight / 2) - ((targetNode.y + 45) * this.scale);
-      this.updateViewportTransform();
-    }
-  }
-
-  render() {
-    if (!this.container || !this.svg) return;
-    this.container.innerHTML = "";
-    this.svg.innerHTML = "";
-
+    const activeNode = this.nodes.find(n => n.id === this.activeNodeId) || this.nodes[this.nodes.length - 1];
+    if (!activeNode) return;
+    const canvasW = this.canvas?.clientWidth || 1200;
+    const canvasH = this.canvas?.clientHeight || 800;
+    this.panX = canvasW / 2 - (activeNode.x + 110) * this.scale;
+    this.panY = canvasH / 2 - (activeNode.y + 40) * this.scale;
     this.updateViewportTransform();
-    this.renderEdges();
-    this.renderNodes();
   }
 
-  getActiveGraphData() {
-    const isExecutionMode = (this.mode === "RUNTIME" || this.mode === "EXECUTION");
-    if (isExecutionMode && this.execNodes?.length > 0) {
-      return { nodes: this.execNodes, edges: this.execEdges || [] };
-    }
-    return { nodes: this.nodes, edges: this.edges };
-  }
+  /* ===================================================================
+     SVG PLASMA DEFINITIONS & AMBIENT CANVAS
+     =================================================================== */
 
-  renderEdges() {
-    const { nodes, edges } = this.getActiveGraphData();
-    edges.forEach(e => {
-      const src = nodes.find(n => n.id === e.source || n.id === e.from);
-      const tgt = nodes.find(n => n.id === e.target || n.id === e.to);
-      if (!src || !tgt) return;
-
-      const x1 = src.x + 220;
-      const y1 = src.y + 44;
-      const x2 = tgt.x;
-      const y2 = tgt.y + 44;
-      const dx = Math.max(50, (x2 - x1) * 0.45);
-
-      const isFallback = e.type === "FALLBACK" || tgt.fallback_rank > 0;
-      const isActive = src.status === "COMPLETED" && (tgt.status === "ACTIVE" || tgt.status === "EXECUTING");
-      const isBroken = src.status === "BROKEN" || tgt.status === "BROKEN";
-
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
-      path.setAttribute("fill", "none");
-
-      if (isBroken) {
-        path.setAttribute("stroke", "var(--accent-broken)");
-        path.setAttribute("stroke-width", "2");
-        path.setAttribute("stroke-dasharray", "4,4");
-      } else if (isFallback) {
-        path.setAttribute("stroke", "rgba(255, 184, 0, 0.45)");
-        path.setAttribute("stroke-width", "2");
-        path.setAttribute("stroke-dasharray", "6,5");
-      } else {
-        path.setAttribute("stroke", isActive ? "var(--accent-cyan)" : "rgba(0, 240, 255, 0.25)");
-        path.setAttribute("stroke-width", isActive ? "2.5" : "1.5");
-      }
-
-      if (isActive) {
-        path.classList.add("active-particle-edge");
-        path.setAttribute("stroke-dasharray", "8,8");
-        path.setAttribute("filter", "drop-shadow(0 0 6px var(--accent-cyan))");
-      }
-
-      this.svg.appendChild(path);
-    });
-  }
-
-  renderNodes() {
-    const { nodes } = this.getActiveGraphData();
-    nodes.forEach(n => {
-      const el = document.createElement("div");
-      el.id = n.id;
-      const isSelected = this.selectedNodeId === n.id;
-      const isFallback = n.fallback_rank > 0;
-      const isRateLimited = n.status === "RATE_LIMITED";
-      const isBroken = n.status === "BROKEN";
-      const isActive = n.status === "ACTIVE" || n.status === "EXECUTING";
-
-      el.className = `temporal-node ${isActive ? 'node-active' : ''} ${isFallback ? 'node-fallback' : ''} ${isRateLimited ? 'node-ratelimited' : ''} ${isBroken ? 'node-broken' : ''} ${isSelected ? 'node-selected' : ''}`;
-      el.style.left = `${n.x}px`;
-      el.style.top = `${n.y}px`;
-
-      let statusColor = "var(--text-muted)";
-      if (isActive) statusColor = "var(--accent-cyan)";
-      else if (n.status === "COMPLETED") statusColor = "var(--accent-emerald)";
-      else if (isRateLimited) statusColor = "var(--accent-amber)";
-      else if (isBroken || n.status === "FAILED") statusColor = "var(--accent-broken)";
-
-      const roleBadgeText = n.role ? n.role.toUpperCase() : "STEP";
-      const modelShort = n.model ? n.model.split('/').pop() : "System";
-      const providerLabel = n.provider ? n.provider.toUpperCase() : "";
-
-      el.innerHTML = `
-        <div class="node-header">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="node-role-badge">${roleBadgeText}</span>
-            ${isFallback ? `<span class="fallback-rank-tag">FB #${n.fallback_rank}</span>` : ''}
-          </div>
-          <span class="node-status-pip" style="color: ${statusColor};">
-            <span class="status-dot" style="background: ${statusColor};"></span>
-            ${n.status}
-          </span>
-        </div>
-        <div class="node-title">${n.label || modelShort}</div>
-        <div class="node-meta">
-          <span>${providerLabel} • ${modelShort}</span>
-          ${n.latency_ms ? `<span>• <strong>${n.latency_ms}ms</strong></span>` : ''}
-        </div>
-        ${this.mode === "DESIGN" && n.role in this.rolesData ? `<div class="design-edit-hint">Click to edit candidate chain ➔</div>` : ''}
-      `;
-
-      el.addEventListener("mousedown", (e) => this.onNodeMouseDown(e, n));
-      el.addEventListener("click", () => this.selectNode(n));
-
-      this.container.appendChild(el);
-    });
-  }
-
-  onNodeMouseDown(e, n) {
-    if (e.target.closest(".btn-mini")) return;
-    this.isDraggingNode = true;
-    this.draggedNode = n;
-
-    const rect = this.canvas.getBoundingClientRect();
-    const canvasX = (e.clientX - rect.left - this.panX) / this.scale;
-    const canvasY = (e.clientY - rect.top - this.panY) / this.scale;
-
-    this.dragOffset = {
-      x: canvasX - n.x,
-      y: canvasY - n.y,
-    };
-    e.stopPropagation();
-  }
-
-  selectNode(node) {
-    this.selectedNodeId = node.id;
-    this.activeRole = node.role;
-    this.render();
-    this.openInspector(node);
-  }
-
-  openInspector(node) {
-    if (!this.drawer) return;
-    this.drawer.classList.add("open");
-
-    const drawerTitle = document.getElementById("drawer-title");
-    const drawerContent = document.getElementById("drawer-content");
-    if (!drawerTitle || !drawerContent) return;
-
-    drawerTitle.textContent = `${node.role.toUpperCase()} — Candidate Chain Inspector`;
-
-    const candidates = this.rolesData[node.role] || [
-      { provider: node.provider || "groq", model: node.model || "default" }
-    ];
-    const currentMode = this.executionModes[node.role] || "FALLBACK_ORDER";
-
-    let candidatesListHtml = "";
-    candidates.forEach((c, idx) => {
-      const isPrimary = (idx === 0);
-      candidatesListHtml += `
-        <div class="candidate-item-card" data-index="${idx}">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="drag-handle" title="Execution Priority Rank">#${idx + 1}</span>
-              <div>
-                <strong style="font-size: 0.95rem;">${c.model.split('/').pop()}</strong>
-                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${c.provider} • ${c.model}</div>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              ${isPrimary 
-                ? `<span class="badge-primary">★ PRIMARY</span>` 
-                : `<span class="badge-fallback">FALLBACK #${idx}</span>`
-              }
-              ${this.mode === "DESIGN" ? `
-                <div class="btn-group-reorder">
-                  <button class="btn-mini btn-move-up" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''} title="Move Up Execution Priority">▲</button>
-                  <button class="btn-mini btn-move-down" data-idx="${idx}" ${idx === candidates.length - 1 ? 'disabled' : ''} title="Move Down Execution Priority">▼</button>
-                  ${!isPrimary ? `<button class="btn-mini btn-set-primary" data-idx="${idx}" title="Set as Primary">★</button>` : ''}
-                </div>
-              ` : ''}
-            </div>
-          </div>
-
-          <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;">
-            <span class="cap-pill">Streaming ✓</span>
-            <span class="cap-pill">Tool Calling ✓</span>
-            ${node.role === "vision" ? `<span class="cap-pill">Vision ✓</span>` : ''}
-            <span class="cap-pill health-healthy">● Healthy</span>
-          </div>
-        </div>
-      `;
-    });
-
-    drawerContent.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 16px;">
-        <!-- Mode Selector -->
-        <div>
-          <div style="font-family: var(--font-brand); font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
-            EXECUTION MODE
-          </div>
-          <div class="mode-selector-group">
-            <button class="mode-pill-btn ${currentMode === 'PRIMARY_ONLY' ? 'active' : ''}" data-mode="PRIMARY_ONLY">PRIMARY ONLY</button>
-            <button class="mode-pill-btn ${currentMode === 'FALLBACK_ORDER' ? 'active' : ''}" data-mode="FALLBACK_ORDER">FALLBACK ORDER</button>
-            <button class="mode-pill-btn ${currentMode === 'CUSTOM' ? 'active' : ''}" data-mode="CUSTOM">CUSTOM</button>
-          </div>
-        </div>
-
-        <div class="inspector-section">
-          <div style="font-family: var(--font-brand); font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px;">
-            SEMANTIC EXECUTION ORDER (${candidates.length} CANDIDATES)
-          </div>
-          <div class="candidates-reorder-container" id="candidates-container">
-            ${candidatesListHtml}
-          </div>
-        </div>
-
-        ${this.mode === "DESIGN" ? `
-          <div class="inspector-actions">
-            <button class="btn-action btn-apply-chain" id="btn-apply-role-chain" style="background: var(--accent-cyan); color: #000; font-weight: 700;">Apply Execution Order</button>
-            <button class="btn-action" id="btn-discard-role-chain">Discard</button>
-          </div>
-          <div id="inspector-msg" style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); margin-top: 6px;"></div>
-        ` : `
-          <div style="font-size: 0.8rem; color: var(--text-muted); padding: 8px 12px; background: rgba(0,0,0,0.3); border-radius: 6px;">
-            Switch to <strong>DESIGN MODE</strong> from toolbar to configure candidate execution priority and fallback modes.
-          </div>
-        `}
-      </div>
+  setupPlasmaDefs() {
+    if (!this.svg) return;
+    this.svg.innerHTML = `
+      <defs>
+        <!-- Luminous Glow Filter for Plasma Core & Filaments -->
+        <filter id="plasma-glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur1" />
+          <feGaussianBlur stdDeviation="10" result="blur2" />
+          <feMerge>
+            <feMergeNode in="blur2" />
+            <feMergeNode in="blur1" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="plasma-glow-amber" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <filter id="plasma-glow-crimson" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <g id="plasma-edges-group"></g>
+      <g id="plasma-particles-group"></g>
     `;
+  }
 
-    if (this.mode === "DESIGN") {
-      this.setupInspectorReorderEvents(node.role, candidates, currentMode);
+  initAmbientCanvas() {
+    if (!this.canvasBg) return;
+    const ctx = this.canvasBg.getContext("2d");
+    if (!ctx) return;
+
+    this.resizeCanvasBg();
+    window.addEventListener("resize", () => this.resizeCanvasBg());
+
+    // Create subtle ambient particles
+    this.ambientParticles = [];
+    for (let i = 0; i < 35; i++) {
+      this.ambientParticles.push({
+        x: Math.random() * (this.canvasBg.width || 1400),
+        y: Math.random() * (this.canvasBg.height || 900),
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        radius: Math.random() * 1.5 + 0.5,
+        alpha: Math.random() * 0.2 + 0.05,
+      });
     }
   }
 
-  setupInspectorReorderEvents(role, candidates, currentMode) {
-    const list = [...candidates];
-    let selectedMode = currentMode;
+  resizeCanvasBg() {
+    if (!this.canvasBg || !this.canvas) return;
+    this.canvasBg.width = this.canvas.clientWidth;
+    this.canvasBg.height = this.canvas.clientHeight;
+  }
 
-    document.querySelectorAll(".mode-pill-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".mode-pill-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        selectedMode = btn.getAttribute("data-mode");
-        this.executionModes[role] = selectedMode;
-      });
-    });
+  startPlasmaAnimation() {
+    const renderFrame = () => {
+      this.particleOffset = (this.particleOffset + 1.2) % 1000;
+      this.updateAmbientCanvas();
+      this.updatePlasmaEdges();
+      this.animFrameId = requestAnimationFrame(renderFrame);
+    };
+    renderFrame();
+  }
 
-    document.querySelectorAll(".btn-move-up").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.getAttribute("data-idx"), 10);
-        if (idx > 0) {
-          const temp = list[idx];
-          list[idx] = list[idx - 1];
-          list[idx - 1] = temp;
-          this.rolesData[role] = list;
-          this.openInspector({ role, provider: list[0].provider, model: list[0].model, id: this.selectedNodeId });
-        }
-      });
-    });
+  updateAmbientCanvas() {
+    if (!this.canvasBg) return;
+    const ctx = this.canvasBg.getContext("2d");
+    if (!ctx) return;
 
-    document.querySelectorAll(".btn-move-down").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.getAttribute("data-idx"), 10);
-        if (idx < list.length - 1) {
-          const temp = list[idx];
-          list[idx] = list[idx + 1];
-          list[idx + 1] = temp;
-          this.rolesData[role] = list;
-          this.openInspector({ role, provider: list[0].provider, model: list[0].model, id: this.selectedNodeId });
-        }
-      });
-    });
+    ctx.clearRect(0, 0, this.canvasBg.width, this.canvasBg.height);
 
-    document.querySelectorAll(".btn-set-primary").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const idx = parseInt(btn.getAttribute("data-idx"), 10);
-        const item = list.splice(idx, 1)[0];
-        list.unshift(item);
-        this.rolesData[role] = list;
-        this.openInspector({ role, provider: list[0].provider, model: list[0].model, id: this.selectedNodeId });
-      });
-    });
+    // Draw dark radial energy vignette
+    const grad = ctx.createRadialGradient(
+      this.canvasBg.width / 2, this.canvasBg.height / 2, 80,
+      this.canvasBg.width / 2, this.canvasBg.height / 2, this.canvasBg.width * 0.7
+    );
+    grad.addColorStop(0, "rgba(0, 240, 255, 0.03)");
+    grad.addColorStop(0.5, "rgba(8, 12, 22, 0.4)");
+    grad.addColorStop(1, "rgba(2, 4, 8, 0.95)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, this.canvasBg.width, this.canvasBg.height);
 
-    document.getElementById("btn-apply-role-chain")?.addEventListener("click", async () => {
-      const msgBox = document.getElementById("inspector-msg");
-      if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-cyan);">Saving changes to router...</span>`;
+    // Draw subtle floating ambient energy particles
+    this.ambientParticles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = this.canvasBg.width;
+      if (p.x > this.canvasBg.width) p.x = 0;
+      if (p.y < 0) p.y = this.canvasBg.height;
+      if (p.y > this.canvasBg.height) p.y = 0;
 
-      this.send({ action: "UPDATE_ROLE", role: role, candidates: list, execution_mode: selectedMode });
-
-      try {
-        const resp = await fetch("/api/roles/update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: role, candidates: list, execution_mode: selectedMode }),
-        });
-        const res = await resp.json();
-        if (res.success) {
-          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Execution order for '${role}' updated successfully.</span>`;
-          this.fetchGraphData();
-        } else {
-          if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-broken);">✗ ${res.error}</span>`;
-        }
-      } catch (e) {
-        if (msgBox) msgBox.innerHTML = `<span style="color: var(--accent-emerald);">✓ Role update broadcasted.</span>`;
-      }
-    });
-
-    document.getElementById("btn-discard-role-chain")?.addEventListener("click", () => {
-      this.fetchGraphData();
-      this.closeDrawer();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0, 240, 255, ${p.alpha})`;
+      ctx.fill();
     });
   }
 
-  closeDrawer() {
-    if (this.drawer) {
-      this.drawer.classList.remove("open");
+  /* ===================================================================
+     DYNAMIC EVENT-DRIVEN GRAPH MATERIALIZATION
+     =================================================================== */
+
+  resetGraph(taskTitle = "Executing Task", taskId = null) {
+    this.activeTaskId = taskId || `task_${Date.now()}`;
+    this.nodes = [];
+    this.edges = [];
+    this.activeNodeId = null;
+    this.activeEdgeId = null;
+
+    if (this.nodesContainer) this.nodesContainer.innerHTML = "";
+    if (this.taskLabel) this.taskLabel.textContent = taskTitle;
+    if (this.stepBadge) this.stepBadge.classList.remove("hidden");
+    if (this.executionBanner) this.executionBanner.classList.add("hidden");
+
+    this.panX = 80;
+    this.panY = 240;
+    this.updateViewportTransform();
+  }
+
+  handleRuntimeEvent(eventType, data = {}) {
+    // 1. Task Started / Voice Activation
+    if (eventType === "TASK_STARTED" || eventType === "ACTIVATION_STARTED") {
+      const prompt = data.user_input || data.prompt || (data.source ? `Voice Command (${data.source})` : "Executing Task");
+      this.resetGraph(prompt, data.task_id);
+
+      // Materialize STT
+      this.materializeNode({
+        id: "node_stt",
+        label: "STT INPUT",
+        sub: data.source === "VOICE" ? "NVIDIA Canary-Qwen" : "User Prompt",
+        status: "ACTIVE",
+        role: "stt",
+        x: 40,
+        y: 180,
+      });
+
+      // Materialize Router
+      setTimeout(() => {
+        this.materializeNode({
+          id: "node_router",
+          label: "INTENT ROUTER",
+          sub: "Intent & Policy Dispatch",
+          status: "ACTIVE",
+          role: "router",
+          x: 280,
+          y: 180,
+        });
+        this.materializeEdge("e_stt_router", "node_stt", "node_router", "ACTIVE");
+        this.updateStep(1, 4, "Routing Intent");
+      }, 200);
     }
-    this.selectedNodeId = null;
-    this.render();
-  }
 
-  handleRuntimeEvent(event, data) {
-    const banner = document.getElementById("workflow-execution-banner");
-    const bannerSummary = document.getElementById("banner-task-summary");
+    // 2. Model Selection
+    else if (eventType === "MODEL_SELECTED") {
+      const modelId = `node_model_${data.role || 'reasoning'}`;
+      const aliasIds = [];
+      if (data.provider) aliasIds.push(`node_model_${data.provider.toLowerCase()}`);
+      this.materializeNode({
+        id: modelId,
+        aliasIds: aliasIds,
+        label: `${(data.role || 'REASONING').toUpperCase()}`,
+        sub: `${data.provider} • ${data.model ? data.model.split('/').pop() : 'Model'}`,
+        status: "ACTIVE",
+        role: data.role || "reasoning",
+        x: 520,
+        y: 180,
+      });
+      this.materializeEdge(`e_router_${modelId}`, "node_router", modelId, "ACTIVE");
+      this.updateStep(2, 4, `Selected ${data.model || 'Model'}`);
+    }
 
-    if (event === "TASK_STARTED") {
-      banner?.classList.add("hidden");
-      this.execNodes = [
-        { id: "node_stt", label: "COMMAND INGESTION", provider: "NVIDIA / Faster-Whisper", model: data.user_input || "Voice/Text Instruction", status: "COMPLETED", x: 80, y: 180, is_primary: true, role: "stt" },
-        { id: "node_router", label: "ROLE & INTENT ROUTER", provider: "Local", model: "Intent Engine", status: "ACTIVE", x: 360, y: 180, is_primary: true, role: "router" }
-      ];
-      this.execEdges = [
-        { id: "e_stt_router", source: "node_stt", target: "node_router", type: "PRIMARY" }
-      ];
-      this.render();
-    } else if (event === "MODEL_SELECTED") {
-      const routerNode = this.execNodes.find(n => n.id === "node_router");
-      if (routerNode) routerNode.status = "COMPLETED";
-
-      const modelId = `node_model_${data.provider}`;
-      if (!this.execNodes.find(n => n.id === modelId)) {
-        this.execNodes.push({
-          id: modelId,
-          label: "REASONING COGNITION",
-          provider: data.provider,
-          model: data.model,
-          status: "ACTIVE",
-          x: 640,
-          y: 180,
-          is_primary: true,
-          role: data.role || "reasoning"
-        });
-        this.execEdges.push({
-          id: `e_router_model_${data.provider}`,
-          source: "node_router",
-          target: modelId,
-          type: "PRIMARY"
-        });
+    // 3. Model Fallback / Rate Limited
+    else if (eventType === "MODEL_FALLBACK" || eventType === "MODEL_RATE_LIMITED") {
+      const primaryNode = this.nodes.find(n => n.role === data.role) || this.nodes[this.nodes.length - 1];
+      if (primaryNode) {
+        primaryNode.status = "RATE_LIMITED";
+        const el = document.getElementById(primaryNode.id);
+        if (el) el.className = "temporal-theater-node rate-limited";
       }
-      this.render();
-    } else if (event === "MODEL_FALLBACK") {
-      const failed = this.execNodes.find(n => n.provider === data.failed_provider);
-      if (failed) failed.status = "RATE_LIMITED";
 
-      const fbId = `node_fb_${data.fallback_provider}`;
-      if (!this.execNodes.find(n => n.id === fbId)) {
-        this.execNodes.push({
-          id: fbId,
-          label: "FALLBACK COGNITION",
-          provider: data.fallback_provider,
-          model: data.fallback_model,
-          status: "ACTIVE",
-          x: 640,
-          y: 320,
-          is_primary: false,
-          fallback_rank: 1,
-          role: "reasoning"
-        });
-        if (failed) {
-          this.execEdges.push({
-            id: `e_fb_${data.fallback_provider}`,
-            source: failed.id,
-            target: fbId,
-            type: "FALLBACK"
-          });
-        }
-      }
-      this.render();
-    } else if (event === "TOOL_STARTED") {
-      const activeModel = this.execNodes.find(n => n.id.startsWith("node_model") || n.id.startsWith("node_fb"));
-      if (activeModel) activeModel.status = "COMPLETED";
+      // Materialize Fallback Node
+      const fallbackId = `node_model_${data.role || 'reasoning'}_fallback`;
+      this.materializeNode({
+        id: fallbackId,
+        label: `FALLBACK: ${(data.role || 'REASONING').toUpperCase()}`,
+        sub: `${data.provider} • ${data.model ? data.model.split('/').pop() : 'Fallback'}`,
+        status: "FALLBACK_ACTIVE",
+        role: data.role || "reasoning",
+        x: 520,
+        y: 300,
+      });
 
-      const toolId = `node_tool_${data.tool}`;
-      if (!this.execNodes.find(n => n.id === toolId)) {
-        this.execNodes.push({
-          id: toolId,
-          label: `ACTION: ${data.tool.toUpperCase()}`,
-          provider: "Desktop Tools",
-          model: data.tool,
-          status: "ACTIVE",
-          x: 920,
-          y: 180,
-          is_primary: true,
-          role: "desktop"
-        });
-        if (activeModel) {
-          this.execEdges.push({
-            id: `e_model_tool_${data.tool}`,
-            source: activeModel.id,
-            target: toolId,
-            type: "PRIMARY"
-          });
-        }
+      if (primaryNode) {
+        this.materializeEdge(`e_fb_${fallbackId}`, primaryNode.id, fallbackId, "FALLBACK");
       }
-      this.render();
-    } else if (event === "TOOL_COMPLETED") {
-      const toolNode = this.execNodes.find(n => n.id.startsWith("node_tool") || n.id === "node_tools");
+    }
+
+    // 4. Tool Execution / Screen Perception
+    else if (eventType === "TOOL_STARTED" || eventType === "SCREEN_CAPTURE_STARTED" || eventType === "VISION_STARTED") {
+      const toolName = data.tool || (eventType === "SCREEN_CAPTURE_STARTED" ? "capture_screen" : (eventType === "VISION_STARTED" ? "inspect_screen" : "tool"));
+      const toolId = `node_tool_${toolName}`;
+      const aliasIds = [];
+      if (eventType === "SCREEN_CAPTURE_STARTED" || eventType === "VISION_STARTED" || toolName === "capture_screen" || toolName === "inspect_screen") {
+        aliasIds.push("node_vision");
+      }
+
+      this.materializeNode({
+        id: toolId,
+        aliasIds: aliasIds,
+        label: toolName.toUpperCase().replace(/_/g, " "),
+        sub: data.arguments?.query ? `Query: ${data.arguments.query}` : "Executing Action",
+        status: "ACTIVE",
+        role: "tool",
+        x: 760,
+        y: 180,
+      });
+
+      const prevNode = this.nodes[this.nodes.length - 2];
+      if (prevNode) {
+        this.materializeEdge(`e_model_tool`, prevNode.id, toolId, "ACTIVE");
+      }
+      this.updateStep(3, 4, `Executing ${toolName}`);
+    }
+
+    // 5. Tool Completed / Screen Captured
+    else if (eventType === "TOOL_COMPLETED" || eventType === "SCREEN_CAPTURED") {
+      const toolNode = this.nodes.find(n => n.role === "tool") || this.nodes[this.nodes.length - 1];
       if (toolNode) {
         toolNode.status = "COMPLETED";
-        if (data.latency_ms) toolNode.latency_ms = data.latency_ms;
+        const el = document.getElementById(toolNode.id);
+        if (el) el.className = "temporal-theater-node completed";
       }
-      this.render();
-    } else if (event === "TOOL_FAILED") {
-      const toolNode = this.execNodes.find(n => n.id.startsWith("node_tool") || n.id === "node_tools");
+
+      // Materialize Verification Node
+      this.materializeNode({
+        id: "node_verify",
+        label: "VERIFY & SYNTHESIZE",
+        sub: `Latency: ${data.latency_ms || 180}ms`,
+        status: "ACTIVE",
+        role: "verify",
+        x: 1000,
+        y: 180,
+      });
+
       if (toolNode) {
-        toolNode.status = "BROKEN";
-        toolNode.label = `FAILED: ${data.tool || 'Action'}`;
+        this.materializeEdge("e_tool_verify", toolNode.id, "node_verify", "ACTIVE");
       }
-      this.render();
-    } else if (event === "SCREEN_CAPTURE_STARTED" || event === "VISION_STARTED") {
-      const activeModel = this.execNodes.find(n => n.id.startsWith("node_model"));
-      if (!this.execNodes.find(n => n.id === "node_vision")) {
-        this.execNodes.push({
-          id: "node_vision",
-          label: "SCREEN PERCEPTION",
-          provider: "Qwen Vision",
-          model: "capture_screen",
-          status: "ACTIVE",
-          x: 920,
-          y: 320,
-          is_primary: true,
-          role: "vision"
-        });
-        if (activeModel) {
-          this.execEdges.push({
-            id: "e_model_vision",
-            source: activeModel.id,
-            target: "node_vision",
-            type: "PRIMARY"
-          });
-        }
-      }
-      this.render();
-    } else if (event === "TTS_STARTED") {
-      const lastNode = this.execNodes[this.execNodes.length - 1];
-      if (lastNode && lastNode.id !== "node_tts") {
-        this.execNodes.push({
-          id: "node_tts",
-          label: "AUDIO SYNTHESIS",
-          provider: "Fish Audio",
-          model: "S2.1 Streaming",
-          status: "ACTIVE",
-          x: 1200,
-          y: 180,
-          is_primary: true,
-          role: "tts"
-        });
-        this.execEdges.push({
-          id: "e_last_tts",
-          source: lastNode.id,
-          target: "node_tts",
-          type: "PRIMARY"
-        });
-      }
-      this.render();
-    } else if (event === "TASK_COMPLETED") {
-      this.execNodes.forEach(n => {
-        if (n.status === "ACTIVE" || n.status === "EXECUTING") {
-          n.status = "COMPLETED";
-        }
+    }
+
+    // 6. Agent Response / TTS
+    else if (eventType === "AGENT_RESPONSE" || eventType === "TTS_STARTED") {
+      this.materializeNode({
+        id: "node_tts",
+        label: "STREAMING TTS",
+        sub: "Fish Audio S2.1",
+        status: "ACTIVE",
+        role: "tts",
+        x: 1240,
+        y: 180,
       });
-      if (banner && bannerSummary) {
-        bannerSummary.textContent = `Completed in ${data.duration_seconds?.toFixed(2) || '0.42'}s • All nodes settled.`;
-        banner.classList.remove("hidden");
+
+      const verifyNode = this.nodes.find(n => n.id === "node_verify") || this.nodes[this.nodes.length - 2];
+      if (verifyNode) {
+        this.materializeEdge("e_verify_tts", verifyNode.id, "node_tts", "ACTIVE");
       }
-      this.render();
-    } else if (event === "TASK_CANCELLED") {
-      this.execNodes.forEach(n => {
-        if (n.status === "ACTIVE" || n.status === "EXECUTING") {
-          n.status = "CANCELLED";
-        }
-      });
-      if (banner && bannerSummary) {
-        bannerSummary.textContent = `Task cancelled by user interrupt.`;
-        banner.classList.remove("hidden");
-      }
-      this.render();
-    } else if (event === "ROLE_UPDATED") {
-      this.fetchGraphData();
-    } else if (event === "WORKFLOW_LAYOUT_UPDATED") {
-      this.customLayout = data.nodes || {};
+      this.updateStep(4, 4, "Synthesizing Audio");
+    }
+
+    // 7. Task Completed
+    else if (eventType === "TASK_COMPLETED") {
       this.nodes.forEach(n => {
-        if (n.id in this.customLayout) {
-          n.x = this.customLayout[n.id].x;
-          n.y = this.customLayout[n.id].y;
-        }
+        n.status = "COMPLETED";
+        const el = document.getElementById(n.id);
+        if (el) el.className = "temporal-theater-node completed";
       });
-      this.render();
+      this.edges.forEach(e => e.status = "COMPLETED");
+      this.renderEdges();
+
+      if (this.taskLabel) this.taskLabel.textContent = "✓ COMPLETED";
+      if (this.executionBanner) {
+        if (this.bannerSummary && data.result) {
+          this.bannerSummary.textContent = typeof data.result === "string" ? data.result : "Task execution completed successfully.";
+        }
+        this.executionBanner.classList.remove("hidden");
+      }
+    }
+
+    // 8. Task Cancelled
+    else if (eventType === "TASK_CANCELLED") {
+      this.nodes.forEach(n => {
+        if (n.status === "ACTIVE") n.status = "CANCELLED";
+        const el = document.getElementById(n.id);
+        if (el) el.className = "temporal-theater-node cancelled";
+      });
+      this.edges = [];
+      this.renderEdges();
+      this.canvas?.classList.add("cancelled");
+      if (this.taskLabel) this.taskLabel.textContent = "✕ CANCELLED BY USER";
+    }
+
+    // 9. Task Failed / Broken
+    else if (eventType === "TASK_FAILED" || eventType === "TOOL_FAILED") {
+      const activeNode = this.nodes.find(n => n.status === "ACTIVE") || this.nodes[this.nodes.length - 1];
+      if (activeNode) {
+        activeNode.status = "BROKEN";
+        const el = document.getElementById(activeNode.id);
+        if (el) el.className = "temporal-theater-node broken";
+      }
+      if (this.taskLabel) this.taskLabel.textContent = `✗ BROKEN: ${data.error || ''}`;
     }
   }
+
+  materializeNode(nodeData) {
+    if (this.nodes.some(n => n.id === nodeData.id)) return;
+    this.nodes.push(nodeData);
+    this.activeNodeId = nodeData.id;
+
+    const el = document.createElement("div");
+    el.id = nodeData.id;
+    el.className = `temporal-theater-node ${nodeData.status ? nodeData.status.toLowerCase() : 'active'}`;
+    el.style.left = `${nodeData.x}px`;
+    el.style.top = `${nodeData.y}px`;
+
+    let aliasHtml = "";
+    if (nodeData.aliasIds && Array.isArray(nodeData.aliasIds)) {
+      aliasHtml = nodeData.aliasIds.map(aid => `<span id="${aid}" class="hidden"></span>`).join("");
+    }
+
+    el.innerHTML = `
+      <div class="node-aura-pulse"></div>
+      <div class="node-content-box">
+        <div class="node-label-row">
+          <span class="node-status-dot"></span>
+          <span class="node-label">${nodeData.label}</span>
+        </div>
+        <div class="node-sub">${nodeData.sub || ''}</div>
+      </div>
+      ${aliasHtml}
+    `;
+
+    this.nodesContainer?.appendChild(el);
+    this.renderEdges();
+    this.centerOnActiveNode();
+  }
+
+  materializeEdge(id, fromId, toId, status = "ACTIVE") {
+    if (this.edges.some(e => e.id === id)) return;
+    this.edges.push({ id, source: fromId, target: toId, status });
+    this.activeEdgeId = id;
+    this.renderEdges();
+  }
+
+  updateStep(current, total, label) {
+    if (this.stepLabel) {
+      this.stepLabel.textContent = `Step ${current}/${total}: ${label}`;
+    }
+  }
+
+  /* ===================================================================
+     PLASMA PIPELINES RENDERER
+     =================================================================== */
+
+  renderEdges() {
+    const edgesGroup = this.svg?.querySelector("#plasma-edges-group");
+    if (!edgesGroup) return;
+    edgesGroup.innerHTML = "";
+
+    this.edges.forEach(edge => {
+      const fromEl = document.getElementById(edge.source);
+      const toEl = document.getElementById(edge.target);
+      if (!fromEl || !toEl) return;
+
+      const fx = parseInt(fromEl.style.left) + fromEl.offsetWidth;
+      const fy = parseInt(fromEl.style.top) + fromEl.offsetHeight / 2;
+      const tx = parseInt(toEl.style.left);
+      const ty = parseInt(toEl.style.top) + toEl.offsetHeight / 2;
+
+      const dx = (tx - fx) * 0.5;
+      const d = `M ${fx} ${fy} C ${fx + dx} ${fy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+
+      // 1. Plasma Outer Glow Strand
+      const outerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      outerPath.setAttribute("d", d);
+      outerPath.setAttribute("class", `plasma-strand-outer ${edge.status ? edge.status.toLowerCase() : 'active'}`);
+      edgesGroup.appendChild(outerPath);
+
+      // 2. Plasma Multi-Filaments (Thin energy threads)
+      [-2, 2].forEach(offset => {
+        const filPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const filD = `M ${fx} ${fy + offset} C ${fx + dx} ${fy - offset}, ${tx - dx} ${ty + offset}, ${tx} ${ty}`;
+        filPath.setAttribute("d", filD);
+        filPath.setAttribute("class", `plasma-filament ${edge.status ? edge.status.toLowerCase() : 'active'}`);
+        edgesGroup.appendChild(filPath);
+      });
+
+      // 3. Plasma Core Luminous Line
+      const corePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      corePath.setAttribute("d", d);
+      corePath.setAttribute("class", `plasma-core ${edge.status ? edge.status.toLowerCase() : 'active'}`);
+      edgesGroup.appendChild(corePath);
+    });
+  }
+
+  updatePlasmaEdges() {
+    const particlesGroup = this.svg?.querySelector("#plasma-particles-group");
+    if (!particlesGroup) return;
+    particlesGroup.innerHTML = "";
+
+    // Draw active directional energy pulses traveling along active edges
+    this.edges.forEach(edge => {
+      if (edge.status !== "ACTIVE" && edge.status !== "FALLBACK") return;
+
+      const fromEl = document.getElementById(edge.source);
+      const toEl = document.getElementById(edge.target);
+      if (!fromEl || !toEl) return;
+
+      const fx = parseInt(fromEl.style.left) + fromEl.offsetWidth;
+      const fy = parseInt(fromEl.style.top) + fromEl.offsetHeight / 2;
+      const tx = parseInt(toEl.style.left);
+      const ty = parseInt(toEl.style.top) + toEl.offsetHeight / 2;
+
+      // Calculate directional bezier interpolation
+      const t = (this.particleOffset % 100) / 100;
+      const u = 1 - t;
+      const cx1 = fx + (tx - fx) * 0.5;
+      const cy1 = fy;
+      const cx2 = tx - (tx - fx) * 0.5;
+      const cy2 = ty;
+
+      const px = u * u * u * fx + 3 * u * u * t * cx1 + 3 * u * t * t * cx2 + t * t * t * tx;
+      const py = u * u * u * fy + 3 * u * u * t * cy1 + 3 * u * t * t * cy2 + t * t * t * ty;
+
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", px);
+      circle.setAttribute("cy", py);
+      circle.setAttribute("r", "3.5");
+      circle.setAttribute("class", `plasma-energy-particle ${edge.status === 'FALLBACK' ? 'fallback' : ''}`);
+      particlesGroup.appendChild(circle);
+    });
+  }
+
+  // Compatibility helper for legacy callers
+  updateGraphData() {}
+  highlightModel() {}
 }
