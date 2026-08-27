@@ -135,10 +135,23 @@ class OpenAICompatibleProvider(LLMProvider):
                         except ValueError:
                             pass
                     self.health.record_failure(resp.text, status_code=resp.status_code, retry_after=retry_after)
+                    try:
+                        from app.core.resource_cache import ResourceStateCache
+                        if resp.status_code == 429:
+                            ResourceStateCache().record_429(self.provider_name, self.model, retry_after=retry_after or 10.0, error_message=resp.text)
+                        else:
+                            ResourceStateCache().record_failure(self.provider_name, self.model, status_code=resp.status_code, error_message=resp.text)
+                    except Exception:
+                        pass
                     raise RuntimeError(f"[{self.provider_name}] HTTP {resp.status_code}: {resp.text}")
 
                 resp_json = resp.json()
                 self.health.record_success(elapsed_ms)
+                try:
+                    from app.core.resource_cache import ResourceStateCache
+                    ResourceStateCache().update_from_headers(self.provider_name, self.model, resp.headers, latency_ms=elapsed_ms)
+                except Exception:
+                    pass
 
                 choice = resp_json.get("choices", [{}])[0]
                 message = choice.get("message", {})

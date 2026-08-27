@@ -80,6 +80,33 @@ export class WorkflowView {
     });
     document.getElementById("btn-fit-screen")?.addEventListener("click", () => this.fitToScreen());
     document.getElementById("btn-center-active")?.addEventListener("click", () => this.centerOnActiveNode());
+    document.getElementById("btn-mode-design")?.addEventListener("click", () => this.renderDesignTopology());
+  }
+
+  renderDesignTopology() {
+    if (!this.nodesContainer) return;
+    this.nodesContainer.innerHTML = "";
+    this.nodes.clear();
+    const roles = ["stt", "router", "reasoning", "fast", "desktop", "vision", "ocr", "embeddings"];
+    roles.forEach((r, idx) => {
+      const el = document.createElement("div");
+      el.id = `node_${r}_primary`;
+      el.className = "temporal-node temporal-materialized";
+      el.style.left = `${100 + (idx % 4) * 220}px`;
+      el.style.top = `${100 + Math.floor(idx / 4) * 160}px`;
+      el.innerHTML = `
+        <div class="node-badge node-role">${r.toUpperCase()}</div>
+        <div class="node-title">${r.toUpperCase()} Processing</div>
+      `;
+      el.addEventListener("click", () => {
+        const drawer = document.getElementById("workflow-inspector-drawer");
+        if (drawer) {
+          drawer.classList.remove("hidden");
+          drawer.classList.add("open");
+        }
+      });
+      this.nodesContainer.appendChild(el);
+    });
   }
 
   setupPanZoom() {

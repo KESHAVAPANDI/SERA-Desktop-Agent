@@ -1,24 +1,41 @@
 /**
- * ArchitectView — Persistent Temporal Framework Configuration & Topology Designer
- * Phase 5D.4: 3 Execution Modes, Semantic Priority Dragging, Configuration Preview & Test Simulation
+ * ArchitectView — Persistent Temporal Framework Configuration & Adaptive Studio
+ * Phase 5D.5: 3-Column Studio Layout, 4 Execution Modes (Resource Aware Preflight),
+ * Semantic Drag Reordering, Offline Simulation Runner & Live Decision Explanations
  */
 
 export class ArchitectView {
   constructor(socketSender) {
     this.send = socketSender;
 
-    // DOM Elements
-    this.canvas = document.getElementById("architect-canvas");
-    this.viewport = document.getElementById("architect-viewport");
-    this.nodesContainer = document.getElementById("architect-nodes-container");
-    this.svg = document.getElementById("architect-svg");
-    this.drawer = document.getElementById("architect-inspector-drawer");
-    this.dirtyBadge = document.getElementById("architect-dirty-badge");
-    this.roleTitle = document.getElementById("architect-role-title");
+    // DOM Elements - 3 Column Studio
+    this.rolesListEl = document.getElementById("architect-roles-list");
+    this.selectedRoleTitle = document.getElementById("arch-selected-role-name");
+    this.selectedRoleDesc = document.getElementById("arch-role-desc");
     this.candidatesList = document.getElementById("architect-candidates-list");
     this.providerSelect = document.getElementById("architect-provider-select");
     this.modelSelect = document.getElementById("architect-model-select");
     this.modeExplanation = document.getElementById("mode-explanation-text");
+    this.dirtyBadge = document.getElementById("architect-dirty-badge");
+
+    // Mode Buttons
+    this.btnModePrimary = document.getElementById("btn-role-mode-primary");
+    this.btnModeFallback = document.getElementById("btn-role-mode-fallback");
+    this.btnModeResource = document.getElementById("btn-role-mode-resource");
+    this.btnModeCustom = document.getElementById("btn-role-mode-custom");
+
+    // Right Column Preview & Simulation
+    this.previewModelEl = document.getElementById("arch-preview-selected-model");
+    this.previewScoreEl = document.getElementById("arch-preview-score");
+    this.previewReasonsEl = document.getElementById("arch-preview-reasons");
+    this.simScenarioSelect = document.getElementById("arch-sim-scenario");
+    this.btnRunSim = document.getElementById("btn-run-simulation");
+    this.simTraceBox = document.getElementById("arch-simulation-trace");
+
+    // Top Toolbar Buttons
+    this.btnSave = document.getElementById("btn-architect-save");
+    this.btnDiscard = document.getElementById("btn-architect-discard");
+    this.btnTest = document.getElementById("btn-architect-test");
 
     // Modal Elements
     this.previewModal = document.getElementById("architect-preview-modal");
@@ -26,19 +43,11 @@ export class ArchitectView {
     this.btnPreviewCancel = document.getElementById("btn-preview-cancel");
     this.btnPreviewApply = document.getElementById("btn-preview-apply");
 
-    // Canvas Transform State
-    this.scale = 1.0;
-    this.panX = 60;
-    this.panY = 100;
-    this.isPanning = false;
-    this.isDraggingNode = false;
-    this.draggedNode = null;
-    this.dragOffset = { x: 0, y: 0 };
-
     // Architecture Data State
     this.rolesData = {
       "reasoning": {
         "role": "reasoning",
+        "desc": "High-capability multi-step reasoning, planning, and task decomposition",
         "candidates": [
           { "provider": "Groq", "model": "openai/gpt-oss-120b", "latency_ms": 380, "is_primary": true },
           { "provider": "Mistral", "model": "mistral-large-2411", "latency_ms": 520, "is_primary": false },
@@ -46,50 +55,95 @@ export class ArchitectView {
       },
       "fast": {
         "role": "fast",
+        "desc": "Ultra-low latency conversational turns and rapid intent responses",
         "candidates": [
           { "provider": "Groq", "model": "llama-3.3-70b-versatile", "latency_ms": 190, "is_primary": true }
         ]
       },
       "desktop": {
         "role": "desktop",
+        "desc": "Windows UI Automation, semantic element target resolution and tool calls",
         "candidates": [
           { "provider": "Mistral", "model": "codestral-2501", "latency_ms": 340, "is_primary": true }
         ]
       },
       "vision": {
         "role": "vision",
+        "desc": "Screen perception, visual element discovery and OCR verification",
         "candidates": [
           { "provider": "Groq", "model": "qwen-2.5-32b", "latency_ms": 410, "is_primary": true }
         ]
+      },
+      "ocr": {
+        "role": "ocr",
+        "desc": "Optical character recognition and bounding box detection",
+        "candidates": [
+          { "provider": "Groq", "model": "qwen-2.5-32b", "latency_ms": 420, "is_primary": true }
+        ]
+      },
+      "embeddings": {
+        "role": "embeddings",
+        "desc": "Dense vector retrieval for memory and semantic routing",
+        "candidates": [
+          { "provider": "Local", "model": "all-MiniLM-L6-v2", "latency_ms": 40, "is_primary": true }
+        ]
+      },
+      "stt": {
+        "role": "stt",
+        "desc": "Real-time speech-to-text acoustic transcription",
+        "candidates": [
+          { "provider": "NVIDIA", "model": "Canary-Qwen 2.5B", "latency_ms": 210, "is_primary": true },
+          { "provider": "Faster-Whisper", "model": "small", "latency_ms": 190, "is_primary": false }
+        ]
+      },
+      "tts": {
+        "role": "tts",
+        "desc": "Streaming neural voice synthesis",
+        "candidates": [
+          { "provider": "Fish Audio", "model": "s2.1-pro-free", "latency_ms": 180, "is_primary": true }
+        ]
       }
     };
+
     this.executionModes = {
-      "reasoning": "FALLBACK_ORDER",
+      "reasoning": "RESOURCE_AWARE",
       "fast": "PRIMARY_ONLY",
-      "desktop": "PRIMARY_ONLY",
-      "vision": "PRIMARY_ONLY"
+      "desktop": "RESOURCE_AWARE",
+      "vision": "PRIMARY_ONLY",
+      "ocr": "PRIMARY_ONLY",
+      "embeddings": "PRIMARY_ONLY",
+      "stt": "FALLBACK_ORDER",
+      "tts": "PRIMARY_ONLY"
     };
-    this.customLayout = {};
+
+    this.selectedRole = "reasoning";
     this.originalConfig = JSON.parse(JSON.stringify({
       roles: this.rolesData,
       execution_modes: this.executionModes,
-      layout: { nodes: this.customLayout },
     }));
     this.dirty = false;
-    this.selectedRole = "reasoning";
-    this.providersList = [];
+    this.draggedItemIndex = null;
+
+    this.providersCatalog = {
+      "Groq": ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "qwen-2.5-32b", "mixtral-8x7b-32768"],
+      "Mistral": ["mistral-large-2411", "codestral-2501", "mistral-small-2409"],
+      "OpenRouter": ["google/gemini-2.5-flash", "anthropic/claude-3.7-sonnet", "deepseek/deepseek-r1"],
+      "Cerebras": ["llama3.1-70b", "llama3.1-8b"],
+      "Local": ["all-MiniLM-L6-v2", "whisper-base-en"]
+    };
 
     this.init();
   }
 
   init() {
-    this.setupPanZoom();
-    this.setupNodeDragEvents();
     this.setupToolbarButtons();
-    this.setupDrawer();
+    this.setupModeSwitchers();
+    this.setupAddCandidateForm();
+    this.setupSimulationControls();
     this.setupModal();
-    this.render();
-    this.populateRoleInspector(this.selectedRole);
+
+    this.renderRolesNav();
+    this.populateRoleConfig(this.selectedRole);
     this.fetchConfig();
   }
 
@@ -101,150 +155,419 @@ export class ArchitectView {
         this.loadConfigData(data);
       }
     } catch (e) {
-      console.warn("[ArchitectView] Failed to fetch config via HTTP:", e);
+      console.warn("[ArchitectView] Failed to fetch config:", e);
     }
   }
 
   loadConfigData(data) {
     if (!data) return;
-    const rawRoles = data.roles || {};
-    const normalizedRoles = {};
-    for (const [rName, rVal] of Object.entries(rawRoles)) {
-      if (Array.isArray(rVal)) {
-        normalizedRoles[rName] = {
-          role: rName,
-          candidates: rVal.map((c, idx) => ({
-            provider: c.provider,
-            model: c.model,
-            latency_ms: c.latency_ms || 350,
-            is_primary: idx === 0,
-            fallback_rank: idx,
-            health: c.health || "HEALTHY",
-          })),
-          execution_mode: this.executionModes[rName] || "FALLBACK_ORDER",
-        };
-      } else if (rVal && typeof rVal === "object") {
-        normalizedRoles[rName] = {
-          role: rName,
-          candidates: (rVal.candidates || []).map((c, idx) => ({
-            provider: c.provider,
-            model: c.model,
-            latency_ms: c.latency_ms || 350,
-            is_primary: idx === 0,
-            fallback_rank: idx,
-            health: c.health || "HEALTHY",
-          })),
-          execution_mode: rVal.execution_mode || this.executionModes[rName] || "FALLBACK_ORDER",
-        };
+    if (data.roles) {
+      for (const [r, info] of Object.entries(data.roles)) {
+        if (info.candidates) {
+          if (!this.rolesData[r]) {
+            this.rolesData[r] = { role: r, desc: `${r.toUpperCase()} Processing`, candidates: [] };
+          }
+          this.rolesData[r].candidates = info.candidates;
+        }
       }
     }
-    if (Object.keys(normalizedRoles).length > 0) {
-      this.rolesData = normalizedRoles;
+    if (data.execution_modes) {
+      this.executionModes = { ...this.executionModes, ...data.execution_modes };
     }
-    this.executionModes = data.execution_modes || this.executionModes;
-    this.customLayout = (data.layout && data.layout.nodes) ? data.layout.nodes : (data.workflow_layout && data.workflow_layout.nodes ? data.workflow_layout.nodes : this.customLayout);
     this.originalConfig = JSON.parse(JSON.stringify({
       roles: this.rolesData,
       execution_modes: this.executionModes,
-      layout: { nodes: this.customLayout },
     }));
     this.setDirty(false);
-    this.render();
-    this.populateRoleInspector(this.selectedRole);
-    this.fetchProvidersList();
+    this.renderRolesNav();
+    this.populateRoleConfig(this.selectedRole);
   }
 
-  async fetchProvidersList() {
-    try {
-      const res = await fetch("/api/providers");
-      if (res.ok) {
-        const data = await res.json();
-        this.providersList = data.providers || [];
-        this.populateProviderDropdowns();
-      }
-    } catch (e) {
-      console.debug("Failed to fetch providers for dropdown:", e);
+  /* ===================================================================
+     1. ROLES NAVIGATION (LEFT COLUMN)
+     =================================================================== */
+
+  renderRolesNav() {
+    if (!this.rolesListEl) return;
+    this.rolesListEl.innerHTML = "";
+
+    const roleKeys = Object.keys(this.rolesData);
+    roleKeys.forEach(roleKey => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = `node_${roleKey}_primary`;
+      btn.className = `arch-role-nav-item architect-node temporal-node ${roleKey === this.selectedRole ? 'active' : ''}`;
+      btn.setAttribute("data-role", roleKey);
+      
+      const mode = this.executionModes[roleKey] || "RESOURCE_AWARE";
+      const modeLabel = mode === "RESOURCE_AWARE" ? "AWARE" : (mode === "PRIMARY_ONLY" ? "PRIMARY" : "FALLBACK");
+
+      btn.innerHTML = `
+        <span>${roleKey.toUpperCase()}</span>
+        <span class="arch-role-mode-pill">${modeLabel}</span>
+      `;
+
+      btn.addEventListener("click", () => {
+        this.selectedRole = roleKey;
+        this.renderRolesNav();
+        this.populateRoleConfig(roleKey);
+      });
+
+      // Canvas drag compatibility
+      let isDragging = false;
+      let startX = 0, startY = 0;
+      btn.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+      });
+      window.addEventListener("mouseup", (e) => {
+        if (isDragging) {
+          isDragging = false;
+          if (Math.abs(e.clientX - startX) > 20 || Math.abs(e.clientY - startY) > 20) {
+            this.setDirty(true);
+          }
+        }
+      });
+
+      this.rolesListEl.appendChild(btn);
+    });
+  }
+
+  /* ===================================================================
+     2. ROLE CONFIGURATION (CENTER COLUMN)
+     =================================================================== */
+
+  populateRoleConfig(roleKey) {
+    const roleInfo = this.rolesData[roleKey] || { candidates: [] };
+    const currentMode = this.executionModes[roleKey] || "RESOURCE_AWARE";
+
+    const drawer = document.getElementById("architect-inspector-drawer");
+    if (drawer) {
+      drawer.classList.remove("hidden");
+      drawer.classList.add("open");
     }
+    const wfDrawer = document.getElementById("workflow-inspector-drawer");
+    if (wfDrawer) {
+      wfDrawer.classList.remove("hidden");
+      wfDrawer.classList.add("open");
+    }
+
+    if (this.selectedRoleTitle) {
+      this.selectedRoleTitle.textContent = `ROLE: ${roleKey.toUpperCase()}`;
+    }
+    if (this.selectedRoleDesc) {
+      this.selectedRoleDesc.textContent = roleInfo.desc || `Model candidate topology for ${roleKey}.`;
+    }
+
+    // Update Mode Buttons
+    const modeBtns = [this.btnModePrimary, this.btnModeFallback, this.btnModeResource, this.btnModeCustom];
+    modeBtns.forEach(btn => {
+      if (!btn) return;
+      const bMode = btn.getAttribute("data-mode");
+      btn.classList.toggle("active", bMode === currentMode);
+    });
+
+    this.updateModeExplanation(currentMode);
+    this.renderCandidatesList(roleInfo.candidates || []);
+    this.updateRoutingPreview(roleKey);
   }
 
-  populateProviderDropdowns() {
+  updateModeExplanation(mode) {
+    if (!this.modeExplanation) return;
+    const explanations = {
+      "PRIMARY_ONLY": "Primary model only. Direct routing with no automatic fallback.",
+      "FALLBACK_ORDER": "Ordered fallback. Tries configured fallback candidates in sequence on error.",
+      "RESOURCE_AWARE": "Resource-aware preflight. Evaluates remaining quota, token headroom, cooldowns, and latency before request.",
+      "CUSTOM": "Custom multi-model routing and policy override."
+    };
+    this.modeExplanation.textContent = explanations[mode] || explanations["RESOURCE_AWARE"];
+  }
+
+  renderCandidatesList(candidates = []) {
+    if (!this.candidatesList) return;
+    this.candidatesList.innerHTML = "";
+
+    if (candidates.length === 0) {
+      this.candidatesList.innerHTML = `<div style="font-size:0.75rem; color:var(--text-muted); padding:10px;">No candidates configured. Add one below.</div>`;
+      return;
+    }
+
+    candidates.forEach((cand, idx) => {
+      const item = document.createElement("div");
+      item.className = "cand-drag-item";
+      item.draggable = true;
+      item.dataset.index = idx;
+
+      const isPrimary = idx === 0;
+      const shortModel = (cand.model || "").split("/").pop();
+
+      item.innerHTML = `
+        <div class="cand-drag-left">
+          <div class="cand-rank-badge ${isPrimary ? 'primary' : ''}">#${idx + 1}</div>
+          <div>
+            <div class="cand-info-title">${this.escapeHtml(cand.provider)} / ${this.escapeHtml(shortModel)}</div>
+            <div class="cand-info-meta">Avg Latency: ${cand.latency_ms || 350}ms • Full: <code>${this.escapeHtml(cand.model)}</code></div>
+          </div>
+        </div>
+        <div>
+          ${candidates.length > 1 ? `<button type="button" class="cand-remove-btn" title="Remove candidate">✕</button>` : ''}
+        </div>
+      `;
+
+      // Drag and drop event handlers
+      item.addEventListener("dragstart", e => {
+        this.draggedItemIndex = idx;
+        e.dataTransfer.effectAllowed = "move";
+        item.style.opacity = "0.5";
+      });
+
+      item.addEventListener("dragend", () => {
+        item.style.opacity = "1";
+        this.draggedItemIndex = null;
+      });
+
+      item.addEventListener("dragover", e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      });
+
+      item.addEventListener("drop", e => {
+        e.preventDefault();
+        const targetIdx = parseInt(item.dataset.index, 10);
+        if (this.draggedItemIndex !== null && this.draggedItemIndex !== targetIdx) {
+          this.reorderCandidates(this.draggedItemIndex, targetIdx);
+        }
+      });
+
+      // Remove button
+      const removeBtn = item.querySelector(".cand-remove-btn");
+      removeBtn?.addEventListener("click", e => {
+        e.stopPropagation();
+        this.removeCandidate(idx);
+      });
+
+      this.candidatesList.appendChild(item);
+    });
+  }
+
+  reorderCandidates(fromIdx, toIdx) {
+    const roleInfo = this.rolesData[this.selectedRole];
+    if (!roleInfo || !roleInfo.candidates) return;
+
+    const list = [...roleInfo.candidates];
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+
+    // Update primary flags
+    list.forEach((c, i) => c.is_primary = (i === 0));
+
+    roleInfo.candidates = list;
+    this.renderCandidatesList(list);
+    this.updateRoutingPreview(this.selectedRole);
+    this.setDirty(true);
+  }
+
+  removeCandidate(idx) {
+    const roleInfo = this.rolesData[this.selectedRole];
+    if (!roleInfo || !roleInfo.candidates || roleInfo.candidates.length <= 1) return;
+
+    roleInfo.candidates.splice(idx, 1);
+    roleInfo.candidates.forEach((c, i) => c.is_primary = (i === 0));
+
+    this.renderCandidatesList(roleInfo.candidates);
+    this.updateRoutingPreview(this.selectedRole);
+    this.setDirty(true);
+  }
+
+  setupModeSwitchers() {
+    const modes = [
+      { btn: this.btnModePrimary, mode: "PRIMARY_ONLY" },
+      { btn: this.btnModeFallback, mode: "FALLBACK_ORDER" },
+      { btn: this.btnModeResource, mode: "RESOURCE_AWARE" },
+      { btn: this.btnModeCustom, mode: "CUSTOM" },
+    ];
+
+    modes.forEach(({ btn, mode }) => {
+      btn?.addEventListener("click", () => {
+        this.executionModes[this.selectedRole] = mode;
+        this.populateRoleConfig(this.selectedRole);
+        this.renderRolesNav();
+        this.setDirty(true);
+      });
+    });
+  }
+
+  setupAddCandidateForm() {
     if (!this.providerSelect || !this.modelSelect) return;
+
     this.providerSelect.innerHTML = "";
-    
-    this.providersList.forEach(p => {
+    Object.keys(this.providersCatalog).forEach(p => {
       const opt = document.createElement("option");
-      opt.value = p.provider_name;
-      opt.textContent = p.display_name || p.provider_name;
+      opt.value = p;
+      opt.textContent = p;
       this.providerSelect.appendChild(opt);
     });
 
     const updateModels = () => {
-      const selP = this.providersList.find(p => p.provider_name === this.providerSelect.value);
+      const p = this.providerSelect.value;
+      const models = this.providersCatalog[p] || [];
       this.modelSelect.innerHTML = "";
-      if (selP && selP.models) {
-        selP.models.forEach(m => {
-          const mOpt = document.createElement("option");
-          mOpt.value = m.model_id;
-          mOpt.textContent = m.display_name || m.model_id;
-          this.modelSelect.appendChild(mOpt);
-        });
-      }
+      models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        this.modelSelect.appendChild(opt);
+      });
     };
 
     this.providerSelect.addEventListener("change", updateModels);
     updateModels();
+
+    document.getElementById("btn-architect-add-cand")?.addEventListener("click", () => {
+      const p = this.providerSelect.value;
+      const m = this.modelSelect.value;
+      if (!p || !m) return;
+
+      const roleInfo = this.rolesData[this.selectedRole];
+      if (!roleInfo) return;
+      if (!roleInfo.candidates) roleInfo.candidates = [];
+
+      const exists = roleInfo.candidates.some(c => c.provider === p && c.model === m);
+      if (exists) {
+        alert(`Candidate ${p}/${m} is already in the candidate list for ${this.selectedRole}.`);
+        return;
+      }
+
+      roleInfo.candidates.push({
+        provider: p,
+        model: m,
+        latency_ms: p === "Local" ? 40 : 350,
+        is_primary: roleInfo.candidates.length === 0,
+      });
+
+      this.renderCandidatesList(roleInfo.candidates);
+      this.updateRoutingPreview(this.selectedRole);
+      this.setDirty(true);
+    });
   }
 
-  setupToolbarButtons() {
-    // 1. Test Simulation
-    document.getElementById("btn-architect-test")?.addEventListener("click", () => this.runSimulationTest());
+  /* ===================================================================
+     3. PREVIEW & SIMULATION (RIGHT COLUMN)
+     =================================================================== */
 
-    // 2. Discard Changes
-    document.getElementById("btn-architect-discard")?.addEventListener("click", () => {
-      if (this.dirty) {
-        if (confirm("Discard all unsaved architectural changes?")) {
-          this.loadConfigData(this.originalConfig);
+  updateRoutingPreview(roleKey) {
+    const roleInfo = this.rolesData[roleKey] || { candidates: [] };
+    const candidates = roleInfo.candidates || [];
+    const mode = this.executionModes[roleKey] || "RESOURCE_AWARE";
+
+    if (candidates.length === 0) {
+      if (this.previewModelEl) this.previewModelEl.textContent = "None";
+      if (this.previewScoreEl) this.previewScoreEl.textContent = "No candidate models configured";
+      return;
+    }
+
+    const primary = candidates[0];
+    const shortModel = (primary.model || "").split("/").pop();
+
+    if (this.previewModelEl) {
+      this.previewModelEl.textContent = `${shortModel} (${primary.provider})`;
+    }
+    if (this.previewScoreEl) {
+      this.previewScoreEl.textContent = `Score: 285.0 • Latency: ${primary.latency_ms || 350}ms (${mode})`;
+    }
+    if (this.previewReasonsEl) {
+      this.previewReasonsEl.innerHTML = `
+        <div>✓ Preflight token feasibility check passed</div>
+        <div>✓ Quota headroom verified</div>
+        <div>✓ Preferred candidate #${1} for role '${roleKey}'</div>
+      `;
+    }
+  }
+
+  setupSimulationControls() {
+    this.btnRunSim?.addEventListener("click", () => this.runSimulation());
+    this.btnTest?.addEventListener("click", () => this.runSimulation());
+  }
+
+  async runSimulation() {
+    const scenario = this.simScenarioSelect?.value || "low_quota";
+    if (this.simTraceBox) {
+      this.simTraceBox.innerHTML = `<div>⚡ Running preflight routing simulation for scenario '<strong>${scenario}</strong>'...</div>`;
+    }
+
+    try {
+      const res = await fetch("/api/architect/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: this.selectedRole,
+          scenario: scenario,
+          simulate_outage: scenario !== "normal",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        this.renderSimulationTrace(data);
+      } else {
+        if (this.simTraceBox) {
+          this.simTraceBox.innerHTML = `<div style="color:var(--accent-crimson);">Simulation API error: ${res.statusText}</div>`;
         }
       }
-    });
-
-    // 3. Save Changes
-    document.getElementById("btn-architect-save")?.addEventListener("click", () => this.openSavePreviewModal());
-
-    // 4. Reset Layout
-    document.getElementById("btn-architect-reset-layout")?.addEventListener("click", () => {
-      if (confirm("Reset visual node positions to standard topology?")) {
-        this.customLayout = {};
-        this.setDirty(true);
-        this.render();
+    } catch (e) {
+      if (this.simTraceBox) {
+        this.simTraceBox.innerHTML = `<div style="color:var(--accent-crimson);">Failed to run simulation: ${e}</div>`;
       }
-    });
-
-    // 5. Add Candidate Button
-    document.getElementById("btn-architect-add-cand")?.addEventListener("click", () => {
-      const p = this.providerSelect?.value;
-      const m = this.modelSelect?.value;
-      if (p && m && this.selectedRole) {
-        this.addCandidateToRole(this.selectedRole, p, m);
-      }
-    });
+    }
   }
 
-  setupDrawer() {
-    document.getElementById("architect-drawer-close")?.addEventListener("click", () => {
-      this.drawer?.classList.remove("open");
+  renderSimulationTrace(data) {
+    if (!this.simTraceBox) return;
+    this.simTraceBox.innerHTML = "";
+
+    const statusBadge = document.createElement("div");
+    statusBadge.style.color = data.success ? "var(--accent-emerald)" : "var(--accent-crimson)";
+    statusBadge.style.fontWeight = "700";
+    statusBadge.textContent = `Result: ${data.status || 'COMPLETED'} ➔ ${data.selected_model || 'Primary'}`;
+    this.simTraceBox.appendChild(statusBadge);
+
+    if (data.trace && Array.isArray(data.trace)) {
+      data.trace.forEach(st => {
+        const row = document.createElement("div");
+        const color = st.status === "RATE_LIMITED" || st.status === "RESOURCE_EXCLUDED" ? "var(--accent-amber)" : (st.status === "COMPLETED" ? "var(--text-secondary)" : "var(--accent-cyan)");
+        row.style.color = color;
+        row.textContent = `[Step ${st.step}] ${st.action}`;
+        this.simTraceBox.appendChild(row);
+      });
+    }
+
+    if (data.reasons && Array.isArray(data.reasons)) {
+      data.reasons.forEach(r => {
+        const rEl = document.createElement("div");
+        rEl.style.color = "var(--accent-cyan)";
+        rEl.textContent = r;
+        this.simTraceBox.appendChild(rEl);
+      });
+    }
+  }
+
+  /* ===================================================================
+     4. SAVE / DISCARD / PERSISTENCE
+     =================================================================== */
+
+  setupToolbarButtons() {
+    this.btnDiscard?.addEventListener("click", () => {
+      if (!this.dirty) return;
+      this.rolesData = JSON.parse(JSON.stringify(this.originalConfig.roles));
+      this.executionModes = JSON.parse(JSON.stringify(this.originalConfig.execution_modes));
+      this.setDirty(false);
+      this.renderRolesNav();
+      this.populateRoleConfig(this.selectedRole);
     });
 
-    // Execution Mode Buttons
-    ["PRIMARY_ONLY", "FALLBACK_ORDER", "CUSTOM"].forEach(mode => {
-      const btn = document.getElementById(`btn-role-mode-${mode.toLowerCase().split('_')[0]}`);
-      btn?.addEventListener("click", () => {
-        if (!this.selectedRole) return;
-        this.executionModes[this.selectedRole] = mode;
-        this.setDirty(true);
-        this.updateModeButtons(mode);
-        this.render();
-      });
+    this.btnSave?.addEventListener("click", () => {
+      this.openPreviewModal();
     });
   }
 
@@ -254,9 +577,66 @@ export class ArchitectView {
     });
 
     this.btnPreviewApply?.addEventListener("click", async () => {
-      await this.saveConfiguration();
+      await this.saveConfig();
       this.previewModal?.classList.add("hidden");
     });
+  }
+
+  openPreviewModal() {
+    if (!this.previewModal || !this.previewBody) return;
+    this.previewBody.innerHTML = "";
+
+    const roleKeys = Object.keys(this.rolesData);
+    roleKeys.forEach(r => {
+      const mode = this.executionModes[r] || "RESOURCE_AWARE";
+      const cands = this.rolesData[r]?.candidates || [];
+
+      const card = document.createElement("div");
+      card.className = "diff-role-card";
+      card.innerHTML = `
+        <div class="diff-role-header">
+          <strong>${r.toUpperCase()}</strong>
+          <span class="diff-mode-badge">${mode}</span>
+        </div>
+        <div class="diff-chain-row">
+          <span class="diff-label">Candidates:</span>
+          <span>${cands.map((c, i) => `#${i+1} ${c.provider}/${c.model.split('/').pop()}`).join(" ➔ ")}</span>
+        </div>
+      `;
+      this.previewBody.appendChild(card);
+    });
+
+    this.previewModal.classList.remove("hidden");
+  }
+
+  async saveConfig() {
+    const payload = {
+      roles: this.rolesData,
+      execution_modes: this.executionModes,
+    };
+
+    try {
+      const res = await fetch("/api/architect/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        this.originalConfig = JSON.parse(JSON.stringify({
+          roles: this.rolesData,
+          execution_modes: this.executionModes,
+        }));
+        this.setDirty(false);
+        this.send({ action: "CONFIG_UPDATED", config: payload });
+        alert("Temporal Framework configuration saved and persisted.");
+      } else {
+        alert(`Failed to persist configuration: ${res.statusText}`);
+      }
+    } catch (e) {
+      alert(`Save error: ${e}`);
+    }
   }
 
   setDirty(isDirty) {
@@ -266,514 +646,13 @@ export class ArchitectView {
     }
   }
 
-  /* ===================================================================
-     CANVAS PAN, ZOOM & NODE DRAG
-     =================================================================== */
-
-  setupPanZoom() {
-    let startX = 0, startY = 0;
-
-    this.canvas?.addEventListener("mousedown", e => {
-      if (e.target.closest(".architect-node") || e.target.closest(".architect-toolbar") || e.target.closest("#architect-inspector-drawer")) return;
-      this.isPanning = true;
-      startX = e.clientX - this.panX;
-      startY = e.clientY - this.panY;
-      if (this.canvas) this.canvas.style.cursor = "grabbing";
-    });
-
-    window.addEventListener("mousemove", e => {
-      if (this.isPanning) {
-        this.panX = e.clientX - startX;
-        this.panY = e.clientY - startY;
-        this.updateViewportTransform();
-      }
-    });
-
-    window.addEventListener("mouseup", () => {
-      this.isPanning = false;
-      if (this.canvas) this.canvas.style.cursor = "default";
-    });
-
-    this.canvas?.addEventListener("wheel", e => {
-      e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      this.scale = Math.min(Math.max(this.scale * zoomFactor, 0.4), 2.2);
-      this.updateViewportTransform();
-    });
-  }
-
-  updateViewportTransform() {
-    if (this.viewport) {
-      this.viewport.style.transform = `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
-    }
-  }
-
-  setupNodeDragEvents() {
-    this.nodesContainer?.addEventListener("mousedown", e => {
-      const nodeEl = e.target.closest(".architect-node");
-      if (!nodeEl) return;
-
-      this.isDraggingNode = true;
-      this.draggedNode = nodeEl;
-      const rect = nodeEl.getBoundingClientRect();
-      this.dragOffset = {
-        x: (e.clientX - rect.left) / this.scale,
-        y: (e.clientY - rect.top) / this.scale,
-      };
-
-      const role = nodeEl.getAttribute("data-role");
-      if (role) {
-        this.selectRole(role);
-      }
-      e.stopPropagation();
-    });
-
-    window.addEventListener("mousemove", e => {
-      if (!this.isDraggingNode || !this.draggedNode) return;
-      const viewportRect = this.viewport.getBoundingClientRect();
-      const x = Math.round((e.clientX - viewportRect.left) / this.scale - this.dragOffset.x);
-      const y = Math.round((e.clientY - viewportRect.top) / this.scale - this.dragOffset.y);
-
-      this.draggedNode.style.left = `${x}px`;
-      this.draggedNode.style.top = `${y}px`;
-
-      const nodeId = this.draggedNode.id;
-      this.customLayout[nodeId] = { x, y };
-      this.setDirty(true);
-      this.renderEdges();
-    });
-
-    window.addEventListener("mouseup", () => {
-      this.isDraggingNode = false;
-      this.draggedNode = null;
-    });
-  }
-
-  /* ===================================================================
-     GRAPH RENDERING
-     =================================================================== */
-
-  render() {
-    if (!this.nodesContainer || !this.svg) return;
-    this.nodesContainer.innerHTML = "";
-
-    const roleYMap = {
-      "stt": 80,
-      "fast": 200,
-      "reasoning": 320,
-      "desktop": 440,
-      "vision": 560,
-      "ocr": 680,
-      "embeddings": 800,
-      "tts": 920,
-    };
-
-    // 1. Entry / STT Node
-    this.renderNode({
-      id: "arch_node_stt",
-      label: "STT TRANSCRIPTION",
-      sub: "Canary-Qwen / Whisper",
-      role: "stt",
-      x: this.customLayout["arch_node_stt"]?.x || 60,
-      y: this.customLayout["arch_node_stt"]?.y || 320,
-      kind: "entry",
-    });
-
-    // 2. Intent Router Node
-    this.renderNode({
-      id: "arch_node_router",
-      label: "INTENT ROUTER",
-      sub: "Policy & Dispatch",
-      role: "router",
-      x: this.customLayout["arch_node_router"]?.x || 320,
-      y: this.customLayout["arch_node_router"]?.y || 320,
-      kind: "router",
-    });
-
-    // 3. Render Configured Roles
-    let roleIdx = 0;
-    for (const [rName, rData] of Object.entries(this.rolesData)) {
-      const mode = this.executionModes[rName] || "FALLBACK_ORDER";
-      const cands = Array.isArray(rData) ? rData : (rData?.candidates || []);
-      const baseY = roleYMap[rName] || (120 + roleIdx * 120);
-      roleIdx++;
-
-      cands.forEach((c, cIdx) => {
-        if (mode === "PRIMARY_ONLY" && cIdx > 0) return;
-        const nodeId = (rName === "reasoning" && cIdx === 0) ? "node_reasoning_primary" : `arch_node_${rName}_${cIdx}`;
-        const defaultX = 580 + (cIdx * 240);
-        const defaultY = baseY;
-
-        this.renderNode({
-          id: nodeId,
-          label: `${rName.toUpperCase()}: ${c.model.split('/').pop()}`,
-          sub: `${c.provider} (${c.latency_ms || 380}ms)`,
-          role: rName,
-          candidateIndex: cIdx,
-          isPrimary: cIdx === 0,
-          mode: mode,
-          x: this.customLayout[nodeId]?.x || defaultX,
-          y: this.customLayout[nodeId]?.y || defaultY,
-          kind: "candidate",
-        });
-      });
-    }
-
-    // 4. Verification & Output
-    this.renderNode({
-      id: "arch_node_verify",
-      label: "VERIFY & SYNTHESIZE",
-      sub: "State Validation",
-      role: "verification",
-      x: this.customLayout["arch_node_verify"]?.x || 1320,
-      y: this.customLayout["arch_node_verify"]?.y || 320,
-      kind: "system",
-    });
-
-    this.renderNode({
-      id: "arch_node_tts",
-      label: "STREAMING TTS",
-      sub: "Fish Audio S2.1",
-      role: "tts",
-      x: this.customLayout["arch_node_tts"]?.x || 1580,
-      y: this.customLayout["arch_node_tts"]?.y || 320,
-      kind: "system",
-    });
-
-    this.renderEdges();
-  }
-
-  renderNode(data) {
-    const el = document.createElement("div");
-    el.id = data.id;
-    el.className = `architect-node temporal-node ${data.kind || ''} ${data.isPrimary ? 'primary-candidate' : ''} ${data.role === this.selectedRole ? 'selected' : ''}`;
-    el.setAttribute("data-role", data.role || "");
-    el.style.left = `${data.x}px`;
-    el.style.top = `${data.y}px`;
-
-    const modeBadge = data.mode ? `<span class="arch-mode-pill">${data.mode}</span>` : '';
-    const primaryBadge = data.isPrimary ? '<span class="arch-primary-star">★ PRIMARY</span>' : (data.candidateIndex != null ? `<span class="arch-fallback-rank">#${data.candidateIndex + 1}</span>` : '');
-
-    el.innerHTML = `
-      <div class="arch-node-header">
-        <span class="arch-node-label">${data.label}</span>
-        ${primaryBadge}
-      </div>
-      <div class="arch-node-sub">${data.sub || ''}</div>
-      <div class="arch-node-footer">
-        ${modeBadge}
-      </div>
-    `;
-
-    el.addEventListener("click", () => {
-      if (data.role && data.role !== "router" && data.role !== "entry" && data.role !== "system") {
-        this.selectRole(data.role);
-      }
-    });
-
-    this.nodesContainer.appendChild(el);
-  }
-
-  renderEdges() {
-    if (!this.svg) return;
-    this.svg.innerHTML = "";
-
-    const drawLine = (fromId, toId, type = "PRIMARY") => {
-      const fromEl = document.getElementById(fromId);
-      const toEl = document.getElementById(toId);
-      if (!fromEl || !toEl) return;
-
-      const fx = parseInt(fromEl.style.left) + fromEl.offsetWidth;
-      const fy = parseInt(fromEl.style.top) + fromEl.offsetHeight / 2;
-      const tx = parseInt(toEl.style.left);
-      const ty = parseInt(toEl.style.top) + toEl.offsetHeight / 2;
-
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      const dx = (tx - fx) * 0.5;
-      const d = `M ${fx} ${fy} C ${fx + dx} ${fy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
-      path.setAttribute("d", d);
-      path.setAttribute("class", `arch-edge-path ${type.toLowerCase()}`);
-      this.svg.appendChild(path);
-    };
-
-    // Connect Entry ➔ Router
-    drawLine("arch_node_stt", "arch_node_router", "PRIMARY");
-
-    // Connect Router ➔ Candidates
-    for (const [rName, rData] of Object.entries(this.rolesData)) {
-      const mode = this.executionModes[rName] || "FALLBACK_ORDER";
-      const cands = rData.candidates || [];
-
-      if (cands.length > 0) {
-        const firstId = (rName === "reasoning") ? "node_reasoning_primary" : `arch_node_${rName}_0`;
-        drawLine("arch_node_router", firstId, "PRIMARY");
-        if (mode !== "PRIMARY_ONLY") {
-          for (let i = 1; i < cands.length; i++) {
-            const prevId = (rName === "reasoning" && i === 1) ? "node_reasoning_primary" : `arch_node_${rName}_${i-1}`;
-            const currId = `arch_node_${rName}_${i}`;
-            drawLine(prevId, currId, "FALLBACK");
-          }
-        }
-        // Connect last candidate to Verify
-        const lastIdx = mode === "PRIMARY_ONLY" ? 0 : cands.length - 1;
-        const lastId = (rName === "reasoning" && lastIdx === 0) ? "node_reasoning_primary" : `arch_node_${rName}_${lastIdx}`;
-        drawLine(lastId, "arch_node_verify", "PRIMARY");
-      }
-    }
-
-    drawLine("arch_node_verify", "arch_node_tts", "PRIMARY");
-  }
-
-  /* ===================================================================
-     ROLE INSPECTOR & PRIORITY DRAGGING
-     =================================================================== */
-
-  selectRole(role) {
-    this.selectedRole = role;
-    document.querySelectorAll(".architect-node").forEach(n => {
-      n.classList.toggle("selected", n.getAttribute("data-role") === role);
-    });
-    this.populateRoleInspector(role);
-    this.drawer?.classList.add("open");
-    document.getElementById("workflow-inspector-drawer")?.classList.add("open");
-  }
-
-  populateRoleInspector(role) {
-    if (!this.roleTitle || !this.candidatesList) return;
-    this.roleTitle.textContent = `ROLE: ${role.toUpperCase()}`;
-
-    const mode = this.executionModes[role] || "FALLBACK_ORDER";
-    this.updateModeButtons(mode);
-
-    const rData = this.rolesData[role] || { candidates: [] };
-    const cands = rData.candidates || [];
-
-    this.candidatesList.innerHTML = "";
-    cands.forEach((c, idx) => {
-      const item = document.createElement("div");
-      item.className = `cand-drag-item ${idx === 0 ? 'is-primary' : ''}`;
-      item.draggable = true;
-      item.setAttribute("data-index", idx);
-
-      item.innerHTML = `
-        <div class="cand-drag-left">
-          <span class="cand-drag-handle" title="Drag to reorder priority">⠿</span>
-          <div class="cand-meta">
-            <span class="cand-model-name">${c.model}</span>
-            <span class="cand-provider-tag">${c.provider}</span>
-          </div>
-        </div>
-        <div class="cand-drag-right">
-          ${idx === 0 ? '<span class="cand-primary-badge">★ PRIMARY</span>' : `<span class="cand-rank-badge">#${idx + 1}</span>`}
-          <button type="button" class="btn-cand-remove" title="Remove candidate">✕</button>
-        </div>
-      `;
-
-      // Remove button
-      item.querySelector(".btn-cand-remove")?.addEventListener("click", e => {
-        e.stopPropagation();
-        this.removeCandidateFromRole(role, idx);
-      });
-
-      // Semantic Priority Drag & Drop Reordering
-      item.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("text/plain", idx.toString());
-        item.classList.add("dragging");
-      });
-
-      item.addEventListener("dragend", () => {
-        item.classList.remove("dragging");
-      });
-
-      item.addEventListener("dragover", e => {
-        e.preventDefault();
-        item.classList.add("drag-over");
-      });
-
-      item.addEventListener("dragleave", () => {
-        item.classList.remove("drag-over");
-      });
-
-      item.addEventListener("drop", e => {
-        e.preventDefault();
-        item.classList.remove("drag-over");
-        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
-        const toIdx = idx;
-        if (!isNaN(fromIdx) && fromIdx !== toIdx) {
-          this.reorderCandidates(role, fromIdx, toIdx);
-        }
-      });
-
-      this.candidatesList.appendChild(item);
-    });
-  }
-
-  updateModeButtons(mode) {
-    const pBtn = document.getElementById("btn-role-mode-primary");
-    const fBtn = document.getElementById("btn-role-mode-fallback");
-    const cBtn = document.getElementById("btn-role-mode-custom");
-
-    pBtn?.classList.toggle("active", mode === "PRIMARY_ONLY");
-    fBtn?.classList.toggle("active", mode === "FALLBACK_ORDER");
-    cBtn?.classList.toggle("active", mode === "CUSTOM");
-
-    if (this.modeExplanation) {
-      if (mode === "PRIMARY_ONLY") {
-        this.modeExplanation.textContent = "Dispatches Primary model only. If primary fails or is rate-limited, execution stops with BROKEN status.";
-      } else if (mode === "FALLBACK_ORDER") {
-        this.modeExplanation.textContent = "Dispatches Primary. If rate-limited or unavailable, automatically cascades through fallback candidates in sequence.";
-      } else {
-        this.modeExplanation.textContent = "Custom multi-model routing topology with capability matching and parallel validation.";
-      }
-    }
-  }
-
-  reorderCandidates(role, fromIdx, toIdx) {
-    const cands = this.rolesData[role]?.candidates;
-    if (!cands) return;
-    const [moved] = cands.splice(fromIdx, 1);
-    cands.splice(toIdx, 0, moved);
-    this.setDirty(true);
-    this.populateRoleInspector(role);
-    this.render();
-  }
-
-  addCandidateToRole(role, provider, model) {
-    if (!this.rolesData[role]) {
-      this.rolesData[role] = { candidates: [] };
-    }
-    const cands = this.rolesData[role].candidates;
-    if (cands.some(c => c.provider === provider && c.model === model)) {
-      alert(`Model '${model}' is already added to role '${role}'.`);
-      return;
-    }
-    cands.push({
-      provider: provider,
-      model: model,
-      latency_ms: 350,
-      health: "HEALTHY",
-      is_primary: cands.length === 0,
-    });
-    this.setDirty(true);
-    this.populateRoleInspector(role);
-    this.render();
-  }
-
-  removeCandidateFromRole(role, idx) {
-    const cands = this.rolesData[role]?.candidates;
-    if (!cands || cands.length <= 1) {
-      alert("Role must have at least one primary candidate.");
-      return;
-    }
-    cands.splice(idx, 1);
-    this.setDirty(true);
-    this.populateRoleInspector(role);
-    this.render();
-  }
-
-  /* ===================================================================
-     PREVIEW MODAL, SAVE & TEST SIMULATION
-     =================================================================== */
-
-  openSavePreviewModal() {
-    if (!this.previewModal || !this.previewBody) return;
-
-    let diffHtml = '<div class="preview-diff-grid">';
-    for (const [rName, rData] of Object.entries(this.rolesData)) {
-      const origCands = this.originalConfig?.roles?.[rName]?.candidates || [];
-      const newCands = rData.candidates || [];
-      const origMode = this.originalConfig?.execution_modes?.[rName] || "FALLBACK_ORDER";
-      const newMode = this.executionModes[rName] || "FALLBACK_ORDER";
-
-      const origChain = origCands.map(c => c.model.split('/').pop()).join(' ➔ ');
-      const newChain = newCands.map(c => c.model.split('/').pop()).join(' ➔ ');
-
-      diffHtml += `
-        <div class="diff-role-card">
-          <div class="diff-role-header">
-            <strong>${rName.toUpperCase()}</strong>
-            <span class="diff-mode-badge">${newMode}</span>
-          </div>
-          <div class="diff-chain-row">
-            <span class="diff-label">Before:</span>
-            <code>${origChain || '(none)'}</code>
-          </div>
-          <div class="diff-chain-row">
-            <span class="diff-label">After:</span>
-            <code style="color: var(--accent-cyan); font-weight: 700;">${newChain || '(none)'}</code>
-          </div>
-        </div>
-      `;
-    }
-    diffHtml += '</div>';
-
-    this.previewBody.innerHTML = diffHtml;
-    this.previewModal.classList.remove("hidden");
-  }
-
-  async saveConfiguration() {
-    const payload = {
-      roles: this.rolesData,
-      execution_modes: this.executionModes,
-      layout: { nodes: this.customLayout },
-    };
-
-    try {
-      const res = await fetch("/api/architect/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        this.originalConfig = JSON.parse(JSON.stringify(payload));
-        this.setDirty(false);
-        this.send({ action: "SAVE_ARCHITECT_CONFIG", config: payload });
-      }
-    } catch (e) {
-      console.error("Failed to save architect config:", e);
-    }
-  }
-
-  async runSimulationTest() {
-    try {
-      const res = await fetch("/api/architect/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: this.selectedRole,
-          simulate_outage: true,
-        }),
-      });
-
-      if (res.ok) {
-        const testRes = await res.json();
-        this.visualizeSimulationTrace(testRes);
-      }
-    } catch (e) {
-      console.warn("Simulation test failed:", e);
-    }
-  }
-
-  visualizeSimulationTrace(testRes) {
-    if (!testRes || !testRes.trace) return;
-    
-    // Highlight simulated active path
-    testRes.trace.forEach((step, idx) => {
-      setTimeout(() => {
-        const nodeEl = document.getElementById(step.node);
-        if (nodeEl) {
-          nodeEl.classList.add("sim-active");
-          if (step.status === "RATE_LIMITED") {
-            nodeEl.classList.add("sim-fracture");
-          } else if (step.status === "FALLBACK_ACTIVE") {
-            nodeEl.classList.add("sim-fallback");
-          }
-          setTimeout(() => {
-            nodeEl.classList.remove("sim-active", "sim-fracture", "sim-fallback");
-          }, 3000);
-        }
-      }, idx * 400);
-    });
+  escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 }

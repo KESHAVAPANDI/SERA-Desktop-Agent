@@ -3,6 +3,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
+from app.core.resource_cache import ResourceStateCache
 from app.models.llm.base import LLMProvider, LLMResponse
 from app.models.llm.health import ModelHealthRegistry, ProviderHealthStatus
 from app.models.llm.latency import ProviderLatencyMetrics
@@ -23,19 +24,26 @@ class RoleCandidate:
 
 
 class ModelRouter:
-    """True ROLE → PROVIDER → FALLBACK router with fine-grained model-level health tracking."""
+    """Adaptive resource-aware ROLE → PROVIDER → MODEL router with preflight capacity feasibility scoring,
+    quota headroom validation, and zero blind sequential fallbacks."""
 
     def __init__(
         self,
         providers: dict[str, LLMProvider] | None = None,
         role_chains: dict[str, list[RoleCandidate]] | None = None,
         health_registry: ModelHealthRegistry | None = None,
+        resource_cache: ResourceStateCache | None = None,
+        event_bus: Any | None = None,
         debug_routing: bool = True,
     ):
         self.health_registry = health_registry or ModelHealthRegistry()
+        self.resource_cache = resource_cache or ResourceStateCache()
+        self.event_bus = event_bus
         self.debug_routing = debug_routing
         self.role_chains: dict[str, list[RoleCandidate]] = role_chains or {}
         self.legacy_providers: dict[str, LLMProvider] = providers or {}
+        self.execution_modes: dict[str, str] = {}  # role -> PRIMARY_ONLY | FALLBACK_ORDER | RESOURCE_AWARE | CUSTOM
+        self.last_routing_explanations: dict[str, Any] = {}
 
         # If legacy providers dict was passed, synthesize role chains for full backward compatibility
         if not self.role_chains and self.legacy_providers:
@@ -77,6 +85,19 @@ class ModelRouter:
         """Returns the ordered candidate chain for a role."""
         return self.role_chains.get(role, [])
 
+    def register_role_chain(self, role: str, candidates: list[RoleCandidate], mode: str = "RESOURCE_AWARE") -> None:
+        """Registers a candidate chain and execution mode for a role."""
+        self.role_chains[role] = candidates
+        self.execution_modes[role] = mode
+
+    def set_execution_mode(self, role: str, mode: str) -> None:
+        """Sets execution mode for a role (PRIMARY_ONLY, FALLBACK_ORDER, RESOURCE_AWARE, CUSTOM)."""
+        self.execution_modes[role] = mode
+
+    def get_execution_mode(self, role: str) -> str:
+        """Gets execution mode for a role, defaulting to RESOURCE_AWARE."""
+        return self.execution_modes.get(role, "RESOURCE_AWARE")
+
     def select_role_for_task(self, query: str, has_image: bool = False) -> str:
         """Selects optimal model role based on user task characteristics."""
         if has_image:
@@ -95,6 +116,7 @@ class ModelRouter:
             "battery", "battery status", "wifi status", "cpu usage",
             "volume", "set volume", "brightness", "set brightness",
             "hello", "hi", "hey sera", "how are you", "who are you",
+            "thank you", "thanks", "good morning", "good evening",
         ]
         if any(kw in q_lower for kw in fast_keywords) and self.has_role("fast"):
             return "fast"
@@ -109,6 +131,134 @@ class ModelRouter:
 
         return "reasoning"
 
+    def select_candidate_preflight(
+        self,
+        role: str,
+        messages: list[dict[str, Any]],
+        images: list[bytes] | None = None,
+    ) -> tuple[RoleCandidate, list[RoleCandidate], dict[str, Any]]:
+        """Preflight selects the optimal candidate using ResourceStateCache scoring,
+        disqualifying models with active cooldowns or insufficient token headroom.
+        
+        Returns:
+            (selected_candidate, ordered_fallback_candidates, telemetry_explanation)
+        """
+        t0 = time.perf_counter()
+        candidates = self.role_chains.get(role, [])
+        if not candidates:
+            legacy_provider = self.legacy_providers.get(role)
+            if legacy_provider:
+                syn_candidate = RoleCandidate(
+                    provider_name=getattr(legacy_provider, "provider_name", role),
+                    model_name=getattr(legacy_provider, "model", "default"),
+                    provider=legacy_provider,
+                    role=role,
+                )
+                return syn_candidate, [], {"decision_ms": 0.1, "reasons": ["Legacy fallback provider"]}
+            raise RuntimeError(f"No candidates or legacy provider configured for role '{role}'")
+
+        mode = self.get_execution_mode(role)
+        estimated_tokens = self.resource_cache.estimate_request_tokens(messages)
+
+        # -------------------------------------------------------------
+        # Mode 1: PRIMARY ONLY
+        # -------------------------------------------------------------
+        if mode == "PRIMARY_ONLY":
+            prim = candidates[0]
+            explanation = {
+                "role": role,
+                "mode": mode,
+                "estimated_tokens": estimated_tokens,
+                "selected_model": str(prim),
+                "reasons": ["✓ Primary-Only mode enforced by configuration"],
+                "decision_ms": round((time.perf_counter() - t0) * 1000, 2),
+            }
+            self.last_routing_explanations[role] = explanation
+            return prim, [], explanation
+
+        # -------------------------------------------------------------
+        # Mode 2: FALLBACK ORDER (Strict ordered sequence)
+        # -------------------------------------------------------------
+        if mode == "FALLBACK_ORDER":
+            healthy_cands = []
+            for idx, c in enumerate(candidates):
+                entry = self.resource_cache.get_or_create(c.provider_name, c.model_name)
+                if not entry.in_cooldown and entry.status != ProviderHealthStatus.DISABLED:
+                    healthy_cands.append(c)
+
+            selected = healthy_cands[0] if healthy_cands else candidates[0]
+            fallbacks = healthy_cands[1:] if len(healthy_cands) > 1 else [c for c in candidates if c != selected]
+            explanation = {
+                "role": role,
+                "mode": mode,
+                "estimated_tokens": estimated_tokens,
+                "selected_model": str(selected),
+                "reasons": ["✓ Sequential candidate ordering"],
+                "decision_ms": round((time.perf_counter() - t0) * 1000, 2),
+            }
+            self.last_routing_explanations[role] = explanation
+            return selected, fallbacks, explanation
+
+        # -------------------------------------------------------------
+        # Mode 3: RESOURCE AWARE (Intelligent preflight feasibility scoring)
+        # -------------------------------------------------------------
+        scored_candidates: list[tuple[float, RoleCandidate, list[str], dict[str, Any]]] = []
+        rejected_candidates: list[dict[str, Any]] = []
+
+        for idx, cand in enumerate(candidates):
+            is_eligible, score, reasons, meta = self.resource_cache.evaluate_candidate(
+                provider_name=cand.provider_name,
+                model_name=cand.model_name,
+                role=role,
+                estimated_tokens=estimated_tokens,
+                architect_priority_rank=idx,
+                provider_instance=cand.provider,
+                images_present=bool(images),
+                health_registry=self.health_registry,
+            )
+
+            if is_eligible:
+                scored_candidates.append((score, cand, reasons, meta))
+            else:
+                rejected_candidates.append({
+                    "model": str(cand),
+                    "reasons": reasons,
+                    "meta": meta,
+                })
+
+        # Sort eligible candidates descending by score
+        scored_candidates.sort(key=lambda item: item[0], reverse=True)
+
+        if scored_candidates:
+            best_score, selected_cand, best_reasons, best_meta = scored_candidates[0]
+            fallback_cands = [item[1] for item in scored_candidates[1:]]
+        else:
+            raise RuntimeError(f"All model candidates rejected during preflight for role '{role}'")
+
+        decision_ms = round((time.perf_counter() - t0) * 1000, 2)
+        explanation = {
+            "role": role,
+            "mode": mode,
+            "estimated_tokens": estimated_tokens,
+            "selected_model": str(selected_cand),
+            "selected_score": best_score,
+            "reasons": best_reasons,
+            "rejected_candidates": rejected_candidates,
+            "candidate_count": len(candidates),
+            "eligible_count": len(scored_candidates),
+            "decision_ms": decision_ms,
+            "timestamp": time.time(),
+        }
+        self.last_routing_explanations[role] = explanation
+
+        if self.debug_routing:
+            print(
+                f"[ROUTER] Role: {role} | Selected: {selected_cand} | Score: {best_score} | "
+                f"Est Tokens: {estimated_tokens} | Decision: {decision_ms}ms"
+            )
+
+        return selected_cand, fallback_cands, explanation
+
     async def generate_with_role(
         self,
         role: str,
@@ -117,64 +267,21 @@ class ModelRouter:
         images: list[bytes] | None = None,
         **kwargs,
     ) -> tuple[LLMResponse, RoleCandidate]:
-        """Generates response using role's candidate chain with model-level health failover."""
-        candidates = self.role_chains.get(role, [])
-        if not candidates:
-            # Check legacy providers directly without cyclic recursion
-            legacy_provider = self.legacy_providers.get(role)
-            if legacy_provider:
-                resp = await legacy_provider.generate(
-                    messages=messages,
-                    tools=tools,
-                    images=images,
-                    **kwargs,
-                )
-                syn_candidate = RoleCandidate(
-                    provider_name=resp.provider or role,
-                    model_name=resp.model or "default",
-                    provider=legacy_provider,
-                    role=role,
-                )
-                return resp, syn_candidate
-            raise RuntimeError(f"No candidates or legacy provider configured for role '{role}'")
+        """Generates response using preflight resource-aware selection with zero blind fallbacks."""
+        selected, fallbacks, explanation = self.select_candidate_preflight(role, messages, images=images)
+        dispatch_chain = [selected] + fallbacks
 
         last_error = None
 
-        for idx, candidate in enumerate(candidates):
+        for idx, candidate in enumerate(dispatch_chain):
             p_name = candidate.provider_name
             m_name = candidate.model_name
             provider = candidate.provider
 
-            # 1. Model-Level Health & Cooldown Check
-            is_avail = self.health_registry.is_model_available(p_name, m_name)
-            if hasattr(provider, "health") and hasattr(provider.health, "is_available"):
-                if not provider.health.is_available():
-                    is_avail = False
-
-            if not is_avail:
-                cooldown_rem = self.health_registry.get_cooldown_remaining_s(p_name, m_name)
-                health = getattr(provider, "health", self.health_registry.get_health(p_name, m_name))
-                if self.debug_routing:
-                    print(
-                        f"[ROUTER] Role: {role} | Skipped: {p_name} / {m_name} "
-                        f"({getattr(health, 'status', 'RATE_LIMITED')}, Cooldown: {cooldown_rem}s)"
-                    )
-                logger.debug(
-                    f"[ModelRouter] Skipped {candidate} for role '{role}' ({cooldown_rem}s remaining)."
-                )
-                continue
-
-            # 2. Capability Validation (e.g. vision or tools required)
-            caps = provider.capabilities()
+            caps = provider.capabilities() if hasattr(provider, "capabilities") else {}
             if images and not caps.get("vision", False):
-                logger.debug(f"[ModelRouter] Skipped {candidate}: lacks vision capability.")
                 continue
 
-            if self.debug_routing:
-                reason = "primary candidate healthy" if idx == 0 else f"fallback candidate #{idx + 1}"
-                print(f"[ROUTER] Role: {role} | Selected: {p_name} / {m_name} | Reason: {reason}")
-
-            # 3. Attempt Generation
             t0 = time.perf_counter()
             try:
                 supports_tools = caps.get("tool_calling", True)
@@ -189,28 +296,21 @@ class ModelRouter:
 
                 elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
                 self.health_registry.record_success(p_name, m_name, elapsed_ms)
+                self.resource_cache.get_or_create(p_name, m_name).recent_latency_ms = elapsed_ms
                 return response, candidate
 
             except Exception as e:
                 err_str = str(e)
-                status_code = None
-                if "429" in err_str or "rate_limit" in err_str:
-                    status_code = 429
-                elif "402" in err_str or "payment" in err_str:
-                    status_code = 402
-                elif "401" in err_str or "auth" in err_str:
-                    status_code = 401
-
+                status_code = 429 if ("429" in err_str or "rate_limit" in err_str.lower()) else (401 if "401" in err_str else (402 if "402" in err_str else None))
                 self.health_registry.record_failure(p_name, m_name, err_str, status_code=status_code)
-
                 if status_code == 429:
-                    logger.warning(
-                        f"[ModelRouter] Quota/rate-limit on {candidate} for role '{role}'. Switching immediately to next fallback..."
-                    )
+                    self.resource_cache.record_429(p_name, m_name, retry_after=10.0, error_message=err_str)
                 else:
-                    logger.warning(
-                        f"[ModelRouter] Failure on {candidate} for role '{role}': {e}. Switching to next fallback..."
-                    )
+                    self.resource_cache.record_failure(p_name, m_name, status_code=status_code, error_message=err_str)
+
+                logger.warning(
+                    f"[ModelRouter] Failure on {candidate} for role '{role}': {e}. Transitioning to next candidate in preflight list..."
+                )
                 last_error = e
 
         raise RuntimeError(
@@ -225,54 +325,20 @@ class ModelRouter:
         images: list[bytes] | None = None,
         **kwargs,
     ) -> AsyncIterator[tuple[str, RoleCandidate]]:
-        """Streams generated tokens from the role's candidate chain with failover."""
-        candidates = self.role_chains.get(role, [])
-        if not candidates:
-            async for token, used_role in self.generate_stream_with_fallback(
-                messages=messages,
-                tools=tools,
-                images=images,
-                preferred_role=role,
-                **kwargs,
-            ):
-                syn_candidate = RoleCandidate(
-                    provider_name=used_role,
-                    model_name="stream_model",
-                    provider=self.legacy_providers.get(used_role),
-                    role=role,
-                )
-                yield token, syn_candidate
-            return
+        """Streams generated tokens using preflight resource-aware candidate selection."""
+        selected, fallbacks, explanation = self.select_candidate_preflight(role, messages, images=images)
+        dispatch_chain = [selected] + fallbacks
 
         last_error = None
 
-        for idx, candidate in enumerate(candidates):
+        for idx, candidate in enumerate(dispatch_chain):
             p_name = candidate.provider_name
             m_name = candidate.model_name
             provider = candidate.provider
 
-            is_avail = self.health_registry.is_model_available(p_name, m_name)
-            if hasattr(provider, "health") and hasattr(provider.health, "is_available"):
-                if not provider.health.is_available():
-                    is_avail = False
-
-            if not is_avail:
-                cooldown_rem = self.health_registry.get_cooldown_remaining_s(p_name, m_name)
-                health = getattr(provider, "health", self.health_registry.get_health(p_name, m_name))
-                if self.debug_routing:
-                    print(
-                        f"[ROUTER] Role: {role} | Skipped Stream: {p_name} / {m_name} "
-                        f"({getattr(health, 'status', 'RATE_LIMITED')}, Cooldown: {cooldown_rem}s)"
-                    )
-                continue
-
-            caps = provider.capabilities()
+            caps = provider.capabilities() if hasattr(provider, "capabilities") else {}
             if images and not caps.get("vision", False):
                 continue
-
-            if self.debug_routing:
-                reason = "primary candidate healthy" if idx == 0 else f"fallback candidate #{idx + 1}"
-                print(f"[ROUTER] Stream Role: {role} | Selected: {p_name} / {m_name} | Reason: {reason}")
 
             t0 = time.perf_counter()
             try:
@@ -292,21 +358,23 @@ class ModelRouter:
                 if has_yielded:
                     elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
                     self.health_registry.record_success(p_name, m_name, elapsed_ms)
+                    self.resource_cache.get_or_create(p_name, m_name).recent_latency_ms = elapsed_ms
                     return
 
             except Exception as e:
                 err_str = str(e)
-                status_code = 429 if "429" in err_str else (402 if "402" in err_str else None)
+                status_code = 429 if ("429" in err_str or "rate_limit" in err_str.lower()) else None
                 self.health_registry.record_failure(p_name, m_name, err_str, status_code=status_code)
+                if status_code == 429:
+                    self.resource_cache.record_429(p_name, m_name, retry_after=10.0, error_message=err_str)
+                else:
+                    self.resource_cache.record_failure(p_name, m_name, status_code=status_code, error_message=err_str)
                 last_error = e
 
         raise RuntimeError(
             f"All model candidates failed streaming for role '{role}'. Last error: {last_error}"
         )
 
-    # -------------------------------------------------------------
-    # Backward Compatibility Methods
-    # -------------------------------------------------------------
     async def generate_with_fallback(
         self,
         messages: list[dict[str, Any]],
@@ -330,7 +398,6 @@ class ModelRouter:
             )
             return resp, target_role
         except Exception:
-            # Fallback to standard reasoning or fast if primary role failed
             alt_roles = ["reasoning", "fast", "fallback"]
             for alt in alt_roles:
                 if alt != target_role and self.has_role(alt):
@@ -400,13 +467,16 @@ def create_model_router_from_config(config_data: dict) -> ModelRouter:
     roles_cfg = config_data.get("roles", {})
     models_cfg = config_data.get("models", {})
     health_reg = ModelHealthRegistry()
+    res_cache = ResourceStateCache()
     role_chains: dict[str, list[RoleCandidate]] = {}
     legacy_providers: dict[str, LLMProvider] = {}
+    execution_modes: dict[str, str] = {}
 
     # 1. Parse 'roles' configuration if present
     if roles_cfg:
         for r_name, r_info in roles_cfg.items():
             chain: list[RoleCandidate] = []
+            execution_modes[r_name] = r_info.get("mode", "RESOURCE_AWARE")
 
             # Primary candidate
             prim = r_info.get("primary", {})
@@ -461,12 +531,16 @@ def create_model_router_from_config(config_data: dict) -> ModelRouter:
                             role=m_role,
                         )
                     ]
+                    execution_modes[m_role] = "RESOURCE_AWARE"
                 except Exception as e:
                     logger.debug(f"[create_model_router] Failed legacy init for {m_role}: {e}")
 
-    return ModelRouter(
+    router = ModelRouter(
         providers=legacy_providers,
         role_chains=role_chains,
         health_registry=health_reg,
+        resource_cache=res_cache,
         debug_routing=config_data.get("telemetry", {}).get("manual_debug_mode", True),
     )
+    router.execution_modes = execution_modes
+    return router

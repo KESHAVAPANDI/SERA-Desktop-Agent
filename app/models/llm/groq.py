@@ -95,7 +95,28 @@ class GroqProvider(LLMProvider):
             params["tools"] = to_openai_tools(tools)
             params["tool_choice"] = "auto"
 
-        response = self.client.chat.completions.create(**params)
+        t0 = time.perf_counter()
+        try:
+            response = self.client.chat.completions.create(**params)
+            elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+            try:
+                from app.core.resource_cache import ResourceStateCache
+                headers = getattr(response, "_headers", {}) or {}
+                ResourceStateCache().update_from_headers("groq", self.model, headers, latency_ms=elapsed_ms)
+            except Exception:
+                pass
+        except Exception as e:
+            err_str = str(e).lower()
+            try:
+                from app.core.resource_cache import ResourceStateCache
+                if "429" in err_str or "rate_limit" in err_str:
+                    ResourceStateCache().record_429("groq", self.model, retry_after=10.0, error_message=str(e))
+                else:
+                    ResourceStateCache().record_failure("groq", self.model, error_message=str(e))
+            except Exception:
+                pass
+            raise
+
         message = response.choices[0].message
         tool_calls = []
 

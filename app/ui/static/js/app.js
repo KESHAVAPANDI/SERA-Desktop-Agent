@@ -12,6 +12,7 @@ class SERAApp {
   constructor() {
     window.SERA_APP = this;
     window.seraApp = this;
+    window.SERA_BUILD_ID = "5D.2";
     this.ws = null;
     this.currentView = "live";
     this.views = {};
@@ -161,6 +162,7 @@ class SERAApp {
   handleEvent(eventType, data) {
     this.views.debug?.logEvent(eventType, data);
     this.views.workflow?.handleRuntimeEvent(eventType, data);
+    this.views.live?.handleRuntimeEvent(eventType, data);
 
     if (eventType === "SNAPSHOT") {
       const isAttached = Boolean(data.runtime_attached);
@@ -197,70 +199,20 @@ class SERAApp {
       const ramEl = document.getElementById("ram-gauge");
       if (ramEl && data.system_memory_mb != null) ramEl.textContent = `${(data.system_memory_mb / 1024).toFixed(1)} GB`;
 
-    } else if (eventType === "ARCHITECT_CONFIG" || eventType === "ARCHITECT_CONFIG_SAVED") {
+    } else if (eventType === "ARCHITECT_CONFIG" || eventType === "ARCHITECT_CONFIG_SAVED" || eventType === "CONFIG_UPDATED") {
       this.views.architect?.loadConfigData(data.config || data);
-    } else if (eventType === "CONFIG_UPDATED") {
-      this.views.architect?.loadConfigData(data);
     } else if (eventType === "ARCHITECT_TEST_RESULT") {
-      this.views.architect?.visualizeSimulationTrace(data);
-    } else if (eventType === "CAPABILITIES_LIST") {
-      if (data.capabilities) this.views.live?.renderCapabilities(data.capabilities);
+      this.views.architect?.renderSimulationTrace(data);
     } else if (eventType === "RUNTIME_STATE_CHANGED") {
       this.updateRuntimeState(data.status, data.task);
-      this.views.live?.setAuraState(data.status, data);
     } else if (eventType === "ACTIVATION_STARTED") {
       this.updateRuntimeState("LISTENING");
-      this.views.live?.setAuraState("LISTENING", data);
-    } else if (eventType === "ACTIVATION_RELEASED") {
+    } else if (eventType === "ACTIVATION_RELEASED" || eventType === "TRANSCRIPTION_STARTED") {
       this.updateRuntimeState("TRANSCRIBING");
-      this.views.live?.setAuraState("TRANSCRIBING");
-    } else if (eventType === "WAKE_WORD_DETECTED") {
-      this.views.live?.setAuraState("LISTENING", { source: "WAKE_WORD" });
-    } else if (eventType === "TRANSCRIPTION_STARTED") {
-      this.updateRuntimeState("TRANSCRIBING");
-      this.views.live?.setAuraState("TRANSCRIBING");
-    } else if (eventType === "TRANSCRIPTION_COMPLETED") {
-      if (data.transcript) {
-        this.views.live?.appendUserMessage(data.transcript, "VOICE");
-      }
     } else if (eventType === "TASK_STARTED") {
       this.updateRuntimeState("EXECUTING", data.user_input);
-      this.views.live?.startTask(data);
-      this.views.live?.setAuraState("EXECUTING");
-    } else if (eventType === "TOOL_STARTED") {
-      this.views.live?.updateTaskStep(2, 4, `Executing ${data.tool}`);
-      this.views.live?.createInlineWorkCard(data.tool, data.arguments || data.params, data.call_id);
-    } else if (eventType === "TOOL_COMPLETED") {
-      this.views.live?.completeInlineWorkCard(data.tool, data.result, data.latency_ms, data.call_id);
-    } else if (eventType === "TOOL_FAILED") {
-      this.views.live?.failInlineWorkCard(data.tool, data.error, data.call_id);
-    } else if (eventType === "SCREEN_CAPTURE_STARTED") {
-      this.views.live?.createInlineWorkCard("capture_screen", data);
-    } else if (eventType === "SCREEN_CAPTURED") {
-      this.views.live?.completeInlineWorkCard("capture_screen", data);
-    } else if (eventType === "VISION_STARTED") {
-      this.views.live?.createInlineWorkCard("inspect_screen", data);
-    } else if (eventType === "VISION_COMPLETED") {
-      this.views.live?.completeInlineWorkCard("inspect_screen", data);
-    } else if (eventType === "STREAM_TOKEN") {
-      this.views.live?.appendStreamToken(data.token || data.text);
-    } else if (eventType === "AGENT_RESPONSE") {
-      const respContent = data.content || data.text || data.result;
-      this.views.live?.completeAssistantResponse(respContent);
-    } else if (eventType === "TTS_STARTED") {
-      this.views.live?.setAuraState("SPEAKING");
-    } else if (eventType === "TASK_COMPLETED") {
+    } else if (eventType === "TASK_COMPLETED" || eventType === "TASK_CANCELLED" || eventType === "TASK_FAILED") {
       this.updateRuntimeState("IDLE");
-      this.views.live?.stopTask("✓ Completed", data);
-      if (data.result) {
-        this.views.live?.completeAssistantResponse(data.result);
-      }
-    } else if (eventType === "TASK_CANCELLED") {
-      this.updateRuntimeState("IDLE");
-      this.views.live?.stopTask("✕ Cancelled", data);
-    } else if (eventType === "TASK_FAILED") {
-      this.updateRuntimeState("IDLE");
-      this.views.live?.stopTask("✗ Failed", data);
     } else if (eventType === "SECURITY_CONFIRMATION_REQUIRED") {
       this.views.security?.showConfirmationRequest(data.action_id, data.tool_name, data.prompt, data.arguments);
       this.updateRuntimeState("CONFIRMING_ACTION", `Confirmation required: ${data.tool_name}`);

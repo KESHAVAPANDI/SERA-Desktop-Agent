@@ -310,6 +310,9 @@ IDENTITY:
         if metrics:
             metrics.llm_request_started_at = time.time()
 
+        if hasattr(self, "event_bus") and self.event_bus:
+            self.event_bus.emit("STREAM_START", {"turn_id": turn_id, "role": preferred_role})
+
         first_token = True
         accumulated_tokens: list[str] = []
 
@@ -325,11 +328,16 @@ IDENTITY:
                         metrics.llm_first_token_at = time.time()
 
                 accumulated_tokens.append(token)
+                if hasattr(self, "event_bus") and self.event_bus:
+                    self.event_bus.emit("STREAM_TOKEN", {"turn_id": turn_id, "token": token})
                 yield token
 
             final_text = "".join(accumulated_tokens).strip()
             if metrics:
                 metrics.llm_completed_at = time.time()
+
+            if hasattr(self, "event_bus") and self.event_bus:
+                self.event_bus.emit("STREAM_COMPLETE", {"turn_id": turn_id, "content": final_text})
 
             self.state.last_response = final_text
             self.state.active_tool_name = None

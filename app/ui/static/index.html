@@ -26,7 +26,7 @@
           </svg>
           <div class="brand-text-block">
             <span class="brand-title">SERA</span>
-            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.2 / 5D.4</span>
+            <span class="brand-build" id="sera-build-badge">TEMPORAL AURA • BUILD 5D.2 / 5D.5</span>
           </div>
         </div>
 
@@ -236,11 +236,42 @@
                   <span id="task-overlay-timer" class="task-overlay-timer">0.0s</span>
                 </div>
                 <div class="task-overlay-title" id="task-overlay-title">Executing Command...</div>
+                <div id="task-card-title" class="hidden">Executing Command...</div>
                 <div class="task-overlay-step" id="task-overlay-step">CURRENT STEP: Initializing task routing...</div>
                 <div class="task-overlay-actions">
                   <button type="button" id="btn-overlay-expand" class="btn-overlay-action">Expand Task</button>
                   <button type="button" id="btn-overlay-stop" class="btn-overlay-action btn-overlay-stop">Stop Task</button>
                   <button type="button" id="btn-overlay-workflow" class="btn-overlay-action btn-overlay-workflow">View Workflow ➔</button>
+                </div>
+              </div>
+
+              <!-- Embedded Live Temporal Execution Theater (Materializes dynamically during active tasks) -->
+              <div id="live-embedded-theater" class="live-embedded-theater hidden">
+                <div class="embedded-theater-header">
+                  <div class="theater-header-left">
+                    <span class="theater-glow-dot"></span>
+                    <span class="theater-title-text">TEMPORAL EXECUTION THEATER</span>
+                  </div>
+                  <div class="theater-header-right">
+                    <span id="live-current-model-badge" class="current-model-badge" title="Click to view why this model was chosen">
+                      <span class="model-badge-icon">⚡</span> <span id="live-model-name-text">Mistral Large</span>
+                    </span>
+                  </div>
+                </div>
+                <div id="live-theater-canvas-container" class="live-theater-canvas-container">
+                  <svg id="live-theater-svg" class="live-theater-svg"></svg>
+                  <div id="live-theater-nodes" class="live-theater-nodes"></div>
+                </div>
+                <div class="embedded-theater-footer">
+                  <div class="theater-step-info">
+                    <span class="step-label-prefix">CURRENT STEP:</span>
+                    <span id="live-theater-step-text" class="step-label-content">Initializing...</span>
+                  </div>
+                  <div class="theater-footer-actions">
+                    <button type="button" id="btn-theater-expand-chat" class="btn-theater-action">Expand Chat</button>
+                    <button type="button" id="btn-theater-stop" class="btn-theater-action btn-theater-stop">Stop Task</button>
+                    <button type="button" id="btn-theater-open-workflow" class="btn-theater-action btn-theater-workflow">Open Full Workflow ➔</button>
+                  </div>
                 </div>
               </div>
 
@@ -326,7 +357,7 @@
         <div class="architect-toolbar">
           <div class="toolbar-left">
             <span class="architect-title">TEMPORAL ARCHITECT</span>
-            <span class="architect-sub">Persistent Role Topology & Candidate Priority Designer</span>
+            <span class="architect-sub">Model Role Selection & Adaptive Framework Topology</span>
             <span id="architect-dirty-badge" class="architect-dirty-badge hidden">● UNSAVED CHANGES</span>
           </div>
           <div class="toolbar-right">
@@ -339,75 +370,115 @@
             <button class="btn-action btn-primary-glow" id="btn-architect-save" title="Preview & Save Temporal Architecture">
               <span>Save Changes</span>
             </button>
-            <div class="toolbar-divider"></div>
-            <button class="btn-action btn-sm" id="btn-architect-reset-layout" title="Reset Node Coordinates">Reset Layout</button>
           </div>
         </div>
 
-        <div class="architect-layout">
-          <!-- Left: Persistent Configuration Canvas -->
-          <div id="architect-canvas" class="architect-canvas">
-            <div id="architect-viewport" class="architect-viewport">
-              <canvas id="architect-canvas-bg" class="architect-canvas-bg"></canvas>
-              <svg id="architect-svg" class="architect-svg-layer"></svg>
-              <div id="architect-nodes-container" class="architect-nodes-layer"></div>
+        <div class="architect-3col-studio">
+          <!-- Column 1: Roles List (Left) -->
+          <aside class="arch-col-roles" id="architect-roles-column">
+            <div class="arch-col-header">SYSTEM ROLES</div>
+            <div class="arch-roles-list" id="architect-roles-list">
+              <!-- Dynamically populated roles: STT, FAST, REASONING, DESKTOP, VISION, OCR, EMBEDDINGS, TTS -->
             </div>
-          </div>
+          </aside>
 
-          <!-- Right: Role & Candidate Execution Mode Inspector Drawer -->
-          <aside id="workflow-inspector-drawer" class="architect-drawer hidden"></aside>
-          <aside id="architect-inspector-drawer" class="architect-drawer">
-            <div class="drawer-header">
-              <div class="drawer-header-left">
-                <span class="drawer-icon">⚙️</span>
-                <span id="architect-role-title" class="drawer-title">ROLE: REASONING</span>
+          <!-- Column 2: Selected Role Configuration (Center) -->
+          <section class="arch-col-config architect-drawer" id="architect-inspector-drawer">
+            <div class="arch-col-header">
+              <div class="arch-role-title-row">
+                <span class="role-icon-glow">⚙️</span>
+                <span id="arch-selected-role-name" class="arch-selected-role-name">ROLE: REASONING</span>
               </div>
-              <button id="architect-drawer-close" class="btn-close-drawer" title="Close Drawer">✕</button>
+              <span class="arch-role-desc" id="arch-role-desc">High-capability multi-step reasoning, planning, and task decomposition</span>
             </div>
 
-            <div class="drawer-body">
-              <!-- Three Execution Modes per Role -->
-              <div class="architect-section">
-                <label class="architect-section-label">EXECUTION MODE</label>
-                <div class="mode-switcher-group">
-                  <button type="button" class="mode-switch-btn" data-mode="PRIMARY_ONLY" id="btn-role-mode-primary">
-                    PRIMARY ONLY
+            <div class="arch-config-body">
+              <!-- Four Execution Modes per Role -->
+              <div class="arch-form-section">
+                <label class="arch-form-label">EXECUTION MODE</label>
+                <div class="arch-modes-grid">
+                  <button type="button" class="mode-card-btn" data-mode="PRIMARY_ONLY" id="btn-role-mode-primary">
+                    <span class="mode-card-title">PRIMARY ONLY</span>
+                    <span class="mode-card-sub">Strictly route to primary candidate</span>
                   </button>
-                  <button type="button" class="mode-switch-btn active" data-mode="FALLBACK_ORDER" id="btn-role-mode-fallback">
-                    FALLBACK ORDER
+                  <button type="button" class="mode-card-btn" data-mode="FALLBACK_ORDER" id="btn-role-mode-fallback">
+                    <span class="mode-card-title">FALLBACK ORDER</span>
+                    <span class="mode-card-sub">Sequential failover on failure</span>
                   </button>
-                  <button type="button" class="mode-switch-btn" data-mode="CUSTOM" id="btn-role-mode-custom">
-                    CUSTOM
+                  <button type="button" class="mode-card-btn active" data-mode="RESOURCE_AWARE" id="btn-role-mode-resource">
+                    <span class="mode-card-title">RESOURCE AWARE</span>
+                    <span class="mode-card-sub">Preflight scoring by quota & latency</span>
+                  </button>
+                  <button type="button" class="mode-card-btn" data-mode="CUSTOM" id="btn-role-mode-custom">
+                    <span class="mode-card-title">CUSTOM</span>
+                    <span class="mode-card-sub">Custom execution topology</span>
                   </button>
                 </div>
                 <div id="mode-explanation-text" class="mode-explanation-text">
-                  Dispatches Primary. If primary fails or is rate-limited, automatically cascades to secondary fallback candidates in order.
+                  Evaluates token requirements and quota headroom before dispatching. Excludes rate-limited models without making a failing request.
                 </div>
               </div>
 
-              <!-- Candidate Priority Drag List -->
-              <div class="architect-section">
-                <div class="section-header-row">
-                  <label class="architect-section-label">CANDIDATE PRIORITY CHAIN</label>
-                  <span class="drag-hint-text">Drag items to change execution priority</span>
+              <!-- Candidate Priority Chain -->
+              <div class="arch-form-section">
+                <div class="arch-section-header">
+                  <label class="arch-form-label">PREFERRED CANDIDATES</label>
+                  <span class="arch-drag-hint">Drag items up/down to adjust priority rank</span>
                 </div>
                 <div id="architect-candidates-list" class="architect-candidates-list">
                   <!-- Dynamically populated candidate items with drag handles -->
                 </div>
               </div>
 
-              <!-- Add Candidate to Role -->
-              <div class="architect-section">
-                <label class="architect-section-label">ADD CANDIDATE MODEL</label>
-                <div class="add-candidate-row">
+              <!-- Add Candidate -->
+              <div class="arch-form-section">
+                <label class="arch-form-label">ADD CANDIDATE MODEL</label>
+                <div class="add-cand-row">
                   <select id="architect-provider-select" class="form-select-sm"></select>
                   <select id="architect-model-select" class="form-select-sm"></select>
-                  <button type="button" id="btn-architect-add-cand" class="btn-action btn-sm">+ Add</button>
+                  <button type="button" id="btn-architect-add-cand" class="btn-action btn-sm">+ Add Candidate</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Column 3: Live Routing Preview & Simulation (Right) -->
+          <aside class="arch-col-preview" id="architect-preview-column">
+            <div class="arch-col-header">ADAPTIVE ROUTING PREVIEW</div>
+            <div class="arch-preview-body">
+              <div class="preview-card" id="arch-live-routing-card">
+                <div class="preview-card-title">ACTIVE SELECTION PREVIEW</div>
+                <div class="preview-model-display" id="arch-preview-selected-model">Mistral Large (Mistral)</div>
+                <div class="preview-score-badge" id="arch-preview-score">Score: 285.0 • Latency: 320ms</div>
+                <div class="preview-reasons-list" id="arch-preview-reasons">
+                  <div>✓ Preflight token feasibility confirmed</div>
+                  <div>✓ Healthy provider state</div>
+                  <div>✓ Low latency candidate</div>
+                </div>
+              </div>
+
+              <div class="preview-card simulation-card">
+                <div class="preview-card-title">OFFLINE ROUTING SIMULATION</div>
+                <div class="sim-controls">
+                  <label class="sim-label">Test Scenario:</label>
+                  <select id="arch-sim-scenario" class="form-select-sm">
+                    <option value="low_quota">Primary Candidate Low Quota</option>
+                    <option value="rate_limit_429">429 Rate Limit Outage</option>
+                    <option value="high_latency">Primary High Latency Spike</option>
+                    <option value="normal">Normal Operation</option>
+                  </select>
+                  <button type="button" id="btn-run-simulation" class="btn-action btn-sm btn-sim-run">Run Simulation</button>
+                </div>
+                <div id="arch-simulation-trace" class="sim-trace-output">
+                  <div class="sim-trace-placeholder">Click 'Run Simulation' or 'Test Configuration' to test routing behavior.</div>
                 </div>
               </div>
             </div>
           </aside>
         </div>
+
+        <!-- Compatibility Elements -->
+        <aside id="workflow-inspector-drawer" class="architect-drawer hidden"></aside>
 
         <!-- Pre-Save Configuration Preview Modal -->
         <div id="architect-preview-modal" class="architect-modal-backdrop hidden">
@@ -584,6 +655,28 @@
         <div class="modal-footer">
           <button id="btn-test-provider-conn" class="btn-action">Test Connection</button>
           <button id="btn-save-provider" class="btn-action btn-primary-glow">Save Provider</button>
+        </div>
+    <!-- 5. WHY THIS MODEL MODAL -->
+    <div id="why-model-modal" class="why-model-modal-backdrop hidden">
+      <div class="why-model-card">
+        <div class="why-model-header">
+          <div class="why-title-row">
+            <span class="why-icon">⚡</span>
+            <span class="why-title">WHY THIS MODEL WAS SELECTED</span>
+          </div>
+          <button type="button" id="btn-why-model-close" class="btn-close-drawer">✕</button>
+        </div>
+        <div class="why-model-body" id="why-model-body">
+          <div class="why-role-badge" id="why-role-label">Role: Reasoning</div>
+          <div class="why-model-name" id="why-model-name">Mistral Large (Mistral)</div>
+          <div class="why-score-pill" id="why-score-pill">Adaptive Score: 285.0 • Preflight Verified</div>
+          <div class="why-reasons-title">Selection Breakdown:</div>
+          <div class="why-reasons-container" id="why-reasons-container">
+            <div class="why-reason-item">✓ Capability requirements matched</div>
+            <div class="why-reason-item">✓ Quota headroom verified: estimated 256 tokens within remaining limit</div>
+            <div class="why-reason-item">✓ Fast latency (320ms avg)</div>
+            <div class="why-reason-item">✓ Healthy provider state (200 OK)</div>
+          </div>
         </div>
       </div>
     </div>

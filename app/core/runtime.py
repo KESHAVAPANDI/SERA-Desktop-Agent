@@ -235,10 +235,33 @@ class SERARuntime:
         self.handle_hotkey_press()
         self.handle_hotkey_release()
         
+    def register_event_listener(self, callback: Any) -> None:
+        """Registers a custom event listener callback receiving (event_type, payload)."""
+        if not hasattr(self, "_custom_listeners"):
+            self._custom_listeners = []
+        self._custom_listeners.append(callback)
+
     def _emit_event(self, event_name: str, payload: Any = None) -> None:
-        """Safely dispatches event to EventBus if initialized."""
+        """Safely dispatches event to EventBus and listeners with standardized metadata."""
+        data = dict(payload) if isinstance(payload, dict) else {"data": payload}
+        if "event_id" not in data:
+            data["event_id"] = f"evt_{uuid.uuid4().hex[:8]}"
+        if "timestamp" not in data:
+            data["timestamp"] = time.time()
+        if "task_id" not in data and getattr(self, "active_task_info", None):
+            data["task_id"] = self.active_task_info.get("task_id")
+        if "turn_id" not in data and data.get("task_id"):
+            data["turn_id"] = data["task_id"]
+
         if hasattr(self, "events") and self.events:
-            self.events.emit(event_name, payload)
+            self.events.emit(event_name, data)
+
+        if hasattr(self, "_custom_listeners"):
+            for listener in self._custom_listeners:
+                try:
+                    listener(event_name, data)
+                except Exception as e:
+                    logger.debug(f"[SERARuntime] Listener error: {e}")
 
     def handle_hotkey_press(self) -> None:
         """Triggered immediately when Ctrl+Space is pressed down (Hold-To-Talk begin)."""
@@ -477,15 +500,59 @@ class SERARuntime:
 
             if hasattr(self, "audio_cues") and self.audio_cues:
                 self.audio_cues.play_thinking_cue()
-            response_text = await self.process_text(raw_text, metrics=metrics, turn_id=turn_id)
+
+            task_id = f"task_{uuid.uuid4().hex[:8]}"
+            t_turn_start = time.time()
+            self.active_task_info = {
+                "task_id": task_id,
+                "user_input": raw_text,
+                "source": source,
+                "status": "EXECUTING",
+                "current_step": 1,
+                "total_steps": 4,
+                "current_node": "Router",
+                "started_at": t_turn_start,
+                "completed_at": None,
+                "result": None,
+                "error": None,
+            }
+            self._emit_event("TASK_STARTED", {
+                "task_id": task_id,
+                "user_input": raw_text,
+                "source": source,
+                "started_at": t_turn_start,
+            })
+
+            response_text = await self.process_text(raw_text, metrics=metrics, turn_id=task_id)
             metrics.turn_completed_at = time.time()
+            duration = time.time() - t_turn_start
+            final_resp = response_text or self.state.last_response or "Action completed."
+
+            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                self.active_task_info["status"] = "COMPLETED"
+                self.active_task_info["completed_at"] = time.time()
+                self.active_task_info["result"] = final_resp
+
+            self._emit_event("AGENT_RESPONSE", {
+                "task_id": task_id,
+                "turn_id": task_id,
+                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                "type": "ASSISTANT_MESSAGE",
+                "content": str(final_resp),
+                "status": "COMPLETED",
+            })
+            self._emit_event("TASK_COMPLETED", {
+                "task_id": task_id,
+                "result": final_resp,
+                "duration_seconds": duration,
+            })
 
             if hasattr(self, "events") and self.events:
                 await self.events.emit_async("latency_metrics", metrics=metrics)
 
             if hasattr(self, "wakeword_detector") and self.wakeword_detector:
                 self.wakeword_detector.resume()
-            return response_text
+            return str(final_resp)
 
         except Exception as e:
             logger.error(f"[SERARuntime] Error during speech turn: {e}")
@@ -667,16 +734,59 @@ class SERARuntime:
             # 4. Audio cue for thinking
             self.audio_cues.play_thinking_cue()
 
+            task_id = f"task_{uuid.uuid4().hex[:8]}"
+            t_turn_start = time.time()
+            self.active_task_info = {
+                "task_id": task_id,
+                "user_input": raw_text,
+                "source": source,
+                "status": "EXECUTING",
+                "current_step": 1,
+                "total_steps": 4,
+                "current_node": "Router",
+                "started_at": t_turn_start,
+                "completed_at": None,
+                "result": None,
+                "error": None,
+            }
+            self._emit_event("TASK_STARTED", {
+                "task_id": task_id,
+                "user_input": raw_text,
+                "source": source,
+                "started_at": t_turn_start,
+            })
+
             # 5. Process validated text turn
-            response = await self.process_text(raw_text, metrics=metrics, turn_id=turn_id)
+            response = await self.process_text(raw_text, metrics=metrics, turn_id=task_id)
             metrics.turn_completed_at = time.time()
+            duration = time.time() - t_turn_start
+            final_resp = response or self.state.last_response or "Action completed."
+
+            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                self.active_task_info["status"] = "COMPLETED"
+                self.active_task_info["completed_at"] = time.time()
+                self.active_task_info["result"] = final_resp
+
+            self._emit_event("AGENT_RESPONSE", {
+                "task_id": task_id,
+                "turn_id": task_id,
+                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                "type": "ASSISTANT_MESSAGE",
+                "content": str(final_resp),
+                "status": "COMPLETED",
+            })
+            self._emit_event("TASK_COMPLETED", {
+                "task_id": task_id,
+                "result": final_resp,
+                "duration_seconds": duration,
+            })
 
             # Emit latency telemetry
             print(f"\n{metrics.format_summary()}")
             if hasattr(self, "events") and self.events:
                 await self.events.emit_async("latency_metrics", metrics=metrics)
 
-            return response
+            return str(final_resp)
 
         except asyncio.CancelledError:
             print("[SERA] Voice turn cancelled by user interruption.")
@@ -783,10 +893,10 @@ class SERARuntime:
         if metrics:
             metrics.llm_request_started_at = time.time()
 
-        tokens_generator = self.agent.run_stream(text, metrics=metrics)
+        tokens_generator = self.agent.run_stream(text, metrics=metrics, turn_id=turn_id)
         await self._stream_and_play_tts(tokens_generator, metrics)
         self._transition_state(SERAStatus.IDLE)
-        return self.state.last_response or ""
+        return self.state.last_response or "I have completed the task."
 
     async def _stream_and_play_tts(self, text_or_tokens: Any, metrics: LatencyMetrics | None) -> None:
         """Pipes streaming LLM tokens into sentence-level Fish Audio TTS."""

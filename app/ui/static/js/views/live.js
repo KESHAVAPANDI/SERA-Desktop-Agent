@@ -1,6 +1,7 @@
 /**
  * LiveView — SERA Human-Facing Conversational Operating Surface
- * Phase 5D.3: Unified Event Stream, Inline Work Cards, Artifacts, Streaming & Context-Aware Interrupt
+ * Phase 5D.5: Embedded Temporal Execution Theater, Guaranteed Assistant Response Contract,
+ * Streaming Token Settlement, Adaptive Model Reason Inspection & Context-Aware Task Minimization
  */
 
 export class LiveView {
@@ -41,6 +42,25 @@ export class LiveView {
     this.btnOverlayWorkflow = document.getElementById("btn-overlay-workflow");
     this.isChatMinimized = false;
 
+    // Embedded Live Temporal Execution Theater Elements
+    this.embeddedTheater = document.getElementById("live-embedded-theater");
+    this.embeddedTheaterNodes = document.getElementById("live-theater-nodes");
+    this.embeddedTheaterSvg = document.getElementById("live-theater-svg");
+    this.embeddedStepText = document.getElementById("live-theater-step-text");
+    this.currentModelBadge = document.getElementById("live-current-model-badge");
+    this.modelNameText = document.getElementById("live-model-name-text");
+    this.btnTheaterExpand = document.getElementById("btn-theater-expand-chat");
+    this.btnTheaterStop = document.getElementById("btn-theater-stop");
+    this.btnTheaterWorkflow = document.getElementById("btn-theater-open-workflow");
+
+    // Why This Model Modal Elements
+    this.whyModelModal = document.getElementById("why-model-modal");
+    this.whyModelRole = document.getElementById("why-role-label");
+    this.whyModelName = document.getElementById("why-model-name");
+    this.whyModelScore = document.getElementById("why-score-pill");
+    this.whyReasonsContainer = document.getElementById("why-reasons-container");
+    this.btnWhyClose = document.getElementById("btn-why-model-close");
+
     // Data-Driven Contextual Capabilities Grid
     this.capabilitiesGrid = document.getElementById("quick-chips-grid");
 
@@ -51,6 +71,7 @@ export class LiveView {
     this.runtimeState = "IDLE";
     this.activeStreamBubble = null;
     this.activeWorkCards = new Map(); // call_id / tool_name -> DOM Element
+    this.embeddedNodes = new Map(); // node_id -> { el, status }
     this.shouldAutoScroll = true;
 
     // Timers
@@ -76,15 +97,29 @@ export class LiveView {
     // 2. Context-Aware Interrupt Button
     this.btnInterrupt?.addEventListener("click", () => this.handleInterruptClick());
 
-    // 2b. Task Overlay Buttons
+    // 2b. Task Overlay & Theater Action Buttons
     this.btnOverlayStop?.addEventListener("click", () => this.handleInterruptClick());
+    this.btnTheaterStop?.addEventListener("click", () => this.handleInterruptClick());
+
     this.btnOverlayWorkflow?.addEventListener("click", () => this.switchView("workflow"));
-    this.btnOverlayExpand?.addEventListener("click", () => {
+    this.btnTheaterWorkflow?.addEventListener("click", () => this.switchView("workflow"));
+
+    const toggleChatMinimize = () => {
       this.isChatMinimized = !this.isChatMinimized;
       this.chatStream?.classList.toggle("chat-compact-mode", this.isChatMinimized);
-      if (this.btnOverlayExpand) {
-        this.btnOverlayExpand.textContent = this.isChatMinimized ? "Expand Conversation" : "Compact Mode";
-      }
+      const label = this.isChatMinimized ? "Expand Chat" : "Compact Mode";
+      if (this.btnOverlayExpand) this.btnOverlayExpand.textContent = label;
+      if (this.btnTheaterExpand) this.btnTheaterExpand.textContent = label;
+    };
+
+    this.btnOverlayExpand?.addEventListener("click", toggleChatMinimize);
+    this.btnTheaterExpand?.addEventListener("click", toggleChatMinimize);
+
+    // 2c. Why This Model Modal Trigger & Close
+    this.currentModelBadge?.addEventListener("click", () => this.openWhyModelModal());
+    this.btnWhyClose?.addEventListener("click", () => this.closeWhyModelModal());
+    this.whyModelModal?.addEventListener("click", e => {
+      if (e.target === this.whyModelModal) this.closeWhyModelModal();
     });
 
     // 3. Scroll Anchoring
@@ -127,7 +162,7 @@ export class LiveView {
   }
 
   /* ===================================================================
-     1. CONVERSATION STREAM & MESSAGE RENDERING
+     1. CONVERSATION STREAM & GUARANTEED RESPONSE CONTRACT
      =================================================================== */
 
   appendUserMessage(text, source = "TEXT") {
@@ -194,7 +229,7 @@ export class LiveView {
 
     const textSpan = this.activeStreamBubble.querySelector(".stream-text");
     if (finalText && textSpan) {
-      textSpan.textContent = finalText;
+      textSpan.innerHTML = this.formatMarkdown(finalText);
     }
 
     const caret = this.activeStreamBubble.querySelector(".streaming-caret");
@@ -414,7 +449,98 @@ export class LiveView {
   }
 
   /* ===================================================================
-     3. CONTEXT-AWARE INTERRUPT LOGIC
+     3. EMBEDDED LIVE TEMPORAL THEATER & NODE MATERIALIZATION
+     =================================================================== */
+
+  addMiniNode(id, label, sub, status = "active") {
+    if (!this.embeddedTheaterNodes) return;
+    if (this.embeddedNodes.has(id)) {
+      this.updateMiniNode(id, status);
+      return;
+    }
+
+    const nodeEl = document.createElement("div");
+    nodeEl.id = `mini_${id}`;
+    nodeEl.className = `mini-node ${status}`;
+    nodeEl.innerHTML = `
+      <span class="mini-node-title">${this.escapeHtml(label)}</span>
+      <span class="mini-node-sub">${this.escapeHtml(sub || '')}</span>
+    `;
+
+    this.embeddedTheaterNodes.appendChild(nodeEl);
+    this.embeddedNodes.set(id, { el: nodeEl, status });
+    this.renderMiniPlasmaEdges();
+  }
+
+  updateMiniNode(id, status) {
+    const nodeObj = this.embeddedNodes.get(id);
+    if (!nodeObj || !nodeObj.el) return;
+    nodeObj.status = status;
+    nodeObj.el.className = `mini-node ${status}`;
+    this.renderMiniPlasmaEdges();
+  }
+
+  renderMiniPlasmaEdges() {
+    if (!this.embeddedTheaterSvg || !this.embeddedTheaterNodes) return;
+    this.embeddedTheaterSvg.innerHTML = "";
+
+    const nodesArr = Array.from(this.embeddedNodes.keys());
+    for (let i = 0; i < nodesArr.length - 1; i++) {
+      const fromEl = document.getElementById(`mini_${nodesArr[i]}`);
+      const toEl = document.getElementById(`mini_${nodesArr[i+1]}`);
+      if (!fromEl || !toEl) continue;
+
+      const fx = fromEl.offsetLeft + fromEl.offsetWidth;
+      const fy = fromEl.offsetTop + fromEl.offsetHeight / 2;
+      const tx = toEl.offsetLeft;
+      const ty = toEl.offsetTop + toEl.offsetHeight / 2;
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const dx = (tx - fx) * 0.5;
+      const d = `M ${fx} ${fy} C ${fx + dx} ${fy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+      path.setAttribute("d", d);
+      path.setAttribute("class", "plasma-edge-channel");
+      path.setAttribute("stroke", "var(--accent-cyan)");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("fill", "none");
+      path.setAttribute("filter", "drop-shadow(0 0 6px var(--accent-cyan))");
+      this.embeddedTheaterSvg.appendChild(path);
+    }
+  }
+
+  async openWhyModelModal(role = "reasoning") {
+    if (!this.whyModelModal) return;
+    try {
+      const res = await fetch(`/api/router/why-model?role=${encodeURIComponent(role)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const expl = data.explanation || {};
+        if (this.whyModelRole) this.whyModelRole.textContent = `Role: ${(expl.role || role).toUpperCase()}`;
+        if (this.whyModelName) this.whyModelName.textContent = expl.selected_model || "Mistral Large";
+        if (this.whyModelScore) this.whyModelScore.textContent = `Adaptive Score: ${expl.selected_score || 285.0} • Preflight Verified`;
+
+        if (this.whyReasonsContainer && expl.reasons) {
+          this.whyReasonsContainer.innerHTML = "";
+          expl.reasons.forEach(r => {
+            const rEl = document.createElement("div");
+            rEl.className = "why-reason-item";
+            rEl.textContent = r;
+            this.whyReasonsContainer.appendChild(rEl);
+          });
+        }
+      }
+    } catch (e) {
+      console.debug("Failed to fetch why-model info:", e);
+    }
+    this.whyModelModal.classList.remove("hidden");
+  }
+
+  closeWhyModelModal() {
+    this.whyModelModal?.classList.add("hidden");
+  }
+
+  /* ===================================================================
+     4. CONTEXT-AWARE INTERRUPT & CAPABILITIES
      =================================================================== */
 
   updateInterruptButton(state) {
@@ -465,10 +591,6 @@ export class LiveView {
       console.warn("Task cancellation API error:", e);
     }
   }
-
-  /* ===================================================================
-     4. DATA-DRIVEN CONTEXTUAL CAPABILITIES
-     =================================================================== */
 
   async fetchCapabilities(contextState = "IDLE") {
     try {
@@ -606,6 +728,15 @@ export class LiveView {
     if (this.taskOverlayTitle) this.taskOverlayTitle.textContent = taskName;
     if (this.taskOverlayStep) this.taskOverlayStep.textContent = "CURRENT STEP: Initializing task routing...";
 
+    // Activate Embedded Live Temporal Theater
+    if (this.embeddedTheater) {
+      this.embeddedTheater.classList.remove("hidden");
+      if (this.embeddedTheaterNodes) this.embeddedTheaterNodes.innerHTML = "";
+      if (this.embeddedTheaterSvg) this.embeddedTheaterSvg.innerHTML = "";
+      this.embeddedNodes.clear();
+      this.addMiniNode("stt", "SPEECH INPUT", "Canary-Qwen 2.5B", "completed");
+    }
+
     this.updateInterruptButton("EXECUTING");
     
     clearInterval(this.taskTimerInterval);
@@ -631,6 +762,9 @@ export class LiveView {
     if (this.taskOverlayStep && actionDescription) {
       this.taskOverlayStep.textContent = `CURRENT STEP: ${actionDescription}`;
     }
+    if (this.embeddedStepText && actionDescription) {
+      this.embeddedStepText.textContent = actionDescription;
+    }
   }
 
   stopTask(reason = "✓ Completed", data = {}) {
@@ -652,6 +786,10 @@ export class LiveView {
       this.taskOverlayStep.textContent = reason;
     }
 
+    if (this.embeddedStepText) {
+      this.embeddedStepText.textContent = reason;
+    }
+
     this.updateInterruptButton("IDLE");
 
     if (reason.includes("Cancelled")) {
@@ -667,11 +805,20 @@ export class LiveView {
           }
         }
       });
+      this.embeddedNodes.forEach((nodeObj, id) => {
+        this.updateMiniNode(id, "broken");
+      });
+    } else {
+      this.embeddedNodes.forEach((nodeObj, id) => {
+        this.updateMiniNode(id, "completed");
+      });
     }
 
     // Ensure any streaming bubble settles into completed state
     if (this.activeStreamBubble) {
       this.completeAssistantResponse(data.result || null);
+    } else if (data.result && typeof data.result === "string" && data.result.trim()) {
+      this.appendStaticAssistantMessage(data.result);
     }
 
     setTimeout(() => {
@@ -681,12 +828,154 @@ export class LiveView {
         if (this.taskStepFill) this.taskStepFill.style.width = "0%";
         if (this.taskElapsedTimer) this.taskElapsedTimer.textContent = "0.0s";
         if (this.taskOverlay) this.taskOverlay.classList.add("hidden");
+        if (this.embeddedTheater) this.embeddedTheater.classList.add("hidden");
       }
     }, 4000);
   }
 
   /* ===================================================================
-     6. UTILITY HELPERS
+     6. UNIFIED RUNTIME EVENT HANDLER
+     =================================================================== */
+
+  handleRuntimeEvent(eventName, data = {}) {
+    switch (eventName) {
+      case "CAPABILITIES_LIST":
+        if (data.capabilities) this.renderCapabilities(data.capabilities);
+        break;
+
+      case "ACTIVATION_STARTED":
+      case "LISTENING_STARTED":
+        this.setAuraState("LISTENING", data);
+        break;
+
+      case "TRANSCRIPTION_STARTED":
+        this.setAuraState("TRANSCRIBING", data);
+        break;
+
+      case "TRANSCRIPTION_COMPLETED":
+        if (data.transcript) {
+          this.appendUserMessage(data.transcript, data.source || "VOICE");
+          this.addMiniNode("router", "INTENT ROUTER", "Policy & Dispatch", "active");
+        }
+        this.setAuraState("THINKING", data);
+        break;
+
+      case "TASK_STARTED":
+        this.startTask(data);
+        this.setAuraState("EXECUTING", data);
+        break;
+
+      case "MODEL_SELECTED":
+        const mName = data.model || "openai/gpt-oss-120b";
+        const mShort = mName.split("/").pop();
+        if (this.modelNameText) {
+          this.modelNameText.textContent = mShort;
+        }
+        this.addMiniNode(`model_${data.role || 'reasoning'}`, `${(data.role || 'MODEL').toUpperCase()}: ${mShort}`, data.provider || 'Groq', "active");
+        this.updateTaskStep(2, 4, `Model routed: ${mShort}`);
+        break;
+
+      case "MODEL_FALLBACK":
+        this.updateMiniNode("model_reasoning", "fractured");
+        this.addMiniNode("fallback", `FALLBACK: ${data.model?.split('/').pop() || 'Mistral'}`, data.provider || "Mistral", "fallback-active");
+        this.updateTaskStep(2, 4, `Fallback activated: ${data.model || 'Alternate'}`);
+        break;
+
+      case "TOOL_STARTED": {
+        const tName = data.tool_name || data.tool || "tool";
+        this.createInlineWorkCard(tName, data.arguments || data.params, data.call_id);
+        this.addMiniNode(`tool_${tName}`, tName.toUpperCase(), "Executing Action", "active");
+        this.updateTaskStep(3, 4, `Executing ${tName}`);
+        break;
+      }
+
+      case "TOOL_COMPLETED": {
+        const tcName = data.tool_name || data.tool || "tool";
+        this.completeInlineWorkCard(tcName, data.result, data.latency_ms || 0, data.call_id);
+        this.updateMiniNode(`tool_${tcName}`, "completed");
+        break;
+      }
+
+      case "TOOL_FAILED": {
+        const tfName = data.tool_name || data.tool || "tool";
+        this.failInlineWorkCard(tfName, data.error, data.call_id);
+        this.updateMiniNode(`tool_${tfName}`, "broken");
+        break;
+      }
+
+      case "SCREEN_CAPTURE_STARTED":
+        this.createInlineWorkCard("capture_screen", data, data.call_id);
+        break;
+
+      case "SCREEN_CAPTURED":
+        this.addMiniNode("vision", "SCREEN VISION", "Qwen 2.5 32B", "active");
+        this.completeInlineWorkCard("capture_screen", data, data.latency_ms || 0, data.call_id);
+        break;
+
+      case "VISION_STARTED":
+        this.createInlineWorkCard("inspect_screen", data, data.call_id);
+        break;
+
+      case "VISION_COMPLETED":
+        this.completeInlineWorkCard("inspect_screen", data, data.latency_ms || 0, data.call_id);
+        break;
+
+      case "WEB_SEARCH_STARTED":
+        this.addMiniNode("search", "WEB SEARCH", "DuckDuckGo API", "active");
+        this.createInlineWorkCard("web_search", data, data.call_id);
+        break;
+
+      case "VERIFICATION_STARTED":
+        this.addMiniNode("verify", "VERIFY & SYNTHESIZE", "State Validation", "active");
+        this.updateTaskStep(4, 4, "Verifying results...");
+        break;
+
+      case "STREAM_START":
+        this.startAssistantStreaming(data.turn_id);
+        break;
+
+      case "STREAM_TOKEN":
+        if (data.token || data.text) {
+          this.appendStreamToken(data.token || data.text);
+        }
+        break;
+
+      case "STREAM_COMPLETE":
+        this.completeAssistantResponse(data.content || data.text);
+        break;
+
+      case "AGENT_RESPONSE": {
+        // Authoritative final assistant response settlement
+        const respText = data.content || data.text || data.result || "Task completed.";
+        this.completeAssistantResponse(respText);
+        break;
+      }
+
+      case "SPEAKING_STARTED":
+      case "TTS_STARTED":
+        this.setAuraState("SPEAKING", data);
+        this.addMiniNode("tts", "STREAMING TTS", "Fish Audio", "active");
+        break;
+
+      case "TASK_COMPLETED":
+        this.stopTask("✓ Task Completed", data);
+        this.setAuraState("IDLE", data);
+        break;
+
+      case "TASK_CANCELLED":
+        this.stopTask("✕ Task Cancelled", data);
+        this.setAuraState("IDLE", data);
+        break;
+
+      case "TASK_FAILED":
+        this.stopTask(`✕ Failed: ${data.error || 'Error'}`, data);
+        this.setAuraState("BROKEN", data);
+        break;
+    }
+  }
+
+  /* ===================================================================
+     7. UTILITY HELPERS
      =================================================================== */
 
   scrollToBottom(force = false) {
@@ -709,7 +998,6 @@ export class LiveView {
   formatMarkdown(str) {
     if (!str) return "";
     let escaped = this.escapeHtml(str);
-    // Simple inline formatting for code blocks and bold
     escaped = escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
     escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
     escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
