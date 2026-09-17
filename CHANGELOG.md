@@ -4,6 +4,37 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase2] — 2026-09-17
+
+### Added
+* **Native Windows Primary Presence (`presence_desktop/`):**
+  * True Windows desktop application overlay built on Electron 33 + Three.js WebGL 2.0 with 100% alpha-channel transparency (`transparent: true`, `frame: false`, `alwaysOnTop: true`, `backgroundColor: "#00000000"`).
+  * System-wide global shortcut hook (`CommandOrControl+Space`) to summon and toggle input capsule from any active application.
+  * Native repositioning via mouse drag, click-through toggle, and Windows system tray integration.
+  * Direct bidirectional WebSocket link to the SERA Python runtime (`ws://127.0.0.1:8765`), consuming real-time EventBus events (`RUNTIME_STATE_CHANGED`, `ACTIVATION_STARTED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`, `TASK_FAILED`).
+  * Real-time microphone audio reactivity using Web Audio API analyser modulating core displacement and wave filaments.
+* **8-Layer Computational Consciousness Visual Engine (`presence_desktop/src/engine/PresenceEngine.js`):**
+  * **Layer 1 (Central Core):** Organic 3D Simplex noise GLSL displacement shader, white-hot center, dynamic inner rotating wireframe lattice, and 180-particle micro-singularity swarm.
+  * **Layer 2 (Inner Energy):** Branching filaments and plasma streams with non-linear organic turbulence.
+  * **Layer 3 (Computational Rings):** 5 segmented concentric rings with independent radii, angular speeds, sub-ticks, and gaps.
+  * **Layer 4 (Information Band):** Procedural cybernetic glyph band with dynamic data symbols, mathematical marks, and orbital drift.
+  * **Layer 5 (Geometric Topology Network):** Dynamic 3D K-nearest-neighbors graph continually forming, dissolving, and reconnecting edges.
+  * **Layer 6 (Radial Filaments):** Tapered outward energy tendrils with audio-sensitive wave propagation.
+  * **Layer 7 (Particle Field):** Volumetric 2,800-particle field responding to state vector fields (inward focus during listening, directional flow during execution, chaotic dispersal on anomaly, orbital reconvergence on completion).
+  * **Layer 8 (Multi-Task Structural Engine):** 8 distinct task-specific computational structures:
+    * *Greeting:* Subtle harmonic ripple ring with exponential decay.
+    * *Time / Instant Query:* Celestial chronometer dial with 12 hour ticks, 60 sub-ticks, and high-speed vector needle.
+    * *Browser:* Directional multi-segment conduit beam, flowing energy packets, and holographic destination reticle lock.
+    * *Web Search:* 5-branch fractal research tree bifurcating into 10 glowing query result nodes.
+    * *Vision / Screen Analysis:* Holographic rectangular frame, coordinate grid, and sweeping horizontal laser scanline.
+    * *File Organization:* 36 discrete file particles clustering from chaotic cloud into structured 6x6 matrix.
+    * *Code Construction:* 6 cascading vertical cybernetic code streams with syntax-tree crossbars.
+    * *System Diagnostics:* 360-degree radar/lidar sweep line, 3 concentric range gauge rings, and 8 peripheral status beacons.
+* **Empirical Snapshot Suite:**
+  * Automated high-resolution window frame captures verifying alpha transparency and distinct task structures (`desktop_presence_live.png`, `desktop_presence_task.png`, `desktop_presence_diagnostics.png`, `desktop_presence_browser.png`).
+
+---
+
 ## [2.0.0-phase2b] — 2026-09-17
 
 ### Added

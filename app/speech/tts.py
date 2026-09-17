@@ -6,8 +6,20 @@ import warnings
 
 import sounddevice as sd
 from dotenv import load_dotenv
-from fishaudio import FishAudio
-from fishaudio.types.tts import TTSConfig
+
+try:
+    from fish_audio_sdk import Session as FishAudioSession, TTSRequest
+    HAS_FISH_SDK = True
+except ImportError:
+    HAS_FISH_SDK = False
+
+try:
+    from fishaudio import FishAudio
+    from fishaudio.types.tts import TTSConfig
+    HAS_FISH_LEGACY = True
+except ImportError:
+    HAS_FISH_LEGACY = False
+
 from scipy.io.wavfile import WavFileWarning, read as read_wav
 
 warnings.filterwarnings("ignore", category=WavFileWarning)

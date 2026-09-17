@@ -65,7 +65,21 @@ class SERAUIServer:
         self.workflow_layout_path = os.path.join(PROJECT_ROOT, "config", "workflow_layout.json")
         self.workflow_layout: dict[str, dict[str, float]] = self._load_workflow_layout()
 
+        # Persist Live UI Event History
+        self.live_history_path = os.path.join(PROJECT_ROOT, "scratch", "live_history.json")
+        self.live_history: list[dict[str, Any]] = self._load_live_history()
+
         self._setup_event_listeners()
+
+    def _load_live_history(self) -> list[dict[str, Any]]:
+        """Loads persistent live event history to survive browser refresh."""
+        if os.path.isfile(self.live_history_path):
+            try:
+                with open(self.live_history_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
 
     def _load_workflow_layout(self) -> dict[str, dict[str, float]]:
         """Loads persistent 2D visual layout coordinates from config/workflow_layout.json."""
@@ -176,6 +190,23 @@ class SERAUIServer:
         if not self.clients:
             return
         payload = {"event": event_type, "data": data, "timestamp": asyncio.get_event_loop().time()}
+        
+        # Persist relevant events to history for page refresh survival
+        if event_type in [
+            "TRANSCRIPTION_COMPLETED", "TASK_STARTED", "TOOL_STARTED", 
+            "TOOL_COMPLETED", "TOOL_FAILED", "SCREEN_CAPTURE_STARTED", 
+            "SCREEN_CAPTURED", "VISION_STARTED", "VISION_COMPLETED", 
+            "WEB_SEARCH_STARTED", "AGENT_RESPONSE", "TASK_COMPLETED", "TASK_CANCELLED"
+        ]:
+            self.live_history.append({"event": event_type, "data": data, "timestamp": payload["timestamp"]})
+            if len(self.live_history) > 100:
+                self.live_history = self.live_history[-100:]
+            try:
+                with open(self.live_history_path, "w", encoding="utf-8") as f:
+                    json.dump(self.live_history, f)
+            except Exception as e:
+                logger.debug(f"[SERAUIServer] Failed to persist live history: {e}")
+
         dead = []
         for client in list(self.clients):
             try:
@@ -354,6 +385,8 @@ class SERAUIServer:
         path = raw_path.split("?")[0]
         if path == "/" or path == "":
             path = "/index.html"
+        elif path == "/presence":
+            path = "/presence.html"
 
         # API Endpoints
         if path.startswith("/api/"):
@@ -516,6 +549,31 @@ class SERAUIServer:
             # 12. Telemetry Waterfall
             if path == "/api/telemetry":
                 return "200 OK", resp_headers, json.dumps(self._get_telemetry_waterfall()).encode("utf-8")
+
+            # 13. Artifact File Serving (Screenshots & Exports)
+            if path.startswith("/api/artifacts/screenshot") or path.startswith("/api/artifacts/file"):
+                filename = ""
+                if "file=" in raw_path:
+                    filename = raw_path.split("file=")[-1].split("&")[0]
+                elif "path=" in raw_path:
+                    filename = raw_path.split("path=")[-1].split("&")[0]
+
+                import urllib.parse
+                filename = urllib.parse.unquote(filename)
+
+                candidates = [
+                    os.path.abspath(os.path.join(PROJECT_ROOT, "scratch", os.path.basename(filename))),
+                    os.path.abspath(os.path.join(PROJECT_ROOT, filename)),
+                    os.path.abspath(filename),
+                ]
+                for file_path in candidates:
+                    if os.path.isfile(file_path):
+                        content_type, _ = mimetypes.guess_type(file_path)
+                        resp_headers["Content-Type"] = content_type or "image/png"
+                        resp_headers["Cache-Control"] = "public, max-age=3600"
+                        with open(file_path, "rb") as f:
+                            return "200 OK", resp_headers, f.read()
+                return "404 Not Found", resp_headers, b'{"error": "Artifact file not found"}'
 
             return "404 Not Found", resp_headers, b'{"error": "Endpoint not found"}'
 
@@ -1160,6 +1218,7 @@ class SERAUIServer:
             "runtime_attached": self.runtime is not None,
             "active_task": active_task_str,
             "active_task_info": task_info_dict,
+            "live_history": self.live_history,
             "mic_status": "READY",
             "wake_word_status": wake_status,
             "stt_info": {

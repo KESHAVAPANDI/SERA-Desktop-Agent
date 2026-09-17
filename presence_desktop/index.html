@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SERA 2.0 Presence</title>
+  <link rel="stylesheet" href="./src/ui/presence.css">
+</head>
+<body>
+  <!-- 1. Master WebGL Transparent Visual Canvas -->
+  <canvas id="presence-canvas"></canvas>
+
+  <!-- 2. Minimal HUD Layer -->
+  <div id="hud-overlay">
+    <div class="top-bar">
+      <div class="sera-brand">
+        <span class="status-dot"></span>
+        <span>SERA 2.0</span>
+      </div>
+      <div class="window-actions">
+        <button id="command-center-btn" class="action-btn" title="Open Technical Command Center">COMMAND CENTER</button>
+        <button id="minimize-btn" class="action-btn" title="Minimize to Tray">−</button>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div id="kinetic-status" class="kinetic-status">INITIALIZING COGNITIVE SYSTEM</div>
+      <div id="kinetic-substatus" class="kinetic-substatus">AWAITING INTENT • CTRL+SPACE</div>
+
+      <div id="input-capsule-wrapper" class="input-capsule-wrapper">
+        <form id="presence-prompt-form" class="input-capsule">
+          <input type="text" id="presence-prompt-input" placeholder="Transmit objective to SERA..." autocomplete="off" />
+          <button type="submit" title="Execute Objective">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Entry Script -->
+  <script type="module" src="./src/App.js"></script>
+</body>
+</html>

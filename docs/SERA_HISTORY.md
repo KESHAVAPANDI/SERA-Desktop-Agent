@@ -168,4 +168,38 @@ With the Three.js WebGL Wisdom King core verified in the browser (`/presence`), 
 * **Empirical Vertical Slices:**
   * Added 8-test comprehensive suite (`tests/vertical_slices/presence/test_desktop_presence_shell.py`) testing default configurations, custom docking math, API bridge calls, dry-run execution, window option contracts, server endpoint serving, and Evidence Verification Fabric asset assertions.
 
+---
+
+## Phase 2 — Reference-Driven Rebuild of Primary Computational Presence
+
+### Moving Beyond Generic AI Orbs
+Previous voice assistants and early SERA prototypes suffered from mechanical animations (idle=breathe, listening=breathe faster, thinking=spin, speaking=wave). To transcend generic orbs and dashboards, SERA was completely re-architected into a living computational consciousness inspired by the internal cognitive visualization of Great Sage / Raphael (Tensura).
+
+### Architectural Milestones:
+* **Dedicated Windows Desktop Shell (`presence_desktop/`):**
+  * Built using Electron 33 + Three.js WebGL 2.0 with Windows Desktop Window Manager (DWM) alpha-channel transparency (`transparent: true`, `backgroundColor: "#00000000"`).
+  * Always-on-top frameless floating window docked to the bottom-right of the primary display.
+  * System-wide global shortcut hook (`CommandOrControl+Space`) allowing instant summoning from any game or application.
+  * Real-time microphone audio reactivity using Web Audio API analyser modulating core radial pressure and wave filaments.
+* **8-Layer Computational Consciousness Engine (`PresenceEngine.js`):**
+  * *Layer 1 (Central Core):* Organic 3D Simplex noise GLSL displacement shader, white-hot center, rotating wireframe lattice, and 180-particle micro-singularity swarm.
+  * *Layer 2 (Inner Energy):* Non-linear branching plasma filaments with organic turbulence.
+  * *Layer 3 (Computational Rings):* 5 segmented concentric rings with independent angular speeds and sub-ticks.
+  * *Layer 4 (Information Band):* Procedural cybernetic glyph band with dynamic data marks and orbital drift.
+  * *Layer 5 (Geometric Topology):* Dynamic 3D K-nearest-neighbors network forming, dissolving, and reconnecting edges.
+  * *Layer 6 (Radial Filaments):* Audio-reactive wave tendrils.
+  * *Layer 7 (Particle Field):* 2,800 GPU particles reacting to state vector fields (inward focus, directional execution, chaotic anomaly dispersal, computational regeneration).
+  * *Layer 8 (Multi-Task Structural Engine):* 8 distinct task-specific computational structures:
+    1. Greeting: Harmonic localized ripple ring.
+    2. Time: Celestial chronometer dial with 12 hour ticks and high-speed needle.
+    3. Browser: Directional multi-segment conduit beam, flowing energy packets, and destination reticle lock.
+    4. Web Search: 5-branch fractal research tree bifurcating into 10 glowing query result nodes.
+    5. Vision: Holographic screen frame, coordinate grid, and sweeping horizontal laser line.
+    6. File Organization: 36 discrete file particles clustering from chaotic cloud into structured 6x6 matrix.
+    7. Code Construction: 6 vertical cascading cybernetic code streams with syntax-tree crossbars.
+    8. System Diagnostics: 360-degree radar/lidar sweep line, 3 concentric range gauge rings, and 8 status beacons.
+* **Empirical Verification:**
+  * Native desktop frames captured and verified across multiple active task states (`desktop_presence_live.png`, `desktop_presence_task.png`, `desktop_presence_diagnostics.png`, `desktop_presence_browser.png`).
+
+
 
