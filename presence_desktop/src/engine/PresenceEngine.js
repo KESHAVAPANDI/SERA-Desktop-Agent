@@ -16,6 +16,7 @@
  */
 
 import * as THREE from "../../node_modules/three/build/three.module.js";
+import { PresenceBehaviorEngine } from "./PresenceBehaviorEngine.js";
 
 // Simplex Noise 3D GLSL Snippet
 const GLSL_SIMPLEX_NOISE = `
@@ -83,6 +84,9 @@ export class PresenceEngine {
     // Master Animation Clock
     this.clock = new THREE.Clock();
     this.time = 0;
+
+    // Presence Behavior Engine (Dynamic Energy, Attention & Organic Variation)
+    this.behavior = new PresenceBehaviorEngine();
 
     this.initScene();
     this.initLayers();
@@ -981,106 +985,97 @@ export class PresenceEngine {
   }
 
   // ─── Set Task Visualization Bridge ────────────────────────────────────────
+  // ─── Task Visualization & Behavior Bridge ─────────────────────────────────
   setTaskVisualization(taskType, objective = "") {
     this.activeTaskType = taskType;
     this.taskStartTime = this.time;
+    if (this.behavior) {
+      this.behavior.setState(this.state, taskType, 0.0);
+    }
     console.log(`[PresenceEngine] Manifesting Task Structure: ${taskType} ("${objective}")`);
   }
 
   // ─── State Behavior Transition ────────────────────────────────────────────
-  setState(newState, taskType = "GENERAL") {
-    if (this.state === newState && this.taskType === taskType) return;
-
+  setState(newState, taskType = "GENERAL", taskProgress = 0.0) {
     this.state = newState;
     this.taskType = taskType;
-    console.log(`[PresenceEngine] State Transition: ${newState} (Task: ${taskType})`);
+    if (this.behavior) {
+      this.behavior.setState(newState, taskType, taskProgress);
+    }
+  }
 
-    // Reset or adjust layer dynamics based on state
-    switch (newState) {
-      case "IDLE":
-        this.coreUniforms.uDistortion.value = 0.35;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.targetTaskOpacity = 0.0;
-        break;
+  // ─── Event-Driven Micro Behaviors ─────────────────────────────────────────
+  triggerEvent(eventType, payload = {}) {
+    if (this.behavior) {
+      this.behavior.triggerEvent(eventType, payload);
+    }
+  }
 
-      case "LISTENING":
-        this.coreUniforms.uDistortion.value = 0.55;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.targetTaskOpacity = 0.0;
-        break;
-
-      case "TRANSCRIBING":
-        this.coreUniforms.uDistortion.value = 0.65;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        break;
-
-      case "THINKING":
-        this.coreUniforms.uDistortion.value = 0.85;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.targetTaskOpacity = 0.5;
-        break;
-
-      case "EXECUTING":
-        this.coreUniforms.uDistortion.value = 0.72;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.targetTaskOpacity = 1.0;
-        break;
-
-      case "SPEAKING":
-        this.coreUniforms.uDistortion.value = 0.6;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        break;
-
-      case "BROKEN":
-        this.coreUniforms.uGlitchIntensity.value = 1.0;
-        this.targetTaskOpacity = 0.0;
-        break;
-
-      case "CANCELLED":
-        this.coreUniforms.uDistortion.value = 0.2;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.targetTaskOpacity = 0.0;
-        break;
-
-      case "COMPLETED":
-        this.coreUniforms.uDistortion.value = 0.45;
-        this.coreUniforms.uGlitchIntensity.value = 0.0;
-        this.reconstructProgress = 0.0;
-        this.targetTaskOpacity = 0.0;
-        break;
+  setAudioData(bands) {
+    if (this.behavior) {
+      this.behavior.setAudioData(bands);
     }
   }
 
   setAudioAmplitude(amp) {
     this.audioAmplitude = Math.max(0.0, Math.min(1.0, amp));
-    this.coreUniforms.uAmplitude.value = this.audioAmplitude;
+    if (this.behavior) {
+      this.behavior.setAudioData({
+        rawAmp: this.audioAmplitude,
+        bass: this.audioAmplitude * 1.3,
+        mid: this.audioAmplitude,
+        treble: this.audioAmplitude * 0.75,
+      });
+    }
   }
 
-  // ─── Animation Render Loop ────────────────────────────────────────────────
+  // ─── Adaptive Simulation Loop ─────────────────────────────────────────────
   update() {
     const delta = this.clock.getDelta();
     this.time += delta;
     this.coreUniforms.uTime.value = this.time;
 
-    // Master subtle continuous drift
-    this.rootGroup.rotation.z = Math.sin(this.time * 0.15) * 0.08;
+    // 0. Update PresenceBehaviorEngine
+    const b = this.behavior ? this.behavior.update(delta) : {
+      energy: 0.25,
+      attention: { core: 1, innerLattice: 0.8, rings: 0.7, glyphs: 0.6, topology: 0.7, filaments: 0.5, particles: 0.65, taskBridge: 0.0 },
+      impulses: { coreShock: 0, energyFlash: 0, anomalyGlitch: 0, toolProjection: 0, returnPulse: 0 },
+      rings: [ { speedMult: 1 }, { speedMult: -1 }, { speedMult: 1 }, { speedMult: -1 }, { speedMult: 1 } ],
+      audio: { rawAmp: 0, bass: 0, mid: 0, treble: 0 },
+      memory: { primaryBranchAngle: 0.5, lastToolTarget: { x: 4.2, y: 0.8 } },
+      breathing: 1.0,
+      topologyWanderRate: 0.015,
+      coreDistortion: 0.35,
+      taskProgress: 0.0,
+    };
+
+    // Master subtle continuous drift influenced by visual memory orientation
+    this.rootGroup.rotation.z = Math.sin(this.time * 0.12 + b.memory.primaryBranchAngle) * 0.06;
 
     // 1. Layer 1: Core Rotation, Lattice & Micro-Singularity
-    this.coreMesh.rotation.y = this.time * 0.35;
-    this.coreMesh.rotation.x = Math.sin(this.time * 0.25) * 0.2;
+    this.coreUniforms.uDistortion.value = b.coreDistortion;
+    this.coreUniforms.uGlitchIntensity.value = b.impulses.anomalyGlitch;
+    this.coreUniforms.uAmplitude.value = b.audio.rawAmp + b.impulses.energyFlash * 0.7;
+
+    const coreAtt = b.attention.core;
+    this.coreGroup.scale.setScalar(b.breathing * (0.85 + coreAtt * 0.2));
+    this.coreMesh.rotation.y += (0.25 + b.energy * 0.45) * delta;
+    this.coreMesh.rotation.x = Math.sin(this.time * 0.25) * (0.15 + b.energy * 0.15);
 
     if (this.innerLattice) {
-      this.innerLattice.rotation.x = -this.time * 0.75;
-      this.innerLattice.rotation.y = this.time * 0.95;
-      this.innerLattice.rotation.z = Math.sin(this.time * 0.4) * 0.35;
+      this.innerLattice.material.opacity = b.attention.innerLattice * 0.75;
+      this.innerLattice.rotation.x -= (0.5 + b.energy * 0.8) * delta;
+      this.innerLattice.rotation.y += (0.7 + b.energy * 1.0) * delta;
     }
 
     if (this.singParticles && this.singularityMesh) {
+      this.singularityMesh.material.opacity = b.attention.innerLattice * 0.95;
       const sPos = this.singularityMesh.geometry.attributes.position.array;
+      const sSpeedMult = 0.8 + b.energy * 2.2;
       for (let s = 0; s < this.singParticles.length; s++) {
         const sp = this.singParticles[s];
-        sp.th += sp.speedTh * delta;
-        sp.ph += sp.speedPh * delta;
+        sp.th += sp.speedTh * delta * sSpeedMult;
+        sp.ph += sp.speedPh * delta * sSpeedMult;
         sPos[s * 3] = sp.r * Math.sin(sp.ph) * Math.cos(sp.th);
         sPos[s * 3 + 1] = sp.r * Math.sin(sp.ph) * Math.sin(sp.th);
         sPos[s * 3 + 2] = sp.r * Math.cos(sp.ph);
@@ -1088,44 +1083,43 @@ export class PresenceEngine {
       this.singularityMesh.geometry.attributes.position.needsUpdate = true;
     }
 
-    // 2. Layer 3: Concentric Rings Rotation (Accelerates during state shifts)
-    const speedMult = (this.state === "THINKING" ? 2.8 :
-                       this.state === "TRANSCRIBING" ? 2.0 :
-                       this.state === "EXECUTING" ? 1.7 : 1.0);
-
-    this.rings.forEach(ring => {
-      ring.rotation.z += ring.userData.baseSpeed * speedMult * delta;
+    // 2. Layer 3: Concentric Rings Rotation (Driven by Behavior Engine Ring States)
+    this.rings.forEach((ring, idx) => {
+      const rState = b.rings[idx] || { speedMult: 1.0, phase: 0.0 };
+      ring.rotation.z += ring.userData.baseSpeed * rState.speedMult * delta;
+      ring.children.forEach(c => {
+        if (c.material) c.material.opacity = Math.min(1.0, b.attention.rings * 0.85);
+      });
     });
 
     // 3. Layer 4: Glyph Band Orbital Motion
-    if (this.glyphTexture) {
-      this.glyphTexture.offset.x += 0.04 * speedMult * delta;
+    if (this.glyphTexture && this.glyphMesh) {
+      this.glyphTexture.offset.x += 0.03 * (0.6 + b.energy * 1.8) * delta;
+      this.glyphMesh.material.opacity = b.attention.glyphs * 0.85;
     }
 
     // 4. Layer 5: Dynamic Geometric Topology Update
-    this.updateTopology(delta);
+    this.updateTopology(delta, b);
 
     // 5. Layer 7: Particle Field State-Driven Vector Field
-    this.updateParticles(delta);
+    this.updateParticles(delta, b);
 
     // 6. Layer 6: Radial Filaments Turbulence & Audio Reactivity
-    this.updateFilaments();
+    this.updateFilaments(b);
 
     // 7. Layer 8: Active Task Structural Engine Update
-    this.updateTaskStructures(delta);
+    this.updateTaskStructures(delta, b);
 
     // Render Scene with 100% Alpha Transparency
     this.renderer.render(this.scene, this.camera);
   }
 
-  updateTaskStructures(delta) {
-    // Smooth fade of task structure opacity
-    this.taskStructureOpacity += (this.targetTaskOpacity - this.taskStructureOpacity) * 0.08;
-    const op = this.taskStructureOpacity;
+  updateTaskStructures(delta, b) {
+    const op = b.attention.taskBridge;
     const active = this.activeTaskType;
+    const progress = b.taskProgress;
     const elapsed = this.time - this.taskStartTime;
 
-    // Helper to toggle active structure vs hidden
     const isAct = (type) => (active === type && op > 0.01);
 
     // 1. GREETING
@@ -1155,20 +1149,24 @@ export class PresenceEngine {
       this.browserReticleMat.opacity = bOp * 0.95;
       this.browserReticle.rotation.z += delta * 2.0;
 
-      // Conduit flowing packets
+      // Conduit flowing packets modulated by progress & energy
       this.conduitPackets.forEach((pMesh, idx) => {
         pMesh.material.opacity = bOp * 0.9;
-        const progress = (this.time * 0.8 + idx * 0.16) % 1.0;
-        pMesh.position.set(progress * 4.2, progress * 0.8, Math.sin(progress * Math.PI) * 0.3);
+        const pSpeed = 0.8 + b.energy * 0.8;
+        const pktProgress = (this.time * pSpeed + idx * 0.16) % 1.0;
+        pMesh.position.set(pktProgress * 4.2, pktProgress * 0.8, Math.sin(pktProgress * Math.PI) * 0.3);
       });
     }
 
     // 4. WEB SEARCH
     if (this.searchBranches.length > 0) {
       const sOp = isAct("WEB_SEARCH") ? op : 0.0;
-      this.searchBranches.forEach((b) => { b.material.opacity = sOp * 0.75; });
+      this.searchBranches.forEach((br) => { br.material.opacity = sOp * 0.75; });
       this.searchNodes.forEach((n, idx) => {
-        n.material.opacity = sOp * (0.6 + Math.sin(this.time * 4.0 + idx) * 0.35);
+        const nodeThreshold = idx / this.searchNodes.length;
+        const isLit = progress > 0.0 ? progress >= nodeThreshold : true;
+        const pulse = Math.sin(this.time * 4.0 + idx) * 0.35 + 0.65;
+        n.material.opacity = isLit ? sOp * pulse : sOp * 0.2;
       });
     }
 
@@ -1187,12 +1185,12 @@ export class PresenceEngine {
     // 6. FILES ORGANIZATION
     if (this.fileBlocks.length > 0) {
       const fOp = isAct("FILES") ? op : 0.0;
-      const clusterT = Math.min(1.0, elapsed * 0.45);
-      this.fileBlocks.forEach((b) => {
-        b.material.opacity = fOp * 0.85;
+      const clusterT = progress > 0.0 ? progress : Math.min(1.0, elapsed * 0.45);
+      this.fileBlocks.forEach((blk) => {
+        blk.material.opacity = fOp * 0.85;
         if (fOp > 0) {
-          b.position.lerpVectors(b.userData.chaosPos, b.userData.targetPos, clusterT);
-          b.rotation.z += delta * 0.8;
+          blk.position.lerpVectors(blk.userData.chaosPos, blk.userData.targetPos, clusterT);
+          blk.rotation.z += delta * 0.8;
         }
       });
     }
@@ -1200,15 +1198,15 @@ export class PresenceEngine {
     // 7. CODE CONSTRUCTION
     if (this.codeStreams.length > 0) {
       const cOp = isAct("CODE") ? op : 0.0;
-      this.codeStreams.forEach((c) => {
-        c.material.opacity = cOp * 0.85;
+      this.codeStreams.forEach((cs) => {
+        cs.material.opacity = cOp * 0.85;
         if (cOp > 0) {
-          const pts = c.geometry.attributes.position.array;
+          const pts = cs.geometry.attributes.position.array;
           for (let d = 0; d < 14; d++) {
-            pts[d * 3 + 1] -= c.userData.speed * delta * 2.0;
+            pts[d * 3 + 1] -= cs.userData.speed * delta * (1.5 + b.energy * 1.5);
             if (pts[d * 3 + 1] < -2.8) pts[d * 3 + 1] = 2.8;
           }
-          c.geometry.attributes.position.needsUpdate = true;
+          cs.geometry.attributes.position.needsUpdate = true;
         }
       });
     }
@@ -1219,30 +1217,31 @@ export class PresenceEngine {
       this.diagRings.forEach((r) => { r.material.opacity = dOp * 0.55; });
       this.diagSweepMat.opacity = dOp * 0.9;
       if (dOp > 0) {
-        this.diagSweep.rotation.z += delta * 2.5;
+        this.diagSweep.rotation.z += delta * (2.0 + b.energy * 2.0);
         const curSweepAng = this.diagSweep.rotation.z % (Math.PI * 2);
-        this.diagBeacons.forEach((b) => {
-          const diff = Math.abs(curSweepAng - b.userData.angle);
+        this.diagBeacons.forEach((beacon) => {
+          const diff = Math.abs(curSweepAng - beacon.userData.angle);
           const flash = diff < 0.35 ? 1.0 : 0.25;
-          b.material.opacity = dOp * flash;
+          beacon.material.opacity = dOp * flash;
         });
       } else {
-        this.diagBeacons.forEach((b) => { b.material.opacity = 0.0; });
+        this.diagBeacons.forEach((beacon) => { beacon.material.opacity = 0.0; });
       }
     }
   }
 
-  updateTopology(delta) {
+  updateTopology(delta, b) {
     const posAttr = this.nodePoints.geometry.attributes.position;
     const positions = posAttr.array;
+    const wanderRate = b.topologyWanderRate;
 
     // Update node positions with wandering velocity
     for (let i = 0; i < this.topologyNodeCount; i++) {
       const node = this.nodes[i];
-      node.pos.add(node.vel);
+      node.pos.addScaledVector(node.vel, wanderRate / 0.015);
 
       // Leash to base region
-      if (node.pos.distanceTo(node.basePos) > 0.6) {
+      if (node.pos.distanceTo(node.basePos) > 0.75) {
         node.vel.negate();
       }
 
@@ -1251,17 +1250,20 @@ export class PresenceEngine {
       positions[i * 3 + 2] = node.pos.z;
     }
     posAttr.needsUpdate = true;
+    this.nodePoints.material.opacity = b.attention.topology * 0.9;
 
-    // Recalculate dynamic edge connections (KNN within threshold)
-    const maxDist = this.state === "THINKING" ? 2.4 : 1.7;
+    // Dynamic edge distance threshold modulated by energy budget
+    const maxDist = 1.5 + b.energy * 1.1;
     let lineIdx = 0;
     const maxLines = (this.topologyNodeCount * (this.topologyNodeCount - 1)) / 2;
+
+    const isAnomaly = b.impulses.anomalyGlitch > 0.05 || this.state === "BROKEN";
 
     for (let i = 0; i < this.topologyNodeCount; i++) {
       for (let j = i + 1; j < this.topologyNodeCount; j++) {
         const d = this.nodes[i].pos.distanceTo(this.nodes[j].pos);
         if (d < maxDist && lineIdx < maxLines) {
-          const alpha = 1.0 - (d / maxDist);
+          const alpha = (1.0 - (d / maxDist)) * b.attention.topology;
           
           this.edgePositions[lineIdx * 6] = this.nodes[i].pos.x;
           this.edgePositions[lineIdx * 6 + 1] = this.nodes[i].pos.y;
@@ -1271,17 +1273,17 @@ export class PresenceEngine {
           this.edgePositions[lineIdx * 6 + 4] = this.nodes[j].pos.y;
           this.edgePositions[lineIdx * 6 + 5] = this.nodes[j].pos.z;
 
-          // Color tint based on state
-          const r = this.state === "BROKEN" ? 1.0 : 0.0;
-          const g = this.state === "BROKEN" ? 0.1 : 0.9 * alpha;
-          const b = this.state === "BROKEN" ? 0.3 : 1.0 * alpha;
+          // Color tint based on anomaly state
+          const r = isAnomaly ? 1.0 : (b.impulses.energyFlash * 0.5);
+          const g = isAnomaly ? 0.05 : (0.9 * alpha);
+          const bCol = isAnomaly ? 0.25 : (1.0 * alpha);
 
           this.edgeColors[lineIdx * 6] = r;
           this.edgeColors[lineIdx * 6 + 1] = g;
-          this.edgeColors[lineIdx * 6 + 2] = b;
+          this.edgeColors[lineIdx * 6 + 2] = bCol;
           this.edgeColors[lineIdx * 6 + 3] = r;
           this.edgeColors[lineIdx * 6 + 4] = g;
-          this.edgeColors[lineIdx * 6 + 5] = b;
+          this.edgeColors[lineIdx * 6 + 5] = bCol;
 
           lineIdx++;
         }
@@ -1293,47 +1295,62 @@ export class PresenceEngine {
     this.edgeGeo.attributes.color.needsUpdate = true;
   }
 
-  updateParticles(delta) {
+  updateParticles(delta, b) {
     const pos = this.particlePositions;
     const count = this.particleCount;
+    this.particleSystem.material.opacity = b.attention.particles * 0.8;
+
+    const pullInward = this.state === "LISTENING" || this.state === "TRANSCRIBING" || b.impulses.returnPulse > 0.05;
+    const isExecuting = this.state === "EXECUTING" || b.impulses.toolProjection > 0.05;
+    const isBroken = this.state === "BROKEN" || b.impulses.anomalyGlitch > 0.05;
+    const isCompleted = this.state === "COMPLETED";
+
+    const dirX = Math.cos(b.memory.primaryBranchAngle);
+    const dirY = Math.sin(b.memory.primaryBranchAngle);
 
     for (let i = 0; i < count; i++) {
       let x = pos[i * 3];
       let y = pos[i * 3 + 1];
       let z = pos[i * 3 + 2];
 
-      if (this.state === "LISTENING") {
+      if (pullInward) {
         // Particles pulled INWARD toward central core
         const dist = Math.hypot(x, y);
-        if (dist > 0.8) {
-          x -= (x / dist) * 0.035;
-          y -= (y / dist) * 0.035;
+        if (dist > 0.7) {
+          const inSpeed = (0.025 + b.energy * 0.035);
+          x -= (x / dist) * inSpeed;
+          y -= (y / dist) * inSpeed;
         } else {
           // Respawn at outer rim
           const ang = Math.random() * Math.PI * 2;
           x = Math.cos(ang) * 4.8;
           y = Math.sin(ang) * 4.8;
         }
-      } else if (this.state === "EXECUTING") {
-        // Directional flow toward task target vector (towards +X)
-        x += 0.045;
-        if (x > 5.0) {
-          x = -2.5;
+      } else if (isExecuting) {
+        // Directional flow toward task target vector (using visual memory orientation)
+        const flowSpeed = 0.035 + b.energy * 0.03;
+        x += dirX * flowSpeed;
+        y += dirY * flowSpeed;
+        if (Math.hypot(x, y) > 5.5) {
+          x = -dirX * 2.5 + (Math.random() - 0.5) * 1.5;
+          y = -dirY * 2.5 + (Math.random() - 0.5) * 1.5;
         }
-      } else if (this.state === "BROKEN") {
+      } else if (isBroken) {
         // Chaotic dispersal outward
-        x += (Math.random() - 0.5) * 0.08;
-        y += (Math.random() - 0.5) * 0.08;
-        z += (Math.random() - 0.5) * 0.08;
-      } else if (this.state === "COMPLETED") {
+        const disperse = 0.06 + b.impulses.anomalyGlitch * 0.06;
+        x += (Math.random() - 0.5) * disperse;
+        y += (Math.random() - 0.5) * disperse;
+        z += (Math.random() - 0.5) * disperse;
+      } else if (isCompleted) {
         // Computational Regeneration: converge back to baseline orbits
         const orig = this.particleOriginals[i];
-        x += (orig.x - x) * 0.05;
-        y += (orig.y - y) * 0.05;
-        z += (orig.z - z) * 0.05;
+        x += (orig.x - x) * 0.08;
+        y += (orig.y - y) * 0.08;
+        z += (orig.z - z) * 0.08;
       } else {
-        // IDLE / General: Gentle orbital drift
-        const ang = Math.atan2(y, x) + 0.008;
+        // IDLE / General: Gentle orbital drift with organic breathing
+        const driftSpeed = 0.005 + b.energy * 0.01;
+        const ang = Math.atan2(y, x) + driftSpeed;
         const r = Math.hypot(x, y);
         x = Math.cos(ang) * r;
         y = Math.sin(ang) * r;
@@ -1347,16 +1364,19 @@ export class PresenceEngine {
     this.particleSystem.geometry.attributes.position.needsUpdate = true;
   }
 
-  updateFilaments() {
-    // Tapered energy filaments wobble and respond to audio
+  updateFilaments(b) {
+    const filOpacity = b.attention.filaments * (0.35 + b.audio.treble * 0.5);
+    const waveAmp = (0.04 + b.energy * 0.08 + b.audio.treble * 0.25);
+
     this.filaments.forEach((fil, idx) => {
+      fil.material.opacity = filOpacity;
       const geo = fil.geometry;
       const pos = geo.attributes.position;
       const basePts = fil.userData.basePts;
 
       for (let p = 0; p < basePts.length; p++) {
         const bp = basePts[p];
-        const wave = Math.sin(this.time * 2.5 + p * 0.4 + idx) * (0.05 + this.audioAmplitude * 0.15);
+        const wave = Math.sin(this.time * 2.5 + p * 0.4 + idx) * waveAmp;
         pos.setXYZ(p, bp.x + wave, bp.y - wave, bp.z + wave * 0.5);
       }
       pos.needsUpdate = true;

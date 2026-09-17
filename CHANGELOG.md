@@ -4,6 +4,23 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase2b-behavior] — 2026-09-17
+
+### Added
+* **Primary Presence Behavior Engine (`presence_desktop/src/engine/PresenceBehaviorEngine.js`):**
+  * **Dynamic Energy Budget (0.0 to 1.0):** Dynamically scales global activity across states (Dormant 0.0, Calm/Idle 0.25, Listening 0.52, Transcribing 0.68, Thinking 0.88, Executing 0.92, Speaking 0.72, Anomaly 0.98, Regeneration 1.0) to prevent visual overload.
+  * **Visual Attention Model:** Per-layer focus dominance weights (`core`, `innerLattice`, `rings`, `glyphs`, `topology`, `filaments`, `particles`, `taskBridge`) highlighting focal operations while subordinating background elements.
+  * **Organic Pacing ("No Constant Motion"):** Spontaneous micro-pauses (1–3s), non-linear phase drift, independent ring gear ratios, and randomized micro-bursts preventing deterministic repetition.
+  * **Visual Memory System:** Persists spatial orientation seeds, primary branch angles, and target coordinates across state transitions.
+  * **Multi-Band Audio Reactivity:** Web Audio analyser frequency decomposition into raw amplitude, bass, mid, and treble — modulating core physical displacement (bass) and filament wave propagation (treble) without global scale blowouts.
+  * **Event-Driven Micro-Behavior:** Real-time event impulse triggers for `MODEL_SELECTED` (flash pulse), `TOOL_STARTED` (outward projection), `TOOL_COMPLETED` (return convergence), `FALLBACK` (glitch destabilization + alternate branch), `PROGRESS_UPDATE` (elastic completion progress), and `TASK_CANCELLED` (contraction).
+  * **Computational Cellular Regeneration:** 7-stage reconstruction sequence upon task completion (fragmentation -> convergence -> lattice assembly -> edge reconnection -> stabilization -> core pulse -> calm baseline).
+* **Behavior Engine Integration (`presence_desktop/src/engine/PresenceEngine.js` & `presence_desktop/src/App.js`):**
+  * Connected all visual layers (GLSL core, HUD rings, glyph band, KNN 3D topology network, particle vector field, radial filaments, and task structures) to dynamic behavior outputs.
+  * Added automated visual verification capturing 4 desktop state snapshots (`desktop_behavior_idle_variation.png`, `desktop_behavior_thinking_branches.png`, `desktop_behavior_execution_progress.png`, `desktop_behavior_regeneration.png`).
+
+---
+
 ## [2.0.0-phase2] — 2026-09-17
 
 ### Added

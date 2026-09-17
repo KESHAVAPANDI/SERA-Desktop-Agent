@@ -137,71 +137,60 @@ function setupIpc() {
     return null;
   });
 
-  // Automatic snapshot sequence for verification
+  // Automatic snapshot sequence for Phase 2B Behavior Engine Verification
   setTimeout(async () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       try {
         const fs = require("fs");
-        // 1. Capture Idle Equilibrium Frame
-        const image1 = await mainWindow.capturePage();
-        const artifactPath1 = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_presence_live.png");
-        fs.writeFileSync(artifactPath1, image1.toPNG());
-        console.log(`[Main] 1. Idle render frame saved: ${artifactPath1}`);
 
-        // 2. Trigger task: Web Search
+        // 1. Capture Idle Equilibrium (Procedural drift, non-uniform ring speeds, organic breathing)
+        const imgIdle = await mainWindow.capturePage();
+        const pIdle = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_idle_variation.png");
+        fs.writeFileSync(pIdle, imgIdle.toPNG());
+        console.log(`[Main] 1. Idle behavior variation frame saved: ${pIdle}`);
+
+        // 2. Trigger Complex Query: Thinking with Parallel Branches
         await mainWindow.webContents.executeJavaScript(`
           if (window.seraApp) {
-            window.seraApp.submitObjective("Search the web for research papers");
+            window.seraApp.submitObjective("Search the web for quantum computing advances");
           }
         `);
 
-        // 3. Capture Active Task: Web Search
+        // Capture Thinking State with Attention Model & Energy Budget at t+1.2s
         setTimeout(async () => {
           if (mainWindow && !mainWindow.isDestroyed()) {
-            const image2 = await mainWindow.capturePage();
-            const p2 = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_presence_task.png");
-            fs.writeFileSync(p2, image2.toPNG());
-            console.log(`[Main] 2. Web Search structure frame saved: ${p2}`);
+            const imgThinking = await mainWindow.capturePage();
+            const pThinking = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_thinking_branches.png");
+            fs.writeFileSync(pThinking, imgThinking.toPNG());
+            console.log(`[Main] 2. Thinking branching frame saved: ${pThinking}`);
 
-            // 4. Trigger task: Diagnostics
-            await mainWindow.webContents.executeJavaScript(`
-              if (window.seraApp) {
-                window.seraApp.submitObjective("Run system diagnostics");
-              }
-            `);
-
+            // 3. Capture Executing with Progress (Attention focused on task bridge, topology subservient)
             setTimeout(async () => {
               if (mainWindow && !mainWindow.isDestroyed()) {
-                const image3 = await mainWindow.capturePage();
-                const p3 = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_presence_diagnostics.png");
-                fs.writeFileSync(p3, image3.toPNG());
-                console.log(`[Main] 3. Diagnostics radar structure frame saved: ${p3}`);
+                const imgExec = await mainWindow.capturePage();
+                const pExec = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_execution_progress.png");
+                fs.writeFileSync(pExec, imgExec.toPNG());
+                console.log(`[Main] 3. Execution progress frame saved: ${pExec}`);
 
-                // 5. Trigger task: Browser Conduit
-                await mainWindow.webContents.executeJavaScript(`
-                  if (window.seraApp) {
-                    window.seraApp.submitObjective("Open Chrome");
-                  }
-                `);
-
+                // 4. Capture Computational Cellular Regeneration
                 setTimeout(async () => {
                   if (mainWindow && !mainWindow.isDestroyed()) {
-                    const image4 = await mainWindow.capturePage();
-                    const p4 = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_presence_browser.png");
-                    fs.writeFileSync(p4, image4.toPNG());
-                    console.log(`[Main] 4. Browser conduit structure frame saved: ${p4}`);
+                    const imgRegen = await mainWindow.capturePage();
+                    const pRegen = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_regeneration.png");
+                    fs.writeFileSync(pRegen, imgRegen.toPNG());
+                    console.log(`[Main] 4. Computational regeneration frame saved: ${pRegen}`);
                   }
-                }, 2200);
+                }, 1800);
               }
-            }, 2200);
+            }, 1800);
           }
-        }, 2200);
+        }, 1200);
 
       } catch (err) {
-        console.error("[Main] Error in verification snapshot sequence:", err);
+        console.error("[Main] Error in Phase 2B verification snapshot sequence:", err);
       }
     }
-  }, 2000);
+  }, 2200);
 }
 
 function createDefaultTrayIcon() {

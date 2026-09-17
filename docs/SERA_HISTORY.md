@@ -201,5 +201,25 @@ Previous voice assistants and early SERA prototypes suffered from mechanical ani
 * **Empirical Verification:**
   * Native desktop frames captured and verified across multiple active task states (`desktop_presence_live.png`, `desktop_presence_task.png`, `desktop_presence_diagnostics.png`, `desktop_presence_browser.png`).
 
+---
+
+## Phase 2B — Primary Presence Behavior Engine
+
+### Eliminating State-Animation Determinism
+Fixed state loops (e.g., spinning during thinking, breathing during idle) make any assistant feel like a collection of canned screensavers. Phase 2B introduced a continuous behavior simulation engine that decouples visual dynamics from discrete state enumerations.
+
+### Architectural Milestones:
+* **Dedicated Presence Behavior Engine (`presence_desktop/src/engine/PresenceBehaviorEngine.js`):**
+  * *Dynamic Energy Budget (0.0 to 1.0):* Activity level dynamically scales from Dormant (0.0), Calm/Idle (0.25), Listening (0.52), Transcribing (0.68), Thinking (0.88), Executing (0.92), Speaking (0.72), Anomaly (0.98), to Cellular Regeneration (1.0).
+  * *Visual Attention Model:* Layer dominance weights (`core`, `innerLattice`, `rings`, `glyphs`, `topology`, `filaments`, `particles`, `taskBridge`) dynamically shift focus to active computational structures while subduing background elements to prevent visual clutter.
+  * *Organic Pacing ("No Constant Motion"):* Non-deterministic ring speeds, independent gear ratios, randomized spontaneous micro-pauses (1–3s), non-linear phase drift, and Poisson micro-bursts during IDLE.
+  * *Visual Memory System:* Persists orientation seeds, primary branch angle, and task targets across state transitions.
+  * *Multi-Band Audio Reactivity:* Frequency decomposition into bass (modulating core displacement and radial pressure) and treble (modulating filament wave propagation).
+  * *Micro-Event Impulses:* Real-time reaction triggers for `MODEL_SELECTED`, `TOOL_STARTED`, `TOOL_COMPLETED`, `FALLBACK`, `PROGRESS_UPDATE`, and `TASK_CANCELLED`.
+  * *Computational Cellular Regeneration:* 7-phase structural reconstitution sequence upon task completion (fragmentation -> convergence -> lattice assembly -> edge reconnection -> stabilization -> core pulse -> calm baseline).
+* **Empirical Visual Verification:**
+  * High-resolution desktop overlay captures verifying non-uniform idle pacing, dynamic branch growth, execution progress, and cellular regeneration (`desktop_behavior_idle_variation.png`, `desktop_behavior_thinking_branches.png`, `desktop_behavior_execution_progress.png`, `desktop_behavior_regeneration.png`).
+
+
 
 

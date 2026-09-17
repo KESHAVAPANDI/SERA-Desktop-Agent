@@ -34,13 +34,15 @@
 | **History View** | ⚠️ PARTIAL | Session log table in `history.js` | Log rendering test | Lacks full-text search and artifact preview | Add artifact modal viewer and date filters |
 | **System Telemetry** | ✅ IMPLEMENTED | Structured event traces in `app/core/telemetry.py` | JSON log file generation in `reports/` | Log files grow unbounded if not periodically pruned | Implement rolling log file retention policy |
 | **Primary Presence** | ✅ IMPLEMENTED | 8-Layer WebGL/Three.js Computational Consciousness Engine (`presence_desktop/src/engine/PresenceEngine.js`) | Automated frame captures (`desktop_presence_live.png`, `desktop_presence_task.png`, etc.) | None | Add audio visualizer spectrum shader |
+| **Presence Behavior Engine** | ✅ IMPLEMENTED | Adaptive simulation engine (`PresenceBehaviorEngine.js`): Energy budget, attention model, organic pacing, visual memory, multi-band audio, and 7-phase cellular regeneration | Automated desktop frame captures (`desktop_behavior_idle_variation.png`, `desktop_behavior_thinking_branches.png`, `desktop_behavior_execution_progress.png`, `desktop_behavior_regeneration.png`) | None | Add emotional valence modulation |
 | **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
 | **Native Desktop Shell** | ✅ IMPLEMENTED | Electron 33 borderless overlay (`presence_desktop/main.js`) with 100% DWM alpha transparency & global shortcut | Empirical process check (HWND 0x0c070d0000000000) & native desktop capturePage | None | Add multi-monitor display selector in Command Center |
 
 ---
 
 ### Status Summary
-* **✅ IMPLEMENTED:** 18 capabilities fully operational and verified.
+* **✅ IMPLEMENTED:** 19 capabilities fully operational and verified.
 * **⚠️ PARTIAL:** 5 capabilities working but undergoing active rework or enhancement.
 * **📋 PLANNED:** 3 capabilities architecturally specified for upcoming phases.
-* **❌ BROKEN:** 0 active regressions (previous Chrome launch and DuckDuckGo zero-result bugs resolved).
+* **❌ BROKEN:** 0 active regressions.
+

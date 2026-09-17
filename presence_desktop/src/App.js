@@ -45,16 +45,24 @@ class PresenceApp {
       const updateAudio = () => {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
+        let bassSum = 0, midSum = 0, trebleSum = 0;
         for (let i = 0; i < dataArray.length; i++) {
           sum += dataArray[i];
+          if (i < 8) bassSum += dataArray[i];
+          else if (i < 28) midSum += dataArray[i];
+          else trebleSum += dataArray[i];
         }
         const avg = sum / dataArray.length;
-        const normalizedAmp = Math.min(1.0, avg / 60.0);
-        this.engine.setAudioAmplitude(normalizedAmp);
+        const rawAmp = Math.min(1.0, avg / 60.0);
+        const bass = Math.min(1.0, (bassSum / 8) / 65.0);
+        const mid = Math.min(1.0, (midSum / 20) / 55.0);
+        const treble = Math.min(1.0, (trebleSum / Math.max(1, dataArray.length - 28)) / 45.0);
+
+        this.engine.setAudioData({ rawAmp, bass, mid, treble });
         requestAnimationFrame(updateAudio);
       };
       updateAudio();
-      console.log("[PresenceApp] Live audio-reactive microphone input activated.");
+      console.log("[PresenceApp] Live audio-reactive microphone input activated (multi-band).");
     } catch (err) {
       console.log("[PresenceApp] Microphone stream optional/unavailable:", err);
     }
@@ -199,8 +207,9 @@ class PresenceApp {
   submitObjective(text) {
     console.log(`[PresenceApp] Submitting Objective: ${text}`);
     const taskType = this.classifyTask(text);
-    this.engine.setState("THINKING", taskType);
+    this.engine.setState("THINKING", taskType, 0.0);
     this.engine.setTaskVisualization(taskType, text);
+    this.engine.triggerEvent("MODEL_SELECTED", { task: text, model: "SERA-Fabric" });
     this.setStatus("ANALYZING OBJECTIVE", text.toUpperCase());
 
     // Transmit to Python backend via WebSocket if available
@@ -212,19 +221,28 @@ class PresenceApp {
         timestamp: Date.now() / 1000,
       }));
     } else {
-      // Local fallback simulation if backend is not currently running
+      // Local adaptive fallback simulation if backend is not currently running
       setTimeout(() => {
-        this.engine.setState("EXECUTING", taskType);
+        this.engine.setState("EXECUTING", taskType, 0.25);
+        this.engine.triggerEvent("TOOL_STARTED", { tool_name: taskType });
         this.setStatus(`EXECUTING [${taskType}]`, text.toUpperCase());
+
         setTimeout(() => {
-          this.engine.setState("COMPLETED", taskType);
-          this.setStatus("OBJECTIVE COMPLETE", "SYSTEM RECONSTRUCTING");
+          this.engine.setState("EXECUTING", taskType, 0.75);
+          this.engine.triggerEvent("PROGRESS_UPDATE", { progress: 0.75 });
+
           setTimeout(() => {
-            this.engine.setState("IDLE");
-            this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
-          }, 2600);
-        }, 3200);
-      }, 1600);
+            this.engine.triggerEvent("TOOL_COMPLETED", { tool_name: taskType });
+            this.engine.setState("COMPLETED", taskType, 1.0);
+            this.setStatus("OBJECTIVE COMPLETE", "COMPUTATIONAL REGENERATION");
+
+            setTimeout(() => {
+              this.engine.setState("IDLE");
+              this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
+            }, 2600);
+          }, 1400);
+        }, 1400);
+      }, 1400);
     }
   }
 
@@ -290,11 +308,16 @@ class PresenceApp {
         this.setStatus("TRANSCRIBING AUDIO", "EXTRACTING PHONEMIC TOKENS");
         break;
 
+      case "MODEL_SELECTED":
+        this.engine.triggerEvent("MODEL_SELECTED", payload);
+        break;
+
       case "TASK_STARTED": {
         const taskText = payload?.task || "COMPUTING";
         const taskType = this.classifyTask(taskText);
         this.engine.setState("THINKING", taskType);
         this.engine.setTaskVisualization(taskType, taskText);
+        this.engine.triggerEvent("MODEL_SELECTED", payload);
         this.setStatus("SYNTHESIZING COGNITIVE PATH", taskText.toUpperCase());
         break;
       }
@@ -304,9 +327,23 @@ class PresenceApp {
         const taskType = this.classifyTask(toolName);
         this.engine.setState("EXECUTING", taskType);
         this.engine.setTaskVisualization(taskType, toolName);
+        this.engine.triggerEvent("TOOL_STARTED", payload);
         this.setStatus(`EXECUTING: ${toolName.toUpperCase()}`, "HARDWARE ACTIONS");
         break;
       }
+
+      case "TOOL_COMPLETED":
+        this.engine.triggerEvent("TOOL_COMPLETED", payload);
+        break;
+
+      case "FALLBACK":
+        this.engine.triggerEvent("FALLBACK", payload);
+        this.setStatus("ADAPTING ROUTE", "PROVIDER FALLBACK ENGAGED");
+        break;
+
+      case "PROGRESS_UPDATE":
+        this.engine.triggerEvent("PROGRESS_UPDATE", payload);
+        break;
 
       case "TTS_STARTED":
         this.engine.setState("SPEAKING");
@@ -315,11 +352,17 @@ class PresenceApp {
 
       case "TASK_COMPLETED":
         this.engine.setState("COMPLETED");
-        this.setStatus("TASK ACCOMPLISHED", "SYSTEM RECONSTRUCTING");
+        this.engine.triggerEvent("TASK_COMPLETED", payload);
+        this.setStatus("TASK ACCOMPLISHED", "COMPUTATIONAL REGENERATION");
         setTimeout(() => {
           this.engine.setState("IDLE");
           this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
         }, 2600);
+        break;
+
+      case "TASK_CANCELLED":
+        this.engine.triggerEvent("TASK_CANCELLED", payload);
+        this.setStatus("TASK CANCELLED", "RETRACTING STRUCTURES");
         break;
 
       case "TASK_FAILED":
