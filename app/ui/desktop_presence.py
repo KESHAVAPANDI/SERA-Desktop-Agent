@@ -54,7 +54,7 @@ class DesktopPresenceAPI:
     """Python API bridge exposed to JavaScript in presence.html."""
 
     def __init__(self, launcher: "DesktopPresenceLauncher"):
-        self.launcher = launcher
+        self._launcher = launcher
 
     def ping(self) -> dict[str, Any]:
         """Verifies JS-to-Python bridge health."""
@@ -67,35 +67,35 @@ class DesktopPresenceAPI:
 
     def minimize(self) -> None:
         """Minimizes the presence overlay window."""
-        if self.launcher.window:
-            self.launcher.window.minimize()
+        if self._launcher.window:
+            self._launcher.window.minimize()
 
     def hide(self) -> None:
         """Hides the presence overlay window."""
-        if self.launcher.window:
-            self.launcher.window.hide()
+        if self._launcher.window:
+            self._launcher.window.hide()
 
     def show(self) -> None:
         """Restores and shows the presence overlay window."""
-        if self.launcher.window:
-            self.launcher.window.show()
+        if self._launcher.window:
+            self._launcher.window.show()
 
     def close(self) -> None:
         """Destroys the presence overlay window."""
-        if self.launcher.window:
-            self.launcher.window.destroy()
+        if self._launcher.window:
+            self._launcher.window.destroy()
 
     def toggle_on_top(self) -> bool:
         """Toggles window stay-on-top state."""
-        if not self.launcher.window:
+        if not self._launcher.window:
             return False
-        self.launcher.config.on_top = not self.launcher.config.on_top
-        self.launcher.window.on_top = self.launcher.config.on_top
-        return self.launcher.config.on_top
+        self._launcher.config.on_top = not self._launcher.config.on_top
+        self._launcher.window.on_top = self._launcher.config.on_top
+        return self._launcher.config.on_top
 
     def set_click_through(self, enabled: bool) -> bool:
         """Enables or disables click-through on Windows via Win32 extended style."""
-        return self.launcher.set_click_through(enabled)
+        return self._launcher.set_click_through(enabled)
 
 
 class DesktopPresenceLauncher:
@@ -202,12 +202,46 @@ class DesktopPresenceLauncher:
             logger.error(f"[DesktopPresence] Error setting click-through: {e}")
             return False
 
+    def ensure_server_running(self) -> None:
+        """Starts the local UI server in a daemon thread if not already listening."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            if s.connect_ex((self.config.host, self.config.port)) == 0:
+                logger.info(f"[DesktopPresence] Server already active on {self.config.host}:{self.config.port}")
+                return
+
+        logger.info(f"[DesktopPresence] Starting background UI server on {self.config.host}:{self.config.port}...")
+        try:
+            from app.ui.server import SERAUIServer
+
+            def _server_thread():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                server = SERAUIServer(host=self.config.host, port=self.config.port, runtime=self.runtime)
+                loop.run_until_complete(server.start())
+                loop.run_forever()
+
+            t = threading.Thread(target=_server_thread, daemon=True, name="SERAUIServerThread")
+            t.start()
+            # Wait briefly for port to become active
+            for _ in range(20):
+                time.sleep(0.1)
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s_check:
+                    s_check.settimeout(0.2)
+                    if s_check.connect_ex((self.config.host, self.config.port)) == 0:
+                        logger.info(f"[DesktopPresence] UI Server online at http://{self.config.host}:{self.config.port}")
+                        break
+        except Exception as e:
+            logger.warning(f"[DesktopPresence] Could not auto-start server: {e}")
+
     def launch(self, dry_run: bool = False) -> None:
         """Entrypoint to create and start the pywebview native desktop presence loop."""
         if dry_run:
             self.create_window(dry_run=True)
             return
 
+        self.ensure_server_running()
         self.create_window(dry_run=False)
         self._is_running = True
         logger.info("[DesktopPresence] Starting native transparent desktop overlay loop...")
