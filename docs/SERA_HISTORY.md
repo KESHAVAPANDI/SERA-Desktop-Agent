@@ -129,3 +129,24 @@ Inspired by the computational elegance of Raphael (the Ultimate Skill from *Tens
 * Luminous white singularity core with celestial cyan energy falloff (`#00F0FF`, `#0284C7`).
 * Transient magenta accents (`#F43F5E`) marking state transitions and high-level analytical synthesis.
 * **Signature Cellular Reconstruction:** Upon task completion, outward-projecting energy filaments fragment, converge inward, nucleate into micro-hexagonal cells, connect along circular tracks, and lock into stable resting geometry with a brilliant harmonic flash.
+
+---
+
+## Phase 2A — Evidence Verification Fabric
+
+### Mandate: Zero False Passes
+Prior to Phase 2A, execution engines often relied on shallow heuristics (e.g. command exit code 0 or successful JSON parsing) to declare tasks `COMPLETED`. This created a critical reliability flaw: tasks were marked successful even when desktop processes failed to launch or web search returned zero records.
+
+### Architectural Milestones:
+* **Evidence Verification Fabric (`app/core/verification.py`):**
+  * Formalized discrete evidence taxonomies: `PROCESS_RUNNING`, `WINDOW_HANDLE`, `STRUCTURED_DATA`, `FILE_SYSTEM`, `IMAGE_BUFFER`, `AUDIO_STREAM`, and `GENERIC`.
+  * Every execution step produces an immutable `EvidenceRecord` proving empirical side effects.
+  * Direct OS process table validation (`psutil`) confirming active PID existence and non-zombie state.
+  * Web search verification enforcing non-empty structured records with valid HTTP endpoints.
+* **Command Pipeline Hardening:**
+  * Wired verification fabric directly into step execution loop (`_execute_single_step`).
+  * Emits `EVIDENCE_VERIFIED` event to the EventBus.
+  * Guarantees automatic state transition to `BROKEN` with explicit `failure_reason` if empirical checks fail.
+* **Empirical Vertical Slices:**
+  * Added 12-test comprehensive suite (`tests/vertical_slices/verification/test_evidence_fabric.py`) covering all verification modalities and false-pass rejection guarantees.
+

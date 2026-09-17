@@ -4,6 +4,25 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase2a] — 2026-09-17
+
+### Added
+* **Evidence Verification Fabric (`app/core/verification.py`):**
+  * Core empirical verification engine establishing mandatory completion gates for all desktop and web actions.
+  * Formalized `EvidenceType` (`PROCESS_RUNNING`, `WINDOW_HANDLE`, `STRUCTURED_DATA`, `FILE_SYSTEM`, `IMAGE_BUFFER`, `AUDIO_STREAM`, `GENERIC`).
+  * Formalized `EvidenceRecord` data model capturing empirical verification status, source, telemetry details, and failure reasons.
+  * Real Windows process table inspection via `psutil` verifying active PIDs and non-zombie statuses.
+  * Web search structured data contract verification ensuring non-empty results and valid HTTP URLs.
+  * Filesystem and screen capture buffer verification.
+* **Command Pipeline Integration (`app/core/command_pipeline.py`):**
+  * Integrated `EvidenceVerificationFabric` into `_execute_single_step`.
+  * Emits `EVIDENCE_VERIFIED` event with empirical metadata.
+  * Automatically transitions task to `BROKEN` and emits `TOOL_FAILED` / `TASK_FAILED` upon verification failure, completely eliminating false passes.
+* **Vertical Slice Test Suite (`tests/vertical_slices/verification/test_evidence_fabric.py`):**
+  * 12 granular, empirical tests asserting serialization, positive process detection, negative non-existent process detection, structured search data contracts, zero-result failure paths, and pipeline integration.
+
+---
+
 ## [2.0.0-design] — 2026-09-17
 
 ### Added

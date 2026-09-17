@@ -96,3 +96,13 @@ This log documents foundational architectural decisions, context, trade-offs, an
 * **Status:** ACCEPTED  
 * **Decision:** Treat DeepSeek (R1 / V3) as an optional paid BYOK (Bring Your Own Key) infrastructure provider rather than assuming it is a permanent free public API.
 * **Context & Rationale:** Public free tiers for heavy reasoning models are subject to aggressive rate limits and sudden commercialization. Treating it as paid infrastructure ensures realistic capacity expectations.
+
+---
+
+### ADR-011: Unified Evidence Verification Fabric Architecture (Phase 2A)
+* **Date:** 2026-09-17  
+* **Status:** ACCEPTED / IMPLEMENTED  
+* **Decision:** Centralize empirical side-effect verification in a dedicated `EvidenceVerificationFabric` engine (`app/core/verification.py`) and mandate that `CommandPipeline` evaluate an `EvidenceRecord` for every executed step before committing state transitions.
+* **Context & Rationale:** Prior to Phase 2A, individual tools performed inconsistent checks, leading to cases where tool wrappers claimed success without empirical validation. Consolidating verification into a typed fabric (`EvidenceType`, `EvidenceRecord`) ensures that OS process tables, structured web records, filesystem artifacts, and screen buffers are systematically inspected and attached to event payloads (`EVIDENCE_VERIFIED`). Any verification failure deterministically routes the task to `BROKEN` with an explicit diagnostic reason.
+* **Consequences:** Eliminates false passes across all current and future tool integrations. Every task execution is backed by auditable empirical evidence.
+

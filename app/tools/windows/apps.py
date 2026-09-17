@@ -2,6 +2,8 @@ import asyncio
 import os
 import shutil
 import subprocess
+import time
+import winreg
 import psutil
 from app.tools.base import Tool
 
@@ -17,6 +19,136 @@ KNOWN_WEBSITES = {
     "instagram": "https://www.instagram.com",
     "netflix": "https://www.netflix.com",
 }
+
+APP_MAP = {
+    "notepad": "notepad.exe",
+    "calculator": "calc.exe",
+    "calc": "calc.exe",
+    "chrome": "chrome.exe",
+    "google chrome": "chrome.exe",
+    "edge": "msedge.exe",
+    "microsoft edge": "msedge.exe",
+    "vs code": "code.exe",
+    "vscode": "code.exe",
+    "code": "code.exe",
+    "explorer": "explorer.exe",
+    "file explorer": "explorer.exe",
+    "cmd": "cmd.exe",
+    "terminal": "wt.exe",
+    "powershell": "powershell.exe",
+    "spotify": "spotify.exe",
+    "task manager": "taskmgr.exe",
+}
+
+
+def resolve_windows_application(application: str) -> str | None:
+    """Resolves an application name to an absolute executable path using Registry, Standard Paths, and PATH."""
+    app_clean = application.strip().lower()
+    if not app_clean:
+        return None
+
+    target = APP_MAP.get(app_clean, app_clean)
+    exe_name = target if (target.endswith(".exe") or target.endswith(".cmd")) else f"{target}.exe"
+
+    # 1. Direct path check
+    if os.path.isfile(target):
+        return os.path.abspath(target)
+    if os.path.isfile(exe_name):
+        return os.path.abspath(exe_name)
+
+    # 2. Known standard Windows installation paths
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+
+    known_paths = {
+        "chrome.exe": [
+            os.path.join(program_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_app_data, "Google", "Chrome", "Application", "chrome.exe") if local_app_data else "",
+        ],
+        "msedge.exe": [
+            os.path.join(program_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(program_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(local_app_data, "Microsoft", "Edge", "Application", "msedge.exe") if local_app_data else "",
+        ],
+        "notepad.exe": [
+            os.path.join(system_root, "System32", "notepad.exe"),
+            os.path.join(system_root, "notepad.exe"),
+        ],
+        "calc.exe": [
+            os.path.join(system_root, "System32", "calc.exe"),
+        ],
+        "code.exe": [
+            os.path.join(local_app_data, "Programs", "Microsoft VS Code", "Code.exe") if local_app_data else "",
+            os.path.join(program_files, "Microsoft VS Code", "Code.exe"),
+        ],
+        "explorer.exe": [
+            os.path.join(system_root, "explorer.exe"),
+        ],
+        "cmd.exe": [
+            os.path.join(system_root, "System32", "cmd.exe"),
+        ],
+        "powershell.exe": [
+            os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        ],
+        "taskmgr.exe": [
+            os.path.join(system_root, "System32", "Taskmgr.exe"),
+        ],
+    }
+
+    if exe_name in known_paths:
+        for p in known_paths[exe_name]:
+            if p and os.path.isfile(p):
+                return p
+
+    # 3. Check Windows Registry App Paths (HKLM and HKCU, 64-bit and 32-bit views)
+    for root in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
+        for subkey in [
+            rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}",
+            rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{target}",
+        ]:
+            for access_mask in [winreg.KEY_READ, winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0), winreg.KEY_READ | getattr(winreg, "KEY_WOW64_32KEY", 0)]:
+                try:
+                    with winreg.OpenKey(root, subkey, 0, access_mask) as key:
+                        val, _ = winreg.QueryValueEx(key, "")
+                        if val:
+                            clean_val = val.strip('"\t ')
+                            if os.path.isfile(clean_val):
+                                return clean_val
+                except (OSError, FileNotFoundError):
+                    pass
+
+    # 4. PATH lookup via shutil.which
+    which_path = shutil.which(exe_name) or shutil.which(target)
+    if which_path and os.path.isfile(which_path):
+        return which_path
+
+    # 5. Search in common program folders
+    for base_dir in [program_files, program_files_x86, os.path.join(local_app_data, "Programs") if local_app_data else ""]:
+        if base_dir and os.path.isdir(base_dir):
+            candidate = os.path.join(base_dir, exe_name)
+            if os.path.isfile(candidate):
+                return candidate
+
+    return None
+
+
+def verify_application_running(target_name: str, timeout: float = 5.0) -> bool:
+    """Verifies that an active, non-zombie process matching the application exists."""
+    app_clean = target_name.lower().replace(".exe", "").replace(".cmd", "")
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        for p in psutil.process_iter(["pid", "name", "status"]):
+            try:
+                p_name = (p.info["name"] or "").lower()
+                if app_clean in p_name and p.info.get("status") != psutil.STATUS_ZOMBIE:
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        time.sleep(0.25)
+    return False
 
 
 class OpenApplicationTool(Tool):
@@ -71,48 +203,9 @@ class OpenApplicationTool(Tool):
                     "error": f"Failed to open website {application}: {str(e)}",
                 }
 
-        app_map = {
-            "notepad": "notepad.exe",
-            "calculator": "calc.exe",
-            "calc": "calc.exe",
-            "chrome": "chrome.exe",
-            "google chrome": "chrome.exe",
-            "edge": "msedge.exe",
-            "microsoft edge": "msedge.exe",
-            "vs code": "code.cmd",
-            "vscode": "code.cmd",
-            "explorer": "explorer.exe",
-            "file explorer": "explorer.exe",
-            "cmd": "cmd.exe",
-            "terminal": "wt.exe",
-            "powershell": "powershell.exe",
-            "spotify": "spotify.exe",
-            "task manager": "taskmgr.exe",
-        }
+        resolved_path = resolve_windows_application(application)
 
-        target = app_map.get(app_lower, application)
-
-        # Check if executable exists in PATH or standard locations
-        resolved_path = shutil.which(target)
-        if not resolved_path and not os.path.exists(target):
-            # Check common Windows program paths
-            common_dirs = [
-                os.environ.get("ProgramFiles", "C:\\Program Files"),
-                os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"),
-                os.environ.get("LocalAppData", ""),
-                os.environ.get("SystemRoot", "C:\\Windows"),
-                os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32"),
-            ]
-            for c_dir in common_dirs:
-                if not c_dir:
-                    continue
-                candidate = os.path.join(c_dir, target)
-                if os.path.exists(candidate):
-                    resolved_path = candidate
-                    break
-
-        # If not resolved and not in app_map or PATH, return truthful failure
-        if not resolved_path and target not in app_map.values():
+        if not resolved_path:
             return {
                 "success": False,
                 "verified": False,
@@ -120,27 +213,30 @@ class OpenApplicationTool(Tool):
             }
 
         try:
-            target_to_run = resolved_path or target
-            subprocess.Popen(f'start "" "{target_to_run}"', shell=True)
-            await asyncio.sleep(0.5)
+            # Launch executable directly using Windows process creation
+            try:
+                subprocess.Popen([resolved_path], shell=False)
+            except Exception:
+                os.startfile(resolved_path)
 
-            # Verification: Check if a matching process or window is running
-            matched = False
-            app_clean = target.lower().replace(".exe", "").replace(".cmd", "")
-            for p in psutil.process_iter(["name"]):
-                try:
-                    p_name = (p.info["name"] or "").lower()
-                    if app_clean in p_name:
-                        matched = True
-                        break
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
+            # Verification: Confirm the application process / window is genuinely active
+            target_file = os.path.basename(resolved_path)
+            verified = await asyncio.to_thread(verify_application_running, target_file, 5.0)
 
+            if not verified:
+                return {
+                    "success": False,
+                    "verified": False,
+                    "error": f"Launched '{application}' but could not verify that its process/window opened.",
+                }
+
+            msg = "Chrome is now open." if "chrome" in app_lower else f"Successfully launched {application}."
             return {
                 "success": True,
-                "verified": matched,
+                "verified": True,
                 "application": application,
-                "message": f"Successfully launched {application}.",
+                "resolved_path": resolved_path,
+                "message": msg,
             }
         except Exception as e:
             return {

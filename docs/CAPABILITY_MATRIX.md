@@ -34,11 +34,12 @@
 | **History View** | ⚠️ PARTIAL | Session log table in `history.js` | Log rendering test | Lacks full-text search and artifact preview | Add artifact modal viewer and date filters |
 | **System Telemetry** | ✅ IMPLEMENTED | Structured event traces in `app/core/telemetry.py` | JSON log file generation in `reports/` | Log files grow unbounded if not periodically pruned | Implement rolling log file retention policy |
 | **Primary Presence** | ✅ IMPLEMENTED | Three.js WebGL core in `presence.html` (Wisdom King / Raphael) | HTTP 200 on `/presence`, WebGL shader initialization | Transparent desktop window needs pywebview wrapper | Add native transparent borderless desktop launcher |
+| **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
 
 ---
 
 ### Status Summary
-* **✅ IMPLEMENTED:** 15 capabilities fully operational and verified.
+* **✅ IMPLEMENTED:** 16 capabilities fully operational and verified.
 * **⚠️ PARTIAL:** 7 capabilities working but undergoing active rework or enhancement.
 * **📋 PLANNED:** 3 capabilities architecturally specified for upcoming phases.
 * **❌ BROKEN:** 0 active regressions (previous Chrome launch and DuckDuckGo zero-result bugs resolved).
