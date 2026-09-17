@@ -136,61 +136,6 @@ function setupIpc() {
     }
     return null;
   });
-
-  // Automatic snapshot sequence for Phase 2B Behavior Engine Verification
-  setTimeout(async () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      try {
-        const fs = require("fs");
-
-        // 1. Capture Idle Equilibrium (Procedural drift, non-uniform ring speeds, organic breathing)
-        const imgIdle = await mainWindow.capturePage();
-        const pIdle = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_idle_variation.png");
-        fs.writeFileSync(pIdle, imgIdle.toPNG());
-        console.log(`[Main] 1. Idle behavior variation frame saved: ${pIdle}`);
-
-        // 2. Trigger Complex Query: Thinking with Parallel Branches
-        await mainWindow.webContents.executeJavaScript(`
-          if (window.seraApp) {
-            window.seraApp.submitObjective("Search the web for quantum computing advances");
-          }
-        `);
-
-        // Capture Thinking State with Attention Model & Energy Budget at t+1.2s
-        setTimeout(async () => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            const imgThinking = await mainWindow.capturePage();
-            const pThinking = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_thinking_branches.png");
-            fs.writeFileSync(pThinking, imgThinking.toPNG());
-            console.log(`[Main] 2. Thinking branching frame saved: ${pThinking}`);
-
-            // 3. Capture Executing with Progress (Attention focused on task bridge, topology subservient)
-            setTimeout(async () => {
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                const imgExec = await mainWindow.capturePage();
-                const pExec = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_execution_progress.png");
-                fs.writeFileSync(pExec, imgExec.toPNG());
-                console.log(`[Main] 3. Execution progress frame saved: ${pExec}`);
-
-                // 4. Capture Computational Cellular Regeneration
-                setTimeout(async () => {
-                  if (mainWindow && !mainWindow.isDestroyed()) {
-                    const imgRegen = await mainWindow.capturePage();
-                    const pRegen = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6\\desktop_behavior_regeneration.png");
-                    fs.writeFileSync(pRegen, imgRegen.toPNG());
-                    console.log(`[Main] 4. Computational regeneration frame saved: ${pRegen}`);
-                  }
-                }, 1800);
-              }
-            }, 1800);
-          }
-        }, 1200);
-
-      } catch (err) {
-        console.error("[Main] Error in Phase 2B verification snapshot sequence:", err);
-      }
-    }
-  }, 2200);
 }
 
 function createDefaultTrayIcon() {
