@@ -1,165 +1,184 @@
-# SERA — Desktop AI Agent
+# SERA — Personal Desktop AI Operating System
 
-SERA (**S**emantic **E**xecution & **R**untime **A**ssistant) is a next-generation, voice-first Windows desktop AI agent engineered for low-latency voice interaction, multimodal screen perception, bounded multi-step computer automation, and role-based model routing.
-
----
-
-## 🌟 Key Capabilities
-
-- **Voice Perception & Activation**:
-  - Primary **NVIDIA Canary-Qwen 2.5B STT** (~210ms) with local **Faster-Whisper GPU FP16** failover.
-  - Fixed 5-second acoustic command capture window.
-  - Local **"SERA"** wake word detection + global **`Ctrl+Space`** hotkey.
-- **Acoustic Streaming & Interruption**:
-  - **Fish Audio S2.1** streaming TTS with instant voice interruption on speech detection.
-- **Role-Based Model Architecture & Health-Aware Routing**:
-  - **Reasoning**: Groq GPT-OSS 120B ➔ Mistral Large ➔ Mistral Medium 3.5 ➔ OpenRouter.
-  - **Fast Text**: Mistral Small ➔ Gemini 3.5 Flash Lite ➔ OpenRouter.
-  - **Desktop Tool Calling**: Mistral Codestral ➔ Groq GPT-OSS 120B ➔ OpenRouter.
-  - **Vision & Screen Perception**: Groq Qwen 3.6 27B ➔ Gemini 3 Flash Preview ➔ OpenRouter.
-  - **OCR & Embeddings**: Mistral OCR & Mistral Embed.
-  - **Model-Level Health Isolation**: Rate limits (HTTP 429) on one model isolate only that model's role into cooldown without impacting other models on the same provider.
-- **Safe Desktop Automation**:
-  - Native Windows UI Automation (`uiautomation` + `pywin32`) with zero hallucinated coordinates.
-  - `TargetResolver` with 4-tier confidence matching.
-  - Closed-loop **Observe ➔ Act ➔ Verify** cycle.
-  - Multi-step bounded agent engine with `SecurityManager`, 5-step limits, and 10s action chain timeouts.
-- **Temporal Command Center UI (Phase 5A Foundation)**:
-  - Futuristic dark AI OS command center inspired by Temporal Aura.
-  - Decoupled asynchronous WebSocket/HTTP gateway server (`http://127.0.0.1:8765`).
-  - 7 First-Class View Scaffolds: `WORKFLOW`, `LIVE`, `AGENTS`, `MEMORY`, `PROVIDERS`, `HISTORY`, `DEBUG`.
+> **A computational consciousness designed for one user.**  
+> Moving beyond conversational chatbots into an autonomous, voice-driven personal desktop operating system.
 
 ---
 
-## 🚦 Current Status & Roadmap
+## 🌟 What is SERA?
 
-| Phase | Milestone | Status |
-|:---|:---|:---:|
-| **Phase 1** | Core Runtime Architecture, State Machine & EventBus | **COMPLETE** |
-| **Phase 2** | Voice Reliability, Real-time Streaming & Audio Interruption | **COMPLETE** |
-| **Phase 3** | Multimodal Vision & Native Windows UI Automation | **COMPLETE** |
-| **Phase 4** | Multi-Step Bounded Agent, Provider Expansion & Role Routing | **COMPLETE** |
-| **Phase 5A** | UI/UX Foundation, Temporal Aura Tokens & Application Shell | **COMPLETE** |
-| **Phase 5B** | UI Implementation (Workflow Canvas Editor, Live Orb & RAG) | *NEXT* |
+**SERA** (**S**emantic **E**xecution & **R**untime **A**ssistant) is a personal desktop AI operating system for Windows. 
 
-> *Note: Phase 5A establishes the application shell and design architecture. Interactive drag-and-drop workflow editing and complex multi-agent animations will be implemented in subsequent UI phases.*
+Unlike conventional AI tools that trap users in a rectangular chat window with message bubbles, SERA is engineered as an **autonomous computational presence** that resides over your operating system. It perceives your desktop, listens to intentional voice commands, executes multi-step system workflows with empirical verification, and manifests as dynamic, mathematical geometry hovering weightlessly over your active applications.
 
 ---
 
-## 🏛️ System Architecture
+## ⚡ Why is SERA Different?
+
+1. **Dual-Body Visual Paradigm:**
+   * **Body 1 (Primary SERA Presence):** A 100% alpha-transparent, floating computational manifestation (inspired by the analytical transcendence of *Wisdom King / Raphael*). Zero panels, zero cards, zero sidebars, zero chat bubbles. The desktop behind SERA remains completely unobstructed.
+   * **Body 2 (Secondary Command Center):** A high-density technical control surface (`http://127.0.0.1:8765`) for deep configuration, model routing, history replay, and diagnostics.
+2. **Empirical Side-Effect Verification:**
+   A task is **never** marked completed simply because an LLM claimed it or a shell command returned exit code 0. SERA actively verifies real-world side effects (scanning Windows process tables, confirming window handles, and verifying structured web search data).
+3. **Dedicated Hold-to-Talk (`Ctrl+Space`):**
+   Combines an intentional global keyboard hook with local wake-word detection ("SERA"), backed by streaming Google Gemini 3.5 Transcribe STT and real-time acoustic voice interruption.
+4. **Model-Agnostic Resource-Aware Fabric:**
+   Routes tasks dynamically across Gemini, Groq, Mistral, OpenRouter, and local Ollama based on real-time health, rolling latency averages, and quota headroom.
+
+---
+
+## 🏛️ High-Level System Architecture
 
 ```
-SERA System Architecture
-├── Speech & Voice Pipeline
-│   ├── Hotkey & Wake Word (Ctrl+Space / "SERA")
-│   ├── STT Engine (NVIDIA Canary-Qwen 2.5B ➔ Faster-Whisper Fallback)
-│   └── TTS Engine (Fish Audio S2.1 Streaming)
-├── Core Engine & Orchestration
-│   ├── SERARuntime & State Machine (IDLE, LISTENING, THINKING, EXECUTING, SPEAKING)
-│   ├── ModelRouter (Role Chains, Model Health Registry, Quota Cooldowns)
-│   └── Agent Engine (Multi-Step Planner, SecurityManager, Verification Loop)
-├── Desktop Perception & Tools
-│   ├── UI Automation Perception (Native Windows Controls & Properties)
-│   ├── Screen Capture & Multimodal Vision (Groq Qwen 3.6 27B / Gemini)
-│   └── System Tools (Application Launcher, Volume, Brightness, Navigation)
-└── Command Center UI (Decoupled Client Layer)
-    ├── Asynchronous WebSocket Gateway (127.0.0.1:8765)
-    └── 7-View Temporal Aura SPA
+                                  OPERATOR
+                         (Voice, Hotkey, Text, API)
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                           PRIMARY SERA PRESENCE                               │
+│        (100% Alpha Transparent WebGL Core · Kinetic Status Typography)        │
+└───────────────────────────────────┬───────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                              SERA CORE RUNTIME                                │
+│                                                                               │
+│   1. PERCEPTION ──────────▶ 2. INTENT CLASSIFIER ───▶ 3. RESOURCE ROUTER      │
+│      • Gemini 3.5 STT          • Goal Deconstruction     • Health & Quota     │
+│      • Whisper CUDA Fallback   • Ambiguity Resolution    • Latency Tracking   │
+│      • Multimodal Screen                                 • Specialized Roles  │
+│                                                               │               │
+│   6. TTS & AUDIO CUES ◀─── 5. VERIFICATION GATE  ◀── 4. PLANNER & TOOLS       │
+│      • Streaming Interruption  • OS Process Checks       • Windows Shell      │
+│      • Spatial Audio Chimes    • Non-Zero Search Gates   • Web Search         │
+│                                                          • MCP Client Hub     │
+│                                       │                                       │
+│                                       ▼                                       │
+│                            7. PARTITIONED MEMORY                              │
+│                               • 6 Scoped Tiers                                │
+│                               • Local LanceDB Vector RAG                      │
+└───────────────────────────────────┬───────────────────────────────────────────┘
+                                    │ Real-Time WebSocket Telemetry
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                          SECONDARY COMMAND CENTER                             │
+│       (10-Tab Workstation · Living Shader Background · Workflow Replay)       │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📁 Repository Structure
+## 🚦 Implementation Status Ledger
 
-```
-Sera/
-├── app/
-│   ├── core/           # Runtime, State Machine, EventBus, Planner, Router
-│   ├── memory/         # Short-term session context & long-term vector store
-│   ├── models/         # Multi-model LLM/Vision/Embedding/STT/TTS Providers & Health
-│   ├── speech/         # Voice capture, Canary STT, Whisper, Wake Word, TTS
-│   ├── tools/          # Windows UI Automation, System, Screen, Security
-│   ├── ui/             # Command Center Server & Temporal Aura SPA Assets
-│   └── utils/          # Configuration loader, logging & system telemetry
-├── config/             # YAML configuration files
-├── docs/               # Architecture, UI Design System, Navigation & Contracts
-├── reports/            # Performance benchmarks & validation telemetry
-├── tests/              # Full unit & integration regression test suite
-├── .env.example        # Environment variables template
-├── main.py             # CLI / Voice Agent main entry point
-├── requirements.txt    # Python package dependencies
-└── README.md
-```
+To maintain absolute technical honesty, all capabilities are strictly classified by their verified state in the codebase:
+
+### ✅ CURRENT STATUS (Actually Working & Verified)
+* **Speech-to-Text (STT):** Google Gemini 3.5 Transcribe (`gemini-3.5-transcribe`) with automatic language detection, natural punctuation, and local Faster-Whisper CUDA fallback.
+* **Hold-to-Talk Voice Loop:** Global `Ctrl+Space` hook with VAD gating and instant acoustic TTS interruption.
+* **Empirical Application Automation:** Windows application launcher in `app/tools/windows/apps.py` with mandatory OS process ID and window title handle verification (verified with Chrome).
+* **Empirical Web Search:** DuckDuckGo HTML parsing engine in `app/tools/browser/web_search.py` with multi-line title cleaning, sponsored ad filtering, strict data contracts, and live search previews (verified with 5-test vertical slice).
+* **Primary SERA Presence (Body 1):** Three.js WebGL Wisdom King core with concentric mathematical rings, 12,000+ GPGPU curl particles, 9 animation states, single-line kinetic typography, and the Signature Computational Cellular Reconstruction completion sequence (`http://127.0.0.1:8765/presence`).
+* **Multi-Provider LLM Fabric:** Adapters for Google Gemini, Groq, Mistral AI, OpenRouter, Cerebras, and Ollama.
+* **Resource-Aware Router:** Model-level health isolation, volatile cooldowns, and latency moving averages.
+* **Unified UI Gateway:** Asynchronous Python HTTP and WebSocket server listening on port 8765.
+
+### ⚠️ IN DEVELOPMENT (Active Rework in Progress)
+* **Secondary Command Center Reorganization:** Migrating the existing browser UI into the 10-tab technical surface (`LIVE`, `TASKS`, `WORKFLOWS`, `AGENTS`, `MEMORY`, `KNOWLEDGE`, `INTEGRATIONS`, `MODELS`, `HISTORY`, `SYSTEM`).
+* **Dynamic Workflow Timeline:** Replacing the previous disconnected static drag-and-drop node graph with a dynamic event-generated task timeline.
+* **Native Desktop Shell:** Wrapping the transparent presence canvas in a lightweight borderless Windows desktop window via `pywebview`.
+* **Wake-Word Robustness:** Tuning local `openWakeWord` sensitivity to eliminate false positives in noisy environments.
+
+### 📋 PLANNED (Architecturally Designed; Not Yet Implemented)
+* **Model Context Protocol (MCP) Client:** Native JSON-RPC 2.0 client (`app/core/mcp_client.py`) connecting to Playwright, Chrome DevTools, Filesystem, and Git MCP servers.
+* **Local Embedded RAG:** In-process LanceDB vector database with semantic chunking and verified line-number citations.
+* **Autonomous Multi-Agent Swarm:** Dedicated sub-agents (Desktop, Browser, Vision, Research, Coding, Automation) coordinating under the SERA Core supervisor.
+
+---
+
+## 🔬 Core Subsystems
+
+### 1. Dual-Body Visual System
+* **Primary Presence:** Accessible at `http://127.0.0.1:8765/presence`. Manifests as a floating computational singularity with concentric rings rotating with differential angular speeds reflecting compute load. Displays single-line status updates (`LISTENING...`, `ANALYZING...`, `EXECUTING...`) and executes cellular reconstruction upon task completion.
+* **Secondary Command Center:** Accessible at `http://127.0.0.1:8765`. High-density dark workstation built on Swiss typographical discipline, rich CSS tokens, and an organic living shader background.
+
+### 2. Model Fabric & Roles
+* **Reasoning:** High-parameter models (Groq Llama-3.3 70B, Mistral Large, Gemini Flash Thinking) for intent deconstruction and task planning.
+* **Fast:** Low-latency models (Mistral Small, Gemini Flash Lite) for instant conversation and status updates.
+* **Vision:** Multimodal models (Groq Qwen-2.5-VL, Gemini Flash) for desktop perception.
+* **Tool Calling:** Mistral Codestral, Groq, and Gemini structured output endpoints.
+* **STT & TTS:** Gemini 3.5 Transcribe / Faster-Whisper CUDA & streaming Fish/Kokoro audio.
+
+### 3. Verification & Testing Philosophy
+SERA rejects monolithic test suites and mock-only passes. All capabilities are validated via **Vertical Slices** (`tests/vertical_slices/`) requiring empirical real-world side effects:
+* **Level 1 (Unit Pass):** Isolated parsing and logic validation.
+* **Level 2 (Integration Pass):** Multi-component EventBus and WebSocket sync.
+* **Level 3 (E2E Pass):** Real operating system or web execution.
+* **Level 4 (Manual Acceptance):** Visual confirmation in Chrome and desktop.
 
 ---
 
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
-- **OS**: Windows 10 / 11 (64-bit)
-- **Python**: Python 3.11+ (Python 3.12 / 3.13 / 3.14 compatible)
-- **NVIDIA GPU**: CUDA-capable GPU recommended for local STT fallback
+* **Operating System:** Windows 10 / 11 (64-bit).
+* **Python:** Python 3.11, 3.12, or 3.14 (in virtual environment).
+* **GPU (Optional):** NVIDIA CUDA-compatible GPU for local Faster-Whisper fallback.
 
 ### 2. Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/KESHAVAPANDI/SERA-Desktop-Agent.git
-   cd SERA-Desktop-Agent
-   ```
-
-2. Create and activate a Python virtual environment:
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-3. Install dependencies:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-### 3. Environment Configuration
-
-Copy the template environment file and add your API keys:
 ```powershell
-copy .env.example .env
+# Clone the repository
+git clone https://github.com/KESHAVAPANDI/SERA-Desktop-Agent.git
+cd SERA-Desktop-Agent
+
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-Edit `.env` with your preferred provider keys:
+### 3. Configuration
+Copy `.env.example` to `.env` and provide your API credentials:
 ```ini
-NVIDIA_API_KEY=your_nvidia_build_key
-GROQ_API_KEY=your_groq_api_key
-GEMINI_API_KEY=your_gemini_api_key
-FISH_API_KEY=your_fish_audio_key
-MISTRAL_API_KEY=your_mistral_api_key
-OPENROUTER_API_KEY=your_openrouter_key
+GEMINI_API_KEY=your_gemini_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+MISTRAL_API_KEY=your_mistral_api_key_here
+OPENROUTER_API_KEY=your_openrouter_key_here
 ```
 
-> ⚠️ **SECURITY WARNING**: Never commit your `.env` file or expose private API keys. Ensure `.env` remains in `.gitignore` at all times.
-
----
-
-## 💻 Running SERA
-
-### Headless Voice Agent (CLI Mode)
+### 4. Running SERA
 ```powershell
+# Run SERA with unified Command Center and Primary Presence
 python main.py
-```
-- Press **`Ctrl+Space`** or say **"SERA"** to activate voice capture.
-- Speak commands such as *"Set brightness to 50%"*, *"Open Chrome and search RTX 5090"*, or ask questions.
 
-### Running Automated Unit Tests
-```powershell
-python -m unittest discover tests
+# Access the Primary Floating Presence:
+http://127.0.0.1:8765/presence
+
+# Access the Secondary Command Center:
+http://127.0.0.1:8765
 ```
-*Current test suite: 89/89 tests passing (100% OK).*
 
 ---
 
-## 🔒 Security & Safety
+## 📚 Documentation Directory
 
-SERA enforces strict safety boundaries:
-- **No Unrestricted Computer Control**: Raw cursor movement and unconstrained key injection are strictly isolated.
-- **Observe ➔ Act ➔ Verify**: Every interaction checks state before and after execution.
-- **Budget Limits**: Max 5 steps per task execution and 10-second action chain timeouts.
+Detailed engineering specifications and historical analyses are maintained in [`docs/`](./docs/):
+* [**`docs/SERA_2_PRODUCT_VISION.md`**](./docs/SERA_2_PRODUCT_VISION.md) — The master product reimagining vision document.
+* [**`docs/SERA_2_ARCHITECTURE.md`**](./docs/SERA_2_ARCHITECTURE.md) — Complete SERA 2.0 micro-kernel architecture.
+* [**`docs/SERA_2_VISUAL_SYSTEM.md`**](./docs/SERA_2_VISUAL_SYSTEM.md) — WebGL shaders, GPGPU curl particles, and 9 state modes.
+* [**`docs/SERA_2_CAPABILITY_MATRIX.md`**](./docs/SERA_2_CAPABILITY_MATRIX.md) — 16-dimension capability matrix and extension points.
+* [**`docs/SERA_2_MCP_PLAN.md`**](./docs/SERA_2_MCP_PLAN.md) — Model Context Protocol client implementation plan.
+* [**`docs/SERA_HISTORY.md`**](./docs/SERA_HISTORY.md) — Chronological development history from Phase 1 to SERA 2.0.
+* [**`docs/DEVELOPMENT_APPROACH.md`**](./docs/DEVELOPMENT_APPROACH.md) — Vertical-slice philosophy and four pass levels.
+* [**`docs/DECISIONS.md`**](./docs/DECISIONS.md) — Architectural decision records (ADRs).
+* [**`docs/ARCHITECTURE_CURRENT.md`**](./docs/ARCHITECTURE_CURRENT.md) — Detailed description of the active codebase.
+* [**`docs/ARCHITECTURE_SERA_2.md`**](./docs/ARCHITECTURE_SERA_2.md) — Future target architecture and dataflow.
+* [**`docs/VISUAL_EVOLUTION.md`**](./docs/VISUAL_EVOLUTION.md) — Evolution from developer dashboards to computational consciousness.
+* [**`docs/CAPABILITY_MATRIX.md`**](./docs/CAPABILITY_MATRIX.md) — Granular implementation status table.
+* [**`docs/ROADMAP.md`**](./docs/ROADMAP.md) — NOW, NEXT, and LATER development horizons.
+* [**`CHANGELOG.md`**](./CHANGELOG.md) — Chronological release notes.
+
+---
+
+## 📄 License
+Internal proprietary research and development. All rights reserved.
