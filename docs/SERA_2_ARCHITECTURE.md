@@ -1,5 +1,8 @@
 # SERA 2.0 — System Architecture Specification
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Version:** 2.0.0-PROPOSED  
 > **Core Subsystems:** Runtime Engine, Model Fabric, Tool Fabric, MCP Client, Memory & RAG, Event Bus, Dual Visual Bodies  
 > **Architectural Paradigm:** Event-Driven Asynchronous Micro-Kernel with Decoupled Surfaces

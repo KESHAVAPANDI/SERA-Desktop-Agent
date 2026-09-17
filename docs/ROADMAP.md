@@ -1,5 +1,9 @@
 # SERA Project Roadmap
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
+
 This living document outlines development priorities organized into three horizons: **NOW** (immediate focus), **NEXT** (upcoming architecture phases), and **LATER** (long-term strategic capabilities).
 
 ---

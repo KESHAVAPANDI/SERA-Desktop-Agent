@@ -1,5 +1,8 @@
 # SERA 2.0 — Target Architecture Specification
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Vision:** A Personal Desktop AI Operating System for One User.  
 > **Execution Paradigm:** Dual-Body Visual Manifestation over an Asynchronous Unified Micro-Kernel.
 

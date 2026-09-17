@@ -1,5 +1,8 @@
 # SERA — Current Architecture (As-Built)
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Document Status:** Empirical snapshot of the current active codebase.  
 > **Classification Key:**  
 > ✅ **IMPLEMENTED** — Fully operational, tested with real-world verification.  

@@ -7,6 +7,10 @@ All notable changes to the SERA project are documented in this file. The format 
 ## [2.0.0-design] — 2026-09-17
 
 ### Added
+* **Project Attribution:**
+  * Author: Keshava Pandi A S
+  * Creator: Keshava Pandi A S
+  * Developer: Keshava Pandi A S
 * **SERA 2.0 Architectural Specifications:**
   * `docs/SERA_2_PRODUCT_VISION.md`: Dual-body paradigm (floating transparent presence vs. technical command center).
   * `docs/SERA_2_ARCHITECTURE.md`: Decoupled micro-kernel, unified event bus, and Model Fabric.

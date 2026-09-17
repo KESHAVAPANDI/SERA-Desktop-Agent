@@ -1,5 +1,9 @@
 # SERA Architecture Decision Records (ADRs)
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
+
 This log documents foundational architectural decisions, context, trade-offs, and current statuses.
 
 ---

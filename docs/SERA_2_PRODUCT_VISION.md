@@ -1,6 +1,8 @@
 # SERA 2.0 — Product Vision & Design Philosophy
 
-> **Status:** Conceptual Architecture & Design Specification  
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Target Audience:** Single User / Personal Desktop Operator  
 > **Design Paradigm:** Dual-Body Computational Presence + High-Density Command Center  
 > **Core Inspiration:** Wisdom King / Raphael (Conceptual Computational Consciousness)

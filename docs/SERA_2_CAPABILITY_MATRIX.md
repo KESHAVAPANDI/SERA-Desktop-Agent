@@ -1,5 +1,8 @@
 # SERA 2.0 — System Capability Matrix & Extension Architecture
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Purpose:** Exhaustive capability mapping across all operational dimensions of SERA 2.0.  
 > **Philosophy:** Clean extension points, strict verification gates, zero fabricated capabilities.
 

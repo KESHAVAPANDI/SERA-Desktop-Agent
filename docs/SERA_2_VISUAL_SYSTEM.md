@@ -1,5 +1,8 @@
 # SERA 2.0 — Visual System & Motion Language Specification
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Aesthetic Directive:** Raphael-Like Computational Consciousness  
 > **Target Fidelity:** High-End WebGL / GPGPU Shader System / Swiss Typographic Grid  
 > **Guiding Principle:** Every motion communicates state, direction, attention, progress, or transformation. Zero decorative noise.

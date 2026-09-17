@@ -1,5 +1,8 @@
 # SERA Development Approach & Engineering Philosophy
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Core Mandate:** Observable real-world verification over theoretical assertions. Zero false passes.
 
 ---

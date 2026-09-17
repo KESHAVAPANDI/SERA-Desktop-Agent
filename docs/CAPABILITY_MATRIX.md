@@ -1,5 +1,8 @@
 # SERA System Capability Matrix (Empirical Ledger)
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Integrity Mandate:** Statuses reflect genuine empirical capability in the repository today. Features are marked ✅ **IMPLEMENTED** only if real-world verification tests exist and pass. Mocks and planned architectures are categorized as 🧪 **EXPERIMENTAL**, ⚠️ **PARTIAL**, or 📋 **PLANNED**.
 
 ---

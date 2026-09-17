@@ -1,5 +1,9 @@
 # SERA Visual Evolution: From Developer Dashboard to Computational Consciousness
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
+
 This document chronicles the design iterations, experimental failures, breakthroughs, and philosophy that led to the SERA 2.0 visual identity.
 
 ---

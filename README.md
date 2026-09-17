@@ -180,5 +180,16 @@ Detailed engineering specifications and historical analyses are maintained in [`
 
 ---
 
+## 👤 Authorship & Credits
+
+* **Author:** Keshava Pandi A S
+* **Creator:** Keshava Pandi A S
+* **Developer:** Keshava Pandi A S
+
+*Note: Antigravity is an AI development assistant/tool used by Keshava Pandi A S during development.*
+
+---
+
 ## 📄 License
-Internal proprietary research and development. All rights reserved.
+Internal proprietary research and development by Keshava Pandi A S. All rights reserved.
+

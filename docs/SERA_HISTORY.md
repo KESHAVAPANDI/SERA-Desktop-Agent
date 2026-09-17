@@ -1,5 +1,9 @@
 # SERA History: Evolution of the Personal Desktop AI Operating System
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
+
 This document provides a comprehensive, chronologically accurate record of the architectural, speech, model, tool, and visual evolution of SERA (**S**emantic **E**xecution & **R**untime **A**ssistant). Every milestone documented here corresponds to actual engineering phases, commits, and verified system behavior in the repository.
 
 ---

@@ -1,5 +1,8 @@
 # SERA 2.0 — MCP Fabric & Integration Engine Architecture
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Role:** Model Context Protocol (MCP) Client Specification & Tool Registry  
 > **Transports Supported:** stdio (Subprocess), SSE (HTTP Server-Sent Events), WebSocket  
 > **Security Directives:** Zero Plaintext Secret Leakage, Capability Sandboxing, Live Health Probing

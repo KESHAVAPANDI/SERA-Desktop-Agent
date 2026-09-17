@@ -1,5 +1,8 @@
 # Visual References & Conceptual Inspiration
 
+> **Author:** Keshava Pandi A S  
+> **Creator:** Keshava Pandi A S  
+> **Developer:** Keshava Pandi A S  
 > **Legal & Attribution Notice:**  
 > This directory and its associated notes document conceptual visual references used purely for design inspiration. These references are **NOT** original SERA assets, nor are any copyrighted anime illustrations or proprietary game/film screenshots embedded in this repository. All visual implementations in SERA 2.0 (shaders, WebGL geometry, procedural particles, and typography) are original, clean-room creations built from first mathematical principles.
 
