@@ -25,8 +25,8 @@ app.commandLine.appendSwitch("enable-transparent-visuals");
 let mainWindow = null;
 let tray = null;
 
-const WINDOW_WIDTH = 640;
-const WINDOW_HEIGHT = 720;
+const WINDOW_WIDTH = 380;
+const WINDOW_HEIGHT = 380;
 const COMMAND_CENTER_URL = "http://127.0.0.1:8765";
 
 function calculateDefaultPosition() {
@@ -35,8 +35,8 @@ function calculateDefaultPosition() {
   const { x: areaX, y: areaY } = primaryDisplay.workArea;
 
   // Dock bottom-right with margin
-  const marginX = 24;
-  const marginY = 24;
+  const marginX = 20;
+  const marginY = 20;
   const x = Math.round(areaX + screenWidth - WINDOW_WIDTH - marginX);
   const y = Math.round(areaY + screenHeight - WINDOW_HEIGHT - marginY);
 
@@ -92,6 +92,20 @@ function createWindow() {
 
   setupIpc();
   setupTray();
+
+  if (process.argv.includes("--snapshot")) {
+    setTimeout(async () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const image = await mainWindow.capturePage();
+        const fs = require("fs");
+        const outDir = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6");
+        const target = path.join(outDir, "desktop_glass_box_panel.png");
+        fs.writeFileSync(target, image.toPNG());
+        console.log(`[Main] Glass box verification snapshot saved: ${target}`);
+        app.quit();
+      }
+    }, 2500);
+  }
 }
 
 function setupIpc() {

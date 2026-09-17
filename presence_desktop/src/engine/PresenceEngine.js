@@ -97,9 +97,9 @@ export class PresenceEngine {
     // 1. Scene
     this.scene = new THREE.Scene();
 
-    // 2. Camera (Perspective with good depth)
+    // 2. Camera (Perspective with good depth, scaled for compact glass box)
     this.camera = new THREE.PerspectiveCamera(45, this.width / this.height, 0.1, 1000);
-    this.camera.position.set(0, 0, 16);
+    this.camera.position.set(0, 0, 18.5);
 
     // 3. Renderer with True Alpha Transparency
     this.renderer = new THREE.WebGLRenderer({

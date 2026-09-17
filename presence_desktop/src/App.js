@@ -69,11 +69,17 @@ class PresenceApp {
   }
 
   setupWindowInteractions() {
-    // Canvas mouse drag repositioning
-    this.canvas.addEventListener("mousedown", (e) => {
-      // Left click on canvas starts window drag
+    const glassPanel = document.getElementById("glass-panel") || this.canvas;
+    let dragDistance = 0;
+
+    // Glass panel mouse drag repositioning
+    glassPanel.addEventListener("mousedown", (e) => {
+      if (e.target.closest("button") || e.target.closest("input") || e.target.closest("form")) {
+        return;
+      }
       if (e.button === 0) {
         this.isDragging = true;
+        dragDistance = 0;
         this.lastMousePos = { x: e.screenX, y: e.screenY };
       }
     });
@@ -82,6 +88,7 @@ class PresenceApp {
       if (this.isDragging && window.seraNative) {
         const dx = e.screenX - this.lastMousePos.x;
         const dy = e.screenY - this.lastMousePos.y;
+        dragDistance += Math.abs(dx) + Math.abs(dy);
         this.lastMousePos = { x: e.screenX, y: e.screenY };
         window.seraNative.dragWindow(dx, dy);
       }
@@ -98,9 +105,12 @@ class PresenceApp {
       });
     }
 
-    // Canvas click toggles prompt input if not dragging
-    this.canvas.addEventListener("click", (e) => {
-      if (!this.isDragging) {
+    // Panel click toggles prompt input if not dragging
+    glassPanel.addEventListener("click", (e) => {
+      if (e.target.closest("button") || e.target.closest("input") || e.target.closest("form")) {
+        return;
+      }
+      if (dragDistance < 6) {
         this.togglePromptInput();
       }
     });
