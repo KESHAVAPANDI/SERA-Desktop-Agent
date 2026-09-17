@@ -33,13 +33,14 @@
 | **Architect Studio** | ✅ IMPLEMENTED | 3-column candidate configuration studio in `architect.js` | Role update tests via WebSocket | Changing candidate order does not affect temporary cooldowns | Add visual latency comparison sparklines |
 | **History View** | ⚠️ PARTIAL | Session log table in `history.js` | Log rendering test | Lacks full-text search and artifact preview | Add artifact modal viewer and date filters |
 | **System Telemetry** | ✅ IMPLEMENTED | Structured event traces in `app/core/telemetry.py` | JSON log file generation in `reports/` | Log files grow unbounded if not periodically pruned | Implement rolling log file retention policy |
-| **Primary Presence** | ✅ IMPLEMENTED | Three.js WebGL core in `presence.html` (Wisdom King / Raphael) | HTTP 200 on `/presence`, WebGL shader initialization | Transparent desktop window needs pywebview wrapper | Add native transparent borderless desktop launcher |
+| **Primary Presence** | ✅ IMPLEMENTED | Three.js WebGL core in `presence.html` (Wisdom King / Raphael) | HTTP 200 on `/presence`, WebGL shader initialization | None | Add ambient audio visualizer spectrum |
 | **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
+| **Native Desktop Shell** | ✅ IMPLEMENTED | `app/ui/desktop_presence.py` pywebview borderless transparent overlay | `tests/vertical_slices/presence/test_desktop_presence_shell.py` (8 tests) | Requires pywebview installed in Python environment | Add multi-monitor display selector |
 
 ---
 
 ### Status Summary
-* **✅ IMPLEMENTED:** 16 capabilities fully operational and verified.
-* **⚠️ PARTIAL:** 7 capabilities working but undergoing active rework or enhancement.
+* **✅ IMPLEMENTED:** 17 capabilities fully operational and verified.
+* **⚠️ PARTIAL:** 6 capabilities working but undergoing active rework or enhancement.
 * **📋 PLANNED:** 3 capabilities architecturally specified for upcoming phases.
 * **❌ BROKEN:** 0 active regressions (previous Chrome launch and DuckDuckGo zero-result bugs resolved).

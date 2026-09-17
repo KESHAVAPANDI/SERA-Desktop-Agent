@@ -1,0 +1,269 @@
+/* SERA 2.0 — Primary Presence Visual Styling */
+/* Absolute Minimalism: 100% Transparent Desktop Manifestation */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  --sera-cyan-bright: #00f0ff;
+  --sera-cyan-mid: #0284c7;
+  --sera-cyan-glow: rgba(0, 240, 255, 0.45);
+  --sera-white-core: #ffffff;
+  --sera-magenta-accent: #f43f5e;
+  --sera-gold-accent: #f59e0b;
+  --sera-text-primary: #f8fafc;
+  --sera-text-muted: rgba(148, 163, 184, 0.7);
+  --sera-bg-input: rgba(7, 12, 24, 0.85);
+  --sera-border-input: rgba(0, 240, 255, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent !important;
+  color: var(--sera-text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Primary WebGL Canvas */
+#presence-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Central Overlay HUD Wrapper */
+#presence-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Kinetic Single-Line Status Text */
+#status-container {
+  position: absolute;
+  top: calc(50% + 150px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  width: 90%;
+  max-width: 600px;
+  text-align: center;
+}
+
+#status-line {
+  font-family: 'Space Mono', 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sera-cyan-bright);
+  text-shadow: 0 0 16px var(--sera-cyan-glow), 0 2px 4px rgba(0, 0, 0, 0.8);
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(5, 8, 17, 0.4);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  transition: all 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+#status-subtext {
+  margin-top: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: var(--sera-text-muted);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.2s ease;
+  max-width: 480px;
+  line-height: 1.4;
+}
+
+/* Minimal Sleek Floating Input (Invoked by clicking core or pressing Enter/Space) */
+#floating-input-overlay {
+  position: absolute;
+  top: calc(50% + 205px);
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  width: 90%;
+  max-width: 460px;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 30;
+}
+
+#floating-input-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+.input-capsule {
+  display: flex;
+  align-items: center;
+  background: var(--sera-bg-input);
+  border: 1px solid var(--sera-border-input);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 240, 255, 0.15);
+  border-radius: 28px;
+  padding: 6px 8px 6px 16px;
+  backdrop-filter: blur(16px);
+}
+
+.input-capsule input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+}
+
+.input-capsule input::placeholder {
+  color: rgba(148, 163, 184, 0.6);
+  font-size: 13px;
+}
+
+.input-btn {
+  background: linear-gradient(135deg, #00f0ff, #0284c7);
+  border: none;
+  outline: none;
+  color: #050811;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 14px var(--sera-cyan-glow);
+}
+
+.input-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Top Right Minimal Navigation / Shortcut Glyph */
+.presence-nav-corner {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+  z-index: 25;
+}
+
+.icon-trigger-btn {
+  background: rgba(5, 8, 17, 0.45);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 12px;
+  color: var(--sera-cyan-bright);
+  padding: 8px 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.icon-trigger-btn:hover {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--sera-cyan-bright);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+}
+
+.icon-trigger-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Bottom State Quick Simulation Bar (For Verification & Demo) */
+.state-simulation-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(5, 8, 17, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 24px;
+  padding: 4px 10px;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.state-simulation-bar:hover {
+  opacity: 1;
+}
+
+.state-pill-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: var(--sera-text-muted);
+  padding: 4px 8px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.state-pill-btn:hover {
+  color: var(--sera-cyan-bright);
+  background: rgba(0, 240, 255, 0.1);
+}
+
+.state-pill-btn.active {
+  color: #050811;
+  background: var(--sera-cyan-bright);
+  box-shadow: 0 0 10px var(--sera-cyan-glow);
+  font-weight: 700;
+}

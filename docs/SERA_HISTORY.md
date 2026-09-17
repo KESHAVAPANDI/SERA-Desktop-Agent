@@ -150,3 +150,22 @@ Prior to Phase 2A, execution engines often relied on shallow heuristics (e.g. co
 * **Empirical Vertical Slices:**
   * Added 12-test comprehensive suite (`tests/vertical_slices/verification/test_evidence_fabric.py`) covering all verification modalities and false-pass rejection guarantees.
 
+---
+
+## Phase 2B — Native Transparent Desktop Shell
+
+### Packaging the Primary Presence
+With the Three.js WebGL Wisdom King core verified in the browser (`/presence`), Phase 2B packaged the manifestation into a permanent, native Windows desktop overlay window using `pywebview`.
+
+### Architectural Milestones:
+* **Native Desktop Shell Launcher (`app/ui/desktop_presence.py`):**
+  * Borderless, frameless, and 100% alpha-transparent window lifecycle (`frameless=True`, `transparent=True`, `on_top=True`).
+  * Display-aware window positioning computing bottom-right screen docking coordinates with margin offsets (`compute_window_position`).
+  * Win32 click-through toggle via `WS_EX_TRANSPARENT` and `WS_EX_LAYERED` extended window styles (`set_click_through`).
+* **Bidirectional JS-to-Python Bridge (`DesktopPresenceAPI`):**
+  * Exposes native OS-level window control methods (`minimize`, `hide`, `show`, `close`, `toggle_on_top`) directly to web scripts.
+  * Health verification (`ping`) ensuring fast IPC round-trips.
+* **Empirical Vertical Slices:**
+  * Added 8-test comprehensive suite (`tests/vertical_slices/presence/test_desktop_presence_shell.py`) testing default configurations, custom docking math, API bridge calls, dry-run execution, window option contracts, server endpoint serving, and Evidence Verification Fabric asset assertions.
+
+

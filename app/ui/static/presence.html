@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SERA 2.0 — Presence</title>
+  
+  <link rel="stylesheet" href="./css/presence.css?v=2.0">
+</head>
+<body>
+
+  <!-- 1. Master WebGL Visual Presence Canvas (100% Alpha Transparent) -->
+  <canvas id="presence-canvas"></canvas>
+
+  <!-- 2. Minimal HUD Layer -->
+  <div id="presence-hud">
+
+    <!-- Top-Right Minimal Command Center Shortcut -->
+    <div class="presence-nav-corner">
+      <a href="/index.html" class="icon-trigger-btn" title="Open Full Command Center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"></rect>
+          <rect x="14" y="3" width="7" height="7"></rect>
+          <rect x="14" y="14" width="7" height="7"></rect>
+          <rect x="3" y="14" width="7" height="7"></rect>
+        </svg>
+        <span>COMMAND CENTER</span>
+      </a>
+    </div>
+
+    <!-- Kinetic Single-Line Status Typography -->
+    <div id="status-container">
+      <div id="status-line">IDLE • AWAITING INTENT</div>
+      <div id="status-subtext">Click core or press Space to interact</div>
+    </div>
+
+    <!-- Minimal Sleek Floating Input Capsule -->
+    <div id="floating-input-overlay">
+      <div class="input-capsule">
+        <input type="text" id="prompt-input" placeholder="Transmit objective to SERA..." autocomplete="off">
+        <button id="send-prompt-btn" class="input-btn" title="Send Objective">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Bottom State Simulation & Inspection Bar (For Testing & Verification) -->
+    <div class="state-simulation-bar" title="Simulate Operational States (Keys 1-9)">
+      <button class="state-pill-btn active" data-state="IDLE">1: IDLE</button>
+      <button class="state-pill-btn" data-state="LISTENING">2: LISTEN</button>
+      <button class="state-pill-btn" data-state="TRANSCRIBING">3: TRANSCRIBE</button>
+      <button class="state-pill-btn" data-state="THINKING">4: THINK</button>
+      <button class="state-pill-btn" data-state="EXECUTING">5: EXECUTE</button>
+      <button class="state-pill-btn" data-state="SPEAKING">6: SPEAK</button>
+      <button class="state-pill-btn" data-state="BROKEN">7: BROKEN</button>
+      <button class="state-pill-btn" data-state="CANCELLED">8: CANCEL</button>
+      <button class="state-pill-btn" data-state="COMPLETED">9: COMPLETE</button>
+    </div>
+
+  </div>
+
+  <!-- Three.js Local Engine -->
+  <script src="./js/vendor/three.min.js"></script>
+
+  <!-- Module Controller Initialization -->
+  <script type="module">
+    import { PresenceController } from "./js/presence/presence_controller.js";
+    window.addEventListener("DOMContentLoaded", () => {
+      window.seraPresence = new PresenceController();
+    });
+  </script>
+
+</body>
+</html>

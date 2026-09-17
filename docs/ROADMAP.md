@@ -17,7 +17,7 @@ This living document outlines development priorities organized into three horizo
 * **[x] SERA 2.0 Product Architecture:** Formalization of the 5 foundational architecture specifications in `docs/`.
 * **[x] Primary SERA Presence (Phase B Engine):** Three.js WebGL Wisdom King core with concentric mathematical rings, GPGPU curl particles, 9 animation states, and kinetic status typography at `/presence`.
 * **[x] Evidence Verification Fabric (Phase 2A):** Universal side-effect verification engine (`app/core/verification.py`) enforcing mandatory completion gates across OS processes, web queries, and filesystem operations with zero false passes.
-* **[ ] Native Transparent Desktop Shell:** Packaging `presence.html` into a lightweight, borderless, click-through desktop overlay window using `pywebview` on Windows.
+* **[x] Native Transparent Desktop Shell (Phase 2B):** Packaging `presence.html` into a lightweight, borderless, click-through desktop overlay window using `pywebview` on Windows (`app/ui/desktop_presence.py`).
 * **[ ] Command Center Reorganization (Phase C):** Rebuilding `http://127.0.0.1:8765` into the 10 organized operational sections (`LIVE`, `TASKS`, `WORKFLOWS`, `AGENTS`, `MEMORY`, `KNOWLEDGE`, `INTEGRATIONS`, `MODELS`, `HISTORY`, `SYSTEM`).
 
 ---

@@ -106,3 +106,13 @@ This log documents foundational architectural decisions, context, trade-offs, an
 * **Context & Rationale:** Prior to Phase 2A, individual tools performed inconsistent checks, leading to cases where tool wrappers claimed success without empirical validation. Consolidating verification into a typed fabric (`EvidenceType`, `EvidenceRecord`) ensures that OS process tables, structured web records, filesystem artifacts, and screen buffers are systematically inspected and attached to event payloads (`EVIDENCE_VERIFIED`). Any verification failure deterministically routes the task to `BROKEN` with an explicit diagnostic reason.
 * **Consequences:** Eliminates false passes across all current and future tool integrations. Every task execution is backed by auditable empirical evidence.
 
+---
+
+### ADR-012: Native pywebview Shell for Alpha-Transparent Desktop Presence (Phase 2B)
+* **Date:** 2026-09-17  
+* **Status:** ACCEPTED / IMPLEMENTED  
+* **Decision:** Package `presence.html` using `pywebview` as a native Windows desktop overlay with borderless frameless styling, 100% alpha transparency, and stay-on-top positioning, rather than relying solely on standard browser tabs.
+* **Context & Rationale:** Operating system AI companions lose presence when buried behind browser tabs or contained in standard bordered chrome frames. Using a lightweight Win32 WebView2 wrapper via `pywebview` provides pure desktop-level alpha blending, non-obstructive dock placement in the primary monitor's work area, and direct Win32 extended style control (`WS_EX_TRANSPARENT`) for seamless click-through.
+* **Consequences:** Primary presence runs as an independent desktop window while communicating with the central runtime server via local loopback WebSocket (`ws://127.0.0.1:8765`).
+
+

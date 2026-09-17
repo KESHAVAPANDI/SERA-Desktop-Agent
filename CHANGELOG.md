@@ -4,6 +4,20 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase2b] — 2026-09-17
+
+### Added
+* **Native Transparent Desktop Shell (`app/ui/desktop_presence.py`):**
+  * Native desktop overlay launcher packaging `presence.html` using `pywebview` on Windows.
+  * Borderless, frameless, and 100% alpha-transparent window presentation floating permanently above the desktop (`on_top=True`, `transparent=True`, `frameless=True`).
+  * Display-aware window positioning with automatic work area computation for bottom-right screen docking (`compute_window_position`).
+  * Win32 click-through toggle via `WS_EX_TRANSPARENT` and `WS_EX_LAYERED` extended window styles (`set_click_through`).
+  * Bidirectional JavaScript-to-Python bridge (`DesktopPresenceAPI`) providing native window controls (`minimize`, `hide`, `show`, `close`, `toggle_on_top`) and bridge health verification (`ping`).
+* **Desktop Presence Vertical Slice Test Suite (`tests/vertical_slices/presence/test_desktop_presence_shell.py`):**
+  * 8 granular tests asserting default configuration compliance, custom docking geometry, position calculations, API bridge responses, dry-run lifecycles, pywebview window option contracts, server endpoint serving, and Evidence Verification Fabric disk asset validation.
+
+---
+
 ## [2.0.0-phase2a] — 2026-09-17
 
 ### Added
