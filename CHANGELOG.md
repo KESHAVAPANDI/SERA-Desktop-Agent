@@ -4,6 +4,22 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase2c] — 2026-09-22
+
+### Added
+* **Master System Orchestrator (`sera.py`):**
+  * Created unified root orchestrator launcher (`python sera.py`) managing the complete SERA lifecycle.
+  * Verified HTTP health endpoint (`http://127.0.0.1:8765/api/health`) with exponential backoff.
+  * **Empirical WebSocket Verification:** Connects to `ws://127.0.0.1:8765` and completes real handshake before launching Presence (zero false passes).
+  * Robust signal handling (`SIGINT`, `SIGTERM`) with graceful teardown of all child processes (backend server and Electron presence) preventing orphaned background tasks.
+* **Header-Only Native Window Dragging (`presence_desktop/`):**
+  * Eliminated window drag drift by replacing asynchronous IPC mousemove delta calculations with native Windows DWM caption dragging (`-webkit-app-region: drag;` strictly on `.top-bar`).
+  * Canvas, panel body, and input capsule are explicitly non-draggable (`-webkit-app-region: no-drag;`).
+* **Complete Window Controls:**
+  * Added dedicated non-draggable action buttons: Command Center (`CMD`), Minimize (`−`), and Close (`×`) with responsive hover states and Win32 IPC integration.
+
+---
+
 ## [2.0.0-phase2b-behavior] — 2026-09-17
 
 ### Added

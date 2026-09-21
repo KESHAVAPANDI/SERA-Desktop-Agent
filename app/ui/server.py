@@ -398,9 +398,9 @@ class SERAUIServer:
                 except Exception:
                     pass
 
-            # 1. State
-            if path == "/api/state":
-                return "200 OK", resp_headers, json.dumps(self._get_initial_snapshot()).encode("utf-8")
+            # 1. State / Health
+            if path in ("/api/health", "/api/state"):
+                return "200 OK", resp_headers, json.dumps({"status": "HEALTHY", "snapshot": self._get_initial_snapshot()}).encode("utf-8")
 
             # 1b. Contextual Capabilities Endpoint
             if path.startswith("/api/capabilities"):

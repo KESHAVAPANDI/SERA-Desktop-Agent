@@ -18,11 +18,10 @@ class PresenceApp {
     this.promptForm = document.getElementById("presence-prompt-form");
     this.commandCenterBtn = document.getElementById("command-center-btn");
     this.minimizeBtn = document.getElementById("minimize-btn");
+    this.closeBtn = document.getElementById("close-btn");
 
     this.engine = new PresenceEngine(this.canvas);
     this.ws = null;
-    this.isDragging = false;
-    this.lastMousePos = { x: 0, y: 0 };
 
     this.setupWindowInteractions();
     this.setupUIControls();
@@ -69,35 +68,6 @@ class PresenceApp {
   }
 
   setupWindowInteractions() {
-    const glassPanel = document.getElementById("glass-panel") || this.canvas;
-    let dragDistance = 0;
-
-    // Glass panel mouse drag repositioning
-    glassPanel.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button") || e.target.closest("input") || e.target.closest("form")) {
-        return;
-      }
-      if (e.button === 0) {
-        this.isDragging = true;
-        dragDistance = 0;
-        this.lastMousePos = { x: e.screenX, y: e.screenY };
-      }
-    });
-
-    window.addEventListener("mousemove", (e) => {
-      if (this.isDragging && window.seraNative) {
-        const dx = e.screenX - this.lastMousePos.x;
-        const dy = e.screenY - this.lastMousePos.y;
-        dragDistance += Math.abs(dx) + Math.abs(dy);
-        this.lastMousePos = { x: e.screenX, y: e.screenY };
-        window.seraNative.dragWindow(dx, dy);
-      }
-    });
-
-    window.addEventListener("mouseup", () => {
-      this.isDragging = false;
-    });
-
     // Global Shortcut summon / toggle
     if (window.seraNative && window.seraNative.onGlobalActivate) {
       window.seraNative.onGlobalActivate(() => {
@@ -105,21 +75,17 @@ class PresenceApp {
       });
     }
 
-    // Panel click toggles prompt input if not dragging
-    glassPanel.addEventListener("click", (e) => {
-      if (e.target.closest("button") || e.target.closest("input") || e.target.closest("form")) {
-        return;
-      }
-      if (dragDistance < 6) {
-        this.togglePromptInput();
-      }
+    // Canvas click toggles prompt input (header handles dragging natively via DWM)
+    this.canvas.addEventListener("click", (e) => {
+      this.togglePromptInput();
     });
   }
 
   setupUIControls() {
     // Command Center external trigger
     if (this.commandCenterBtn) {
-      this.commandCenterBtn.addEventListener("click", () => {
+      this.commandCenterBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (window.seraNative) {
           window.seraNative.openCommandCenter();
         } else {
@@ -130,9 +96,22 @@ class PresenceApp {
 
     // Minimize trigger
     if (this.minimizeBtn) {
-      this.minimizeBtn.addEventListener("click", () => {
+      this.minimizeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (window.seraNative) {
           window.seraNative.minimize();
+        }
+      });
+    }
+
+    // Close trigger
+    if (this.closeBtn) {
+      this.closeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (window.seraNative) {
+          window.seraNative.close();
+        } else {
+          window.close();
         }
       });
     }
