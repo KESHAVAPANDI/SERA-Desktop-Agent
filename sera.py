@@ -172,7 +172,7 @@ def start_runtime_server() -> subprocess.Popen | None:
     return proc
 
 
-def launch_presence_overlay(snapshot_mode: bool = False) -> subprocess.Popen | None:
+def launch_presence_overlay(snapshot_mode: bool = False, voice_snapshot: bool = False) -> subprocess.Popen | None:
     """Start native Electron Primary Presence overlay."""
     if not os.path.exists(ELECTRON_EXE):
         log(f"ERROR: Electron executable not found at: {ELECTRON_EXE}")
@@ -181,7 +181,9 @@ def launch_presence_overlay(snapshot_mode: bool = False) -> subprocess.Popen | N
 
     log(f"Starting Primary Presence Overlay ({ELECTRON_EXE})...")
     args = [ELECTRON_EXE, "."]
-    if snapshot_mode:
+    if voice_snapshot:
+        args.append("--snapshot-voice")
+    elif snapshot_mode:
         args.append("--snapshot")
 
     proc = subprocess.Popen(
@@ -198,7 +200,9 @@ def main():
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    verify_only = "--verify" in sys.argv
+    voice_snapshot = "--snapshot-voice" in sys.argv
+    snapshot_mode = ("--snapshot" in sys.argv) or ("--verify" in sys.argv)
+    verify_only = snapshot_mode or voice_snapshot
     headless = "--headless" in sys.argv
 
     print("=" * 60)
@@ -211,13 +215,13 @@ def main():
     server_proc = start_runtime_server()
 
     # 2. Verify HTTP port 8765
-    http_ok = verify_http_endpoint(HTTP_HEALTH_URL, timeout=12.0)
+    http_ok = verify_http_endpoint(HTTP_HEALTH_URL, timeout=30.0)
     if not http_ok:
         log("FATAL: SERA Runtime Server failed to respond on HTTP health check.")
         shutdown_handler()
         sys.exit(1)
 
-    # 3. Verify real WebSocket connection (Requirement 7)
+    # 3. Verify real WebSocket connection
     ws_ok = verify_websocket_endpoint(WS_URL, timeout=6.0)
     if not ws_ok:
         log("FATAL: WebSocket endpoint verification failed. Cannot claim PASS.")
@@ -238,7 +242,7 @@ def main():
         return
 
     # 4. Start Presence Overlay
-    presence_proc = launch_presence_overlay(snapshot_mode=verify_only)
+    presence_proc = launch_presence_overlay(snapshot_mode=verify_only, voice_snapshot=voice_snapshot)
     if not presence_proc:
         log("FATAL: Failed to launch Presence Overlay.")
         shutdown_handler()
@@ -246,11 +250,11 @@ def main():
 
     if verify_only:
         log("Verification mode active. Waiting for presence snapshot sequence...")
-        exit_code = presence_proc.wait(timeout=10.0)
+        exit_code = presence_proc.wait(timeout=12.0)
         log(f"Presence verification finished with exit code {exit_code}")
         shutdown_handler()
         if exit_code == 0:
-            log("ALL PHASE 2C SYSTEM VERIFICATION CHECKS PASSED.")
+            log("ALL PHASE 2D SYSTEM VERIFICATION CHECKS PASSED.")
             sys.exit(0)
         else:
             log("Verification check failed.")

@@ -93,13 +93,51 @@ function createWindow() {
   setupIpc();
   setupTray();
 
-  if (process.argv.includes("--snapshot")) {
+  if (process.argv.includes("--snapshot-voice")) {
+    setTimeout(async () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          await mainWindow.webContents.executeJavaScript(`
+            if (window.seraApp) {
+              window.seraApp.handleBackendEvent({
+                event: "ACTIVATION_STARTED",
+                payload: { source: "HOTKEY_HOLD", mode: "HOLD_TO_TALK" }
+              });
+              window.seraApp.handleBackendEvent({
+                event: "PARTIAL_TRANSCRIPTION",
+                payload: { partial: "what time is it right now", transcript: "what time is it right now", is_final: false }
+              });
+              window.seraApp.handleBackendEvent({
+                event: "TRANSCRIPTION_COMPLETED",
+                payload: { transcript: "What time is it right now?", is_final: true }
+              });
+              window.seraApp.handleBackendEvent({
+                event: "AGENT_RESPONSE",
+                payload: { content: "It is currently 1:24 AM on Monday, September 22. All systems are operational." }
+              });
+            }
+          `);
+        } catch (e) {
+          console.error("Execute JS failed:", e);
+        }
+        setTimeout(async () => {
+          const image = await mainWindow.capturePage();
+          const fs = require("fs");
+          const outDir = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6");
+          const target = path.join(outDir, "desktop_voice_conversation_panel.png");
+          fs.writeFileSync(target, image.toPNG());
+          console.log(`[Main] Voice conversation verification snapshot saved: ${target}`);
+          app.quit();
+        }, 1500);
+      }
+    }, 2000);
+  } else if (process.argv.includes("--snapshot")) {
     setTimeout(async () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         const image = await mainWindow.capturePage();
         const fs = require("fs");
         const outDir = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6");
-        const target = path.join(outDir, "desktop_glass_box_panel.png");
+        const target = path.join(outDir, "desktop_voice_glass_box.png");
         fs.writeFileSync(target, image.toPNG());
         console.log(`[Main] Glass box verification snapshot saved: ${target}`);
         app.quit();

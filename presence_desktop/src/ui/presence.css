@@ -192,63 +192,222 @@ html, body {
   max-width: 90%;
 }
 
-/* Single-Line Prompt Capsule (Revealed on Ctrl+Space / Click) */
-.input-capsule-wrapper {
-  margin-top: 4px;
-  pointer-events: auto;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+/* Real-Time Voice Conversation Container */
+.conversation-container {
   width: 100%;
+  max-height: 0px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.97);
+  transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.35s ease,
+              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin: 6px 0;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  z-index: 15;
 }
 
-.input-capsule-wrapper.active {
+.conversation-container.active {
+  max-height: 220px;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.conversation-container::-webkit-scrollbar {
+  width: 3px;
+}
+
+.conversation-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+/* Caption Cards (User and SERA) */
+.caption-card {
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-app-region: no-drag;
+}
+
+/* User Command Card: Always Remains Visible */
+.caption-card.user-card {
+  background: linear-gradient(135deg, rgba(10, 22, 42, 0.88) 0%, rgba(4, 12, 26, 0.94) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 14px rgba(0, 240, 255, 0.1);
+}
+
+/* SERA Response Card: Expands Directly Below Command */
+.caption-card.sera-card {
+  background: linear-gradient(135deg, rgba(20, 16, 44, 0.90) 0%, rgba(8, 12, 30, 0.95) 100%);
+  border: 1px solid rgba(160, 120, 255, 0.38);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(160, 120, 255, 0.12);
   opacity: 1;
   transform: translateY(0);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.input-capsule {
+.caption-card.sera-card.hidden {
+  display: none !important;
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+/* Header & Meta */
+.caption-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 8px;
+  letter-spacing: 0.8px;
+}
+
+.badge-wrapper {
   display: flex;
   align-items: center;
-  background: rgba(4, 12, 24, 0.85);
-  border: 1px solid rgba(0, 220, 255, 0.45);
-  border-radius: 16px;
-  padding: 4px 10px;
-  width: 94%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 12px rgba(0, 200, 255, 0.2);
-  backdrop-filter: blur(12px);
+  gap: 6px;
 }
 
-.input-capsule input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #ffffff;
+.speaker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.5px;
-  width: 100%;
+  font-weight: 700;
+  font-size: 7.5px;
+  letter-spacing: 1px;
 }
 
-.input-capsule input::placeholder {
-  color: rgba(140, 180, 220, 0.4);
-}
-
-.input-capsule button {
-  background: transparent;
-  border: none;
+.speaker-badge.user-badge {
+  background: rgba(0, 240, 255, 0.18);
   color: #00f0ff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-left: 4px;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  border: 1px solid rgba(0, 240, 255, 0.45);
 }
 
-.input-capsule button:hover {
-  transform: scale(1.15);
-  filter: drop-shadow(0 0 6px #00f0ff);
+.speaker-badge.sera-badge {
+  background: rgba(180, 130, 255, 0.2);
+  color: #d6b8ff;
+  border: 1px solid rgba(180, 130, 255, 0.48);
+}
+
+.mic-wave-icon {
+  animation: mic-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 4px #00f0ff); }
+}
+
+.sera-core-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d6b8ff;
+  box-shadow: 0 0 6px #d6b8ff;
+  animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+.status-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.status-pill.listening-pill {
+  background: rgba(0, 240, 255, 0.12);
+  color: rgba(0, 240, 255, 0.9);
+}
+
+.status-pill.responding-pill {
+  background: rgba(180, 130, 255, 0.15);
+  color: rgba(210, 180, 255, 0.95);
+}
+
+.status-pill.confirmed-pill {
+  background: rgba(0, 255, 170, 0.14);
+  color: rgba(0, 255, 180, 0.95);
+}
+
+.caption-timestamp {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7px;
+  color: rgba(140, 180, 220, 0.5);
+}
+
+/* Captions Typography */
+.caption-text {
+  font-size: 10px;
+  line-height: 1.45;
+  word-break: break-word;
+  user-select: text;
+  min-height: 14px;
+}
+
+.caption-text.user-text {
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+}
+
+.caption-text.user-text.partial {
+  color: rgba(160, 230, 255, 0.88);
+  font-style: italic;
+}
+
+.caption-text.user-text.finalized {
+  color: #ffffff;
+  font-style: normal;
+  font-weight: 500;
+  text-shadow: 0 0 10px rgba(0, 220, 255, 0.35);
+}
+
+.caption-placeholder {
+  color: rgba(120, 160, 200, 0.45);
+  font-style: italic;
+  font-size: 9.5px;
+}
+
+.caption-text.sera-text {
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  color: #e4f2ff;
+  letter-spacing: 0.2px;
+  font-size: 10px;
+  text-shadow: 0 0 10px rgba(0, 150, 255, 0.25);
+}
+
+.caption-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  background: #00f0ff;
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: blink-cursor 0.8s infinite;
+  box-shadow: 0 0 6px #00f0ff;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }

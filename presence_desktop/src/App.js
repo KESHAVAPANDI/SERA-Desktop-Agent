@@ -1,27 +1,53 @@
 /**
  * SERA 2.0 — Desktop Presence Main Application Controller
- * Handles UI interactions, drag positioning, WebSocket bridge to Python backend,
- * and kinetic status typography.
+ * Completely Voice-Driven Interaction Engine
+ * 
+ * Features:
+ * - Pure voice interaction (Hold-To-Talk via Ctrl+Space & Wake Word)
+ * - Real-time multi-band microphone audio driving the 3D core shaders
+ * - Live STT partial captions streaming during speech
+ * - Finalized command caption stays pinned and visible
+ * - SERA response caption renders directly beneath the command
+ * - Smooth animated conversation card expansion
  * 
  * Author: Keshava Pandi A S <keshavapandi@gmail.com>
  */
 
 import { PresenceEngine } from "./engine/PresenceEngine.js";
 
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 class PresenceApp {
   constructor() {
     this.canvas = document.getElementById("presence-canvas");
     this.statusEl = document.getElementById("kinetic-status");
     this.substatusEl = document.getElementById("kinetic-substatus");
-    this.inputWrapper = document.getElementById("input-capsule-wrapper");
-    this.promptInput = document.getElementById("presence-prompt-input");
-    this.promptForm = document.getElementById("presence-prompt-form");
+
+    // Voice Conversation Container Elements
+    this.convContainer = document.getElementById("conversation-container");
+    this.userBox = document.getElementById("user-caption-box");
+    this.userTextEl = document.getElementById("user-caption-text");
+    this.userStatusPill = document.getElementById("user-status-pill");
+    this.seraBox = document.getElementById("sera-caption-box");
+    this.seraTextEl = document.getElementById("sera-caption-text");
+    this.seraStatusPill = document.getElementById("sera-status-pill");
+
+    // Header Controls
     this.commandCenterBtn = document.getElementById("command-center-btn");
     this.minimizeBtn = document.getElementById("minimize-btn");
     this.closeBtn = document.getElementById("close-btn");
 
     this.engine = new PresenceEngine(this.canvas);
     this.ws = null;
+    this._collapseTimer = null;
 
     this.setupWindowInteractions();
     this.setupUIControls();
@@ -30,6 +56,9 @@ class PresenceApp {
     this.startRenderLoop();
   }
 
+  /**
+   * Real microphone stream using Web Audio API to modulate the 3D presence core.
+   */
   async initAudioReactivity() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -71,13 +100,20 @@ class PresenceApp {
     // Global Shortcut summon / toggle
     if (window.seraNative && window.seraNative.onGlobalActivate) {
       window.seraNative.onGlobalActivate(() => {
-        this.togglePromptInput();
+        this.expandConversation();
+        this.setStatus("VOICE ACTIVE", "HOLD CTRL+SPACE TO SPEAK");
       });
     }
 
-    // Canvas click toggles prompt input (header handles dragging natively via DWM)
-    this.canvas.addEventListener("click", (e) => {
-      this.togglePromptInput();
+    // Canvas click expands/reveals voice status
+    this.canvas.addEventListener("click", () => {
+      if (this.convContainer.classList.contains("active")) {
+        this.scheduleConversationCollapse(3000);
+      } else {
+        this.expandConversation();
+        this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+        this.scheduleConversationCollapse(5000);
+      }
     });
   }
 
@@ -115,53 +151,100 @@ class PresenceApp {
         }
       });
     }
+  }
 
-    // Prompt Submission
-    if (this.promptForm) {
-      this.promptForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const text = this.promptInput.value.trim();
-        if (text) {
-          this.submitObjective(text);
-          this.promptInput.value = "";
-          this.hidePromptInput();
-        }
-      });
+  /* Conversation Container Controls */
+
+  expandConversation() {
+    if (this._collapseTimer) {
+      clearTimeout(this._collapseTimer);
+      this._collapseTimer = null;
     }
+    if (this.convContainer) {
+      this.convContainer.classList.add("active");
+    }
+  }
 
-    // Escape closes input
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        this.hidePromptInput();
+  collapseConversation() {
+    if (this.convContainer) {
+      this.convContainer.classList.remove("active");
+    }
+  }
+
+  scheduleConversationCollapse(delayMs = 8000) {
+    if (this._collapseTimer) {
+      clearTimeout(this._collapseTimer);
+    }
+    this._collapseTimer = setTimeout(() => {
+      if (this.engine.state === "IDLE") {
+        this.collapseConversation();
       }
-    });
+    }, delayMs);
   }
 
-  togglePromptInput() {
-    if (this.inputWrapper.classList.contains("active")) {
-      this.hidePromptInput();
-    } else {
-      this.showPromptInput();
+  resetConversationForNewUtterance() {
+    this.expandConversation();
+    if (this.seraBox) {
+      this.seraBox.classList.add("hidden");
+    }
+    if (this.seraTextEl) {
+      this.seraTextEl.textContent = "";
+    }
+    if (this.userTextEl) {
+      this.userTextEl.className = "caption-text user-text partial";
+      this.userTextEl.innerHTML = '<span class="caption-placeholder">Listening to voice...</span><span class="caption-cursor"></span>';
+    }
+    if (this.userStatusPill) {
+      this.userStatusPill.className = "status-pill listening-pill";
+      this.userStatusPill.textContent = "LISTENING";
     }
   }
 
-  showPromptInput() {
-    this.inputWrapper.classList.add("active");
-    this.promptInput.focus();
-    this.setStatus("AWAITING OBJECTIVE", "TYPE INTENT OR PRESS ESCAPE TO CANCEL");
+  updateUserCaption(text, isFinal = false) {
+    this.expandConversation();
+    if (!this.userTextEl) return;
+
+    if (isFinal) {
+      this.userTextEl.className = "caption-text user-text finalized";
+      this.userTextEl.textContent = text;
+      if (this.userStatusPill) {
+        this.userStatusPill.className = "status-pill confirmed-pill";
+        this.userStatusPill.textContent = "COMMAND";
+      }
+    } else {
+      this.userTextEl.className = "caption-text user-text partial";
+      this.userTextEl.innerHTML = `${escapeHtml(text)}<span class="caption-cursor"></span>`;
+      if (this.userStatusPill) {
+        this.userStatusPill.className = "status-pill listening-pill";
+        this.userStatusPill.textContent = "LISTENING";
+      }
+    }
+
+    // Auto-scroll inside container
+    if (this.convContainer) {
+      this.convContainer.scrollTop = this.convContainer.scrollHeight;
+    }
   }
 
-  hidePromptInput() {
-    this.inputWrapper.classList.remove("active");
-    this.promptInput.blur();
-    if (this.engine.state === "IDLE") {
-      this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
+  updateSeraResponse(text, statusLabel = "RESPONSE") {
+    this.expandConversation();
+    if (!this.seraBox || !this.seraTextEl) return;
+
+    this.seraBox.classList.remove("hidden");
+    this.seraTextEl.textContent = text;
+
+    if (this.seraStatusPill) {
+      this.seraStatusPill.className = "status-pill responding-pill";
+      this.seraStatusPill.textContent = statusLabel;
+    }
+
+    if (this.convContainer) {
+      this.convContainer.scrollTop = this.convContainer.scrollHeight;
     }
   }
 
   setStatus(mainText, subText = null) {
     if (this.statusEl) {
-      // Kinetic blur/fade transition
       this.statusEl.style.opacity = "0";
       this.statusEl.style.filter = "blur(4px)";
       this.statusEl.style.transform = "translateY(2px)";
@@ -193,48 +276,6 @@ class PresenceApp {
     return "GENERAL";
   }
 
-  submitObjective(text) {
-    console.log(`[PresenceApp] Submitting Objective: ${text}`);
-    const taskType = this.classifyTask(text);
-    this.engine.setState("THINKING", taskType, 0.0);
-    this.engine.setTaskVisualization(taskType, text);
-    this.engine.triggerEvent("MODEL_SELECTED", { task: text, model: "SERA-Fabric" });
-    this.setStatus("ANALYZING OBJECTIVE", text.toUpperCase());
-
-    // Transmit to Python backend via WebSocket if available
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: "USER_INPUT",
-        content: text,
-        task_type: taskType,
-        timestamp: Date.now() / 1000,
-      }));
-    } else {
-      // Local adaptive fallback simulation if backend is not currently running
-      setTimeout(() => {
-        this.engine.setState("EXECUTING", taskType, 0.25);
-        this.engine.triggerEvent("TOOL_STARTED", { tool_name: taskType });
-        this.setStatus(`EXECUTING [${taskType}]`, text.toUpperCase());
-
-        setTimeout(() => {
-          this.engine.setState("EXECUTING", taskType, 0.75);
-          this.engine.triggerEvent("PROGRESS_UPDATE", { progress: 0.75 });
-
-          setTimeout(() => {
-            this.engine.triggerEvent("TOOL_COMPLETED", { tool_name: taskType });
-            this.engine.setState("COMPLETED", taskType, 1.0);
-            this.setStatus("OBJECTIVE COMPLETE", "COMPUTATIONAL REGENERATION");
-
-            setTimeout(() => {
-              this.engine.setState("IDLE");
-              this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
-            }, 2600);
-          }, 1400);
-        }, 1400);
-      }, 1400);
-    }
-  }
-
   connectBackendWebSocket() {
     const wsUrl = "ws://127.0.0.1:8765";
     console.log(`[PresenceApp] Connecting to SERA Runtime at ${wsUrl}...`);
@@ -244,7 +285,7 @@ class PresenceApp {
 
       this.ws.onopen = () => {
         console.log("[PresenceApp] Connected to SERA Python Runtime EventBus.");
-        this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
+        this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
       };
 
       this.ws.onmessage = (event) => {
@@ -271,7 +312,8 @@ class PresenceApp {
   }
 
   handleBackendEvent(msg) {
-    const { event, payload } = msg;
+    const { event } = msg;
+    const payload = msg.payload || msg.data || {};
     if (!event) return;
 
     switch (event) {
@@ -283,31 +325,59 @@ class PresenceApp {
         if (taskType !== "GENERAL") {
           this.engine.setTaskVisualization(taskType, taskText);
         }
-        this.setStatus(status, payload?.task || "PROCESSING RUNTIME STATE");
+        if (status === "IDLE") {
+          this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+        } else {
+          this.setStatus(status, payload?.task || "PROCESSING RUNTIME STATE");
+        }
         break;
       }
+
       case "ACTIVATION_STARTED":
       case "LISTENING_STARTED":
         this.engine.setState("LISTENING");
-        this.setStatus("LISTENING TO AUDIO STREAM", "VOICE VAD ACTIVE");
+        this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
+        this.resetConversationForNewUtterance();
         break;
+
+      case "PARTIAL_TRANSCRIPTION": {
+        const partialText = payload.partial || payload.transcript || "";
+        if (partialText) {
+          this.updateUserCaption(partialText, false);
+          this.setStatus("CAPTURING SPEECH", partialText.toUpperCase());
+        }
+        break;
+      }
 
       case "TRANSCRIPTION_STARTED":
         this.engine.setState("TRANSCRIBING");
         this.setStatus("TRANSCRIBING AUDIO", "EXTRACTING PHONEMIC TOKENS");
         break;
 
+      case "TRANSCRIPTION_COMPLETED": {
+        const finalText = payload.transcript || "";
+        if (finalText) {
+          this.updateUserCaption(finalText, true);
+          const taskType = this.classifyTask(finalText);
+          this.engine.setState("THINKING", taskType);
+          this.engine.setTaskVisualization(taskType, finalText);
+          this.setStatus("ANALYZING OBJECTIVE", finalText.toUpperCase());
+        }
+        break;
+      }
+
       case "MODEL_SELECTED":
         this.engine.triggerEvent("MODEL_SELECTED", payload);
         break;
 
       case "TASK_STARTED": {
-        const taskText = payload?.task || "COMPUTING";
+        const taskText = payload?.user_input || payload?.task || "COMPUTING";
         const taskType = this.classifyTask(taskText);
         this.engine.setState("THINKING", taskType);
         this.engine.setTaskVisualization(taskType, taskText);
         this.engine.triggerEvent("MODEL_SELECTED", payload);
-        this.setStatus("SYNTHESIZING COGNITIVE PATH", taskText.toUpperCase());
+        this.setStatus("SYNTHESIZING PATH", taskText.toUpperCase());
+        this.updateSeraResponse("Synthesizing neural execution plan...", "PLANNING");
         break;
       }
 
@@ -318,6 +388,7 @@ class PresenceApp {
         this.engine.setTaskVisualization(taskType, toolName);
         this.engine.triggerEvent("TOOL_STARTED", payload);
         this.setStatus(`EXECUTING: ${toolName.toUpperCase()}`, "HARDWARE ACTIONS");
+        this.updateSeraResponse(`Executing: ${toolName}...`, "EXECUTING");
         break;
       }
 
@@ -334,29 +405,53 @@ class PresenceApp {
         this.engine.triggerEvent("PROGRESS_UPDATE", payload);
         break;
 
+      case "AGENT_RESPONSE": {
+        const responseText = payload.content || payload.text || payload.response || "";
+        if (responseText) {
+          this.updateSeraResponse(responseText, "RESPONSE");
+          this.setStatus("SERA RESPONSE", "COGNITIVE CONVERSATION");
+        }
+        break;
+      }
+
       case "TTS_STARTED":
         this.engine.setState("SPEAKING");
         this.setStatus("SYNTHESIZING SPEECH", "F5-TTS STREAMING");
+        if (this.seraStatusPill) {
+          this.seraStatusPill.textContent = "SPEAKING";
+        }
         break;
 
-      case "TASK_COMPLETED":
+      case "TASK_COMPLETED": {
         this.engine.setState("COMPLETED");
         this.engine.triggerEvent("TASK_COMPLETED", payload);
-        this.setStatus("TASK ACCOMPLISHED", "COMPUTATIONAL REGENERATION");
+        const resultText = payload.result;
+        if (resultText && !this.seraTextEl.textContent) {
+          this.updateSeraResponse(resultText, "COMPLETE");
+        } else if (this.seraStatusPill) {
+          this.seraStatusPill.textContent = "COMPLETE";
+        }
+        this.setStatus("OBJECTIVE COMPLETE", "COMPUTATIONAL REGENERATION");
         setTimeout(() => {
           this.engine.setState("IDLE");
-          this.setStatus("COGNITIVE EQUILIBRIUM", "AWAITING INTENT • CTRL+SPACE");
+          this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
         }, 2600);
+        this.scheduleConversationCollapse(8000);
         break;
+      }
 
       case "TASK_CANCELLED":
         this.engine.triggerEvent("TASK_CANCELLED", payload);
         this.setStatus("TASK CANCELLED", "RETRACTING STRUCTURES");
+        this.updateSeraResponse("Task execution cancelled.", "CANCELLED");
+        this.scheduleConversationCollapse(6000);
         break;
 
       case "TASK_FAILED":
         this.engine.setState("BROKEN");
         this.setStatus("ANOMALY DETECTED", payload?.error || "TASK FAILURE");
+        this.updateSeraResponse(payload?.error || "Execution anomaly encountered.", "ERROR");
+        this.scheduleConversationCollapse(8000);
         break;
     }
   }

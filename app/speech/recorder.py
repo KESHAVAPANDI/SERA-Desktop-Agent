@@ -96,6 +96,13 @@ class AudioRecorder:
         logger.info(f"[AudioRecorder] Recorded {len(audio_data)} samples ({len(audio_data)/self.sample_rate:.2f}s).")
         return audio_data
 
+    def get_current_audio(self) -> np.ndarray:
+        """Returns snapshot of accumulated float32 numpy array without stopping the stream."""
+        with self._lock:
+            if not self._active_chunks:
+                return np.zeros(0, dtype=np.float32)
+            return np.concatenate(self._active_chunks)
+
     async def record_for(self, seconds: float = 5.0) -> np.ndarray:
         """Records from the microphone for exactly `seconds` duration (for wake-word capture)."""
         loop = asyncio.get_running_loop()

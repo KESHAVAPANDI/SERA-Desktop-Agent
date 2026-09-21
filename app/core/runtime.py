@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import sys
 import time
@@ -31,7 +32,9 @@ from app.speech.wakeword import LocalCustomWakeWordProvider, OpenWakeWordDetecto
 from app.tools import create_tool_registry
 from app.tools.desktop.perception_router import DesktopPerceptionRouter
 from app.tools.desktop.ui_inspector import WindowsUIInspector
+from app.core.command_pipeline import CommandPipeline
 from app.utils.config import SERAConfig
+from app.utils.security import SecurityManager
 from app.vision.analyzer import ScreenPerceptionEngine
 
 logger = logging.getLogger(__name__)
@@ -120,8 +123,8 @@ class SERARuntime:
         else:
             self.stt = create_stt_pipeline(self.config.data)
 
-        print(f"[STT] Primary: NVIDIA Canary-Qwen 2.5B")
-        print(f"[STT] Mode: Hosted API")
+        print(f"[STT] Primary: Google Gemini 3.5 Transcribe")
+        print(f"[STT] Mode: Gemini API")
         print(f"[STT] Language: {self.stt_language}")
         print(f"[STT] Command capture: {self.recording_duration} seconds")
 
@@ -181,16 +184,13 @@ class SERARuntime:
             prefer_native=prefer_native,
         )
 
-        # Task Planner & Multi-Step Executor (Phase 4)
-        from app.core.planner import TaskPlanner
-        from app.core.task_executor import MultiStepExecutor
-        self.planner = TaskPlanner(tools=self.tools, router=self.router)
-        self.multi_step_executor = MultiStepExecutor(
+        # Deterministic Command Execution Pipeline (Fast-Path Layer 1, Layer 2, Layer 3)
+        self.command_pipeline = CommandPipeline(
             tools=self.tools,
-            inspector=self.desktop_router.inspector,
-            vision_engine=self.vision,
+            router=self.router,
             state=self.state,
             event_bus=self.events,
+            security_manager=SecurityManager(),
         )
 
         # Global Hotkey Manager with Hold-To-Talk
@@ -316,11 +316,27 @@ class SERARuntime:
             self.recorder.start_recording()
             print("[STT] Hold-To-Talk recording started...")
 
+        # Launch periodic partial STT sampling
+        loop = getattr(self, "_loop", None)
+        if not loop or loop.is_closed():
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+        if loop and loop.is_running():
+            if hasattr(self, "_partial_task") and self._partial_task and not self._partial_task.done():
+                self._partial_task.cancel()
+            self._partial_task = loop.create_task(self._partial_transcription_worker())
+
     def handle_hotkey_release(self) -> None:
         """Triggered immediately when Ctrl+Space is released (Hold-To-Talk end)."""
         if not self._is_holding_hotkey:
             return
         self._is_holding_hotkey = False
+
+        if hasattr(self, "_partial_task") and self._partial_task and not self._partial_task.done():
+            self._partial_task.cancel()
 
         release_time = time.time()
         audio_data = self.recorder.stop_recording() if hasattr(self, "recorder") and self.recorder else np.zeros(0, dtype=np.float32)
@@ -355,6 +371,49 @@ class SERARuntime:
                 )
             self._active_listen_task = loop.create_task(coro)
             self._active_task = self._active_listen_task
+
+    async def _partial_transcription_worker(self) -> None:
+        """Periodically samples accumulated audio during active Hold-To-Talk/speech and emits partial STT."""
+        sr = getattr(self, "stt_sample_rate", 16000)
+        min_samples = int(sr * 0.4)  # At least 400ms of audio
+        last_emitted_text = ""
+
+        await asyncio.sleep(0.4)
+
+        while self._is_holding_hotkey or (hasattr(self, "recorder") and self.recorder and self.recorder.is_recording):
+            try:
+                if hasattr(self, "recorder") and self.recorder:
+                    audio_data = self.recorder.get_current_audio()
+                    if audio_data is not None and len(audio_data) >= min_samples:
+                        partial_text = ""
+                        # Try fast local fallback first if available to keep latency minimal (<100ms)
+                        if hasattr(self, "stt") and hasattr(self.stt, "fallback") and self.stt.fallback:
+                            res = await self.stt.fallback.transcribe(
+                                audio_data, sample_rate=sr, language=getattr(self, "stt_language", "en-US")
+                            )
+                            partial_text = str(res).strip() if res else ""
+                        elif hasattr(self, "stt") and hasattr(self.stt, "transcribe"):
+                            res = await self.stt.transcribe(
+                                audio_data, sample_rate=sr, language=getattr(self, "stt_language", "en-US")
+                            )
+                            partial_text = str(res).strip() if res else ""
+
+                        if partial_text and partial_text != last_emitted_text:
+                            last_emitted_text = partial_text
+                            self._emit_event(
+                                "PARTIAL_TRANSCRIPTION",
+                                {
+                                    "partial": partial_text,
+                                    "transcript": partial_text,
+                                    "is_final": False,
+                                },
+                            )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug(f"[SERARuntime] Partial STT error: {e}")
+
+            await asyncio.sleep(0.5)
 
     def handle_wakeword_trigger(self) -> None:
         """Triggered when the local wake word ('SERA') is detected."""
@@ -430,12 +489,19 @@ class SERARuntime:
         self._emit_event("LISTENING_STARTED", {"source": "WAKE_WORD", "duration": 5.0})
         print(f"[STT] Wake word detected. Recording for {getattr(self, 'recording_duration', 5.0)}s...")
         audio_data = np.zeros(0, dtype=np.float32)
-        if hasattr(self, "recorder") and self.recorder:
-            rec_res = self.recorder.record_for(getattr(self, "recording_duration", 5.0))
-            if inspect.iscoroutine(rec_res) or hasattr(rec_res, "__await__"):
-                audio_data = await rec_res
-            else:
-                audio_data = rec_res
+
+        loop = getattr(self, "_loop", None) or asyncio.get_running_loop()
+        partial_task = loop.create_task(self._partial_transcription_worker())
+        try:
+            if hasattr(self, "recorder") and self.recorder:
+                rec_res = self.recorder.record_for(getattr(self, "recording_duration", 5.0))
+                if inspect.iscoroutine(rec_res) or hasattr(rec_res, "__await__"):
+                    audio_data = await rec_res
+                else:
+                    audio_data = rec_res
+        finally:
+            partial_task.cancel()
+
         self._emit_event("LISTENING_STOPPED", {"source": "WAKE_WORD"})
         return await self._process_recorded_audio(audio_data, activation_time, source="WAKE_WORD")
 
@@ -479,6 +545,7 @@ class SERARuntime:
                     "source": source,
                     "turn_id": turn_id,
                     "transcript": raw_text,
+                    "is_final": True,
                 },
             )
 
@@ -629,28 +696,27 @@ class SERARuntime:
         })
 
         try:
-            resp = await self.process_text(text, turn_id=task_id)
+            result = await self.command_pipeline.execute_text(
+                text=text,
+                task_id=task_id,
+                source=source,
+            )
             duration = time.time() - started_at
+            resp = result.get("response", "")
+            is_success = result.get("success", False)
+
+            if not is_success:
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "FAILED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["error"] = result.get("error") or resp
+                return {"success": False, "task_id": task_id, "error": result.get("error") or resp, "duration_seconds": duration}
+
             if self.active_task_info and self.active_task_info.get("task_id") == task_id:
                 self.active_task_info["status"] = "COMPLETED"
                 self.active_task_info["completed_at"] = time.time()
                 self.active_task_info["result"] = resp
-            
-            # Authoritative Assistant Response Object Contract
-            self._emit_event("AGENT_RESPONSE", {
-                "task_id": task_id,
-                "turn_id": task_id,
-                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
-                "type": "ASSISTANT_MESSAGE",
-                "content": resp if isinstance(resp, str) else str(resp),
-                "status": "COMPLETED",
-            })
 
-            self._emit_event("TASK_COMPLETED", {
-                "task_id": task_id,
-                "result": resp,
-                "duration_seconds": duration,
-            })
             return {"success": True, "task_id": task_id, "result": resp, "duration_seconds": duration}
         except asyncio.CancelledError:
             duration = time.time() - started_at
@@ -803,100 +869,29 @@ class SERARuntime:
                 self.wakeword_detector.resume()
 
     async def process_text(self, text: str, metrics: LatencyMetrics | None = None, turn_id: str | None = None) -> str:
-        """Processes a text utterance through local intent, multi-step planner, or agent reasoning."""
+        """Processes a text utterance through the deterministic CommandPipeline."""
         text = text.strip()
         if not text:
             return ""
 
         turn_id = turn_id or f"turn-{self.turn_count}"
 
-        # -------------------------------------------------------------
-        # Route 1: Local Intent Fast-Path (Brightness, Volume, Mute)
-        # -------------------------------------------------------------
-        local_intent = self.intent_router.detect(text)
-        if local_intent:
-            if metrics:
-                metrics.intent_routed_at = time.time()
-                metrics.intent_classified_at = time.time()
+        result = await self.command_pipeline.execute_text(
+            text=text,
+            task_id=turn_id,
+            metrics=metrics,
+        )
 
-            tool_name = local_intent.get("tool") if isinstance(local_intent, dict) else getattr(local_intent, "tool_name", "")
-            tool_args = local_intent.get("arguments") if isinstance(local_intent, dict) else getattr(local_intent, "arguments", {})
-            tool_sig = f"{turn_id}:{tool_name}:{str(sorted(tool_args.items()))}"
+        resp_text = result.get("response", "")
+        self.state.last_response = resp_text
 
-            if tool_sig in self._executed_tools:
-                logger.debug(f"[SERARuntime] Deduplicated tool call: {tool_sig}")
-                return ""
-            self._executed_tools.add(tool_sig)
-
-            self._transition_state(SERAStatus.EXECUTING)
-            print(f"\n[SERA] Local command detected: {tool_name} {tool_args}")
-
-            tool_res = await self.tools.execute(tool_name, tool_args)
-            print(f"[RESULT] {tool_res}")
-
-            if metrics:
-                metrics.local_tool_executed_at = time.time()
-
-            self.audio_cues.play_completed_cue()
-            if "brightness" in tool_name:
-                resp_str = f"Brightness has been set to {tool_args.get('brightness')}%."
-            elif "volume" in tool_name:
-                resp_str = f"Volume set to {tool_args.get('volume')}%."
-            else:
-                resp_str = str(tool_res)
-
-            self.state.last_response = resp_str
+        # Audio playback if audio engine active
+        if resp_text and hasattr(self.audio, "speak") and self.state.status != SERAStatus.IDLE:
             self._transition_state(SERAStatus.SPEAKING)
-            if hasattr(self.audio, "speak"):
-                self.audio.speak(resp_str)
-
+            self.audio.speak(resp_text)
             self._transition_state(SERAStatus.IDLE)
-            return resp_str
 
-        # -------------------------------------------------------------
-        # Route 2: Multi-Step Task Planner (Phase 4)
-        # -------------------------------------------------------------
-        if self.planner.is_multi_step_request(text):
-            self._transition_state(SERAStatus.TASK_PLANNING)
-            plan = await self.planner.plan(text)
-            if plan.is_valid:
-                res = await self.multi_step_executor.execute(plan, metrics=metrics)
-                if res.success:
-                    self.audio_cues.play_completed_cue()
-                    await self._stream_and_play_tts(res.summary_message, metrics)
-                else:
-                    self.audio_cues.play_error_cue()
-                    await self._stream_and_play_tts(res.summary_message or "Task could not be completed.", metrics)
-                self._transition_state(SERAStatus.IDLE)
-                return res.summary_message
-
-        # -------------------------------------------------------------
-        # Route 3: Desktop Perception Query (Screen Understanding)
-        # -------------------------------------------------------------
-        if self.desktop_router.is_desktop_query(text):
-            self._transition_state(SERAStatus.THINKING)
-            print("[SERA] Desktop perception query detected. Routing perception hierarchy...")
-            spoken_resp, method, _ = await self.desktop_router.perceive(text, metrics=metrics)
-            self._transition_state(SERAStatus.SPEAKING)
-            if hasattr(self.audio, "speak"):
-                self.audio.speak(spoken_resp)
-            self._transition_state(SERAStatus.IDLE)
-            return spoken_resp
-
-        # -------------------------------------------------------------
-        # Route 4: Conversational Agent Streaming
-        # -------------------------------------------------------------
-        self._transition_state(SERAStatus.THINKING)
-        print(f"\n[SERA USER] {text}")
-        print("[SERA] Streaming response from agent engine...")
-
-        if metrics:
-            metrics.llm_request_started_at = time.time()
-
-        tokens_generator = self.agent.run_stream(text, metrics=metrics, turn_id=turn_id)
-        await self._stream_and_play_tts(tokens_generator, metrics)
-        self._transition_state(SERAStatus.IDLE)
-        return self.state.last_response or "I have completed the task."
+        return resp_text
 
     async def _stream_and_play_tts(self, text_or_tokens: Any, metrics: LatencyMetrics | None) -> None:
         """Pipes streaming LLM tokens into sentence-level Fish Audio TTS."""

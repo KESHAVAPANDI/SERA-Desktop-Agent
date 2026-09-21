@@ -129,6 +129,7 @@ class SERAUIServer:
             event_names = [
                 "ACTIVATION_STARTED", "ACTIVATION_RELEASED", "WAKE_WORD_DETECTED",
                 "LISTENING_STARTED", "LISTENING_STOPPED",
+                "PARTIAL_TRANSCRIPTION",
                 "TRANSCRIPTION_STARTED", "TRANSCRIPTION_COMPLETED",
                 "TASK_STARTED", "TASK_COMPLETED", "TASK_CANCELLED", "TASK_FAILED",
                 "MODEL_SELECTED", "MODEL_FALLBACK", "MODEL_RATE_LIMITED",
@@ -189,7 +190,7 @@ class SERAUIServer:
                     break
         if not self.clients:
             return
-        payload = {"event": event_type, "data": data, "timestamp": asyncio.get_event_loop().time()}
+        payload = {"event": event_type, "data": data, "payload": data, "timestamp": asyncio.get_event_loop().time()}
         
         # Persist relevant events to history for page refresh survival
         if event_type in [
@@ -1533,15 +1534,39 @@ class SERAUIServer:
 
 
 async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
-    server = SERAUIServer(host=host, port=port)
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    server = SERAUIServer(host=host, port=port, runtime=None)
     await server.start()
     print(f"[SERA] Command Center running at http://{host}:{port}")
-    print("[SERA] Press Ctrl+C to stop.")
+
+    runtime = None
     try:
-        while True:
-            await asyncio.sleep(3600)
-    except (asyncio.CancelledError, KeyboardInterrupt):
-        await server.stop()
+        from app.core.runtime import SERARuntime
+        runtime = await asyncio.to_thread(SERARuntime)
+        server.runtime = runtime
+        server._setup_event_listeners()
+    except Exception as e:
+        logger.error(f"[SERA] Could not initialize SERARuntime: {e}")
+        print(f"[SERA WARNING] Running UI server without voice runtime: {e}")
+
+    if runtime:
+        print(f"[SERA] Voice Control: Hotkey ({runtime.config.data.get('hotkey', {}).get('combination', 'ctrl+space')}) | Wake Word ('{getattr(runtime, 'wakeword_phrase', 'SERA')}')")
+    print("[SERA] Press Ctrl+C to stop.")
+
+    if runtime:
+        runtime_task = asyncio.create_task(runtime.run())
+        try:
+            await runtime_task
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await server.stop()
+    else:
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await server.stop()
 
 
 if __name__ == "__main__":

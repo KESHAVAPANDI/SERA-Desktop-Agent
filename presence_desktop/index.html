@@ -14,6 +14,7 @@
 
     <!-- 2. Minimal HUD Layer -->
     <div id="hud-overlay">
+      <!-- Header Bar (Only Draggable Region) -->
       <div class="top-bar">
         <div class="sera-brand">
           <span class="status-dot"></span>
@@ -26,21 +27,48 @@
         </div>
       </div>
 
-      <div class="bottom-bar">
-        <div id="kinetic-status" class="kinetic-status">SYSTEM READY</div>
-        <div id="kinetic-substatus" class="kinetic-substatus">CTRL+SPACE</div>
-
-        <div id="input-capsule-wrapper" class="input-capsule-wrapper">
-          <form id="presence-prompt-form" class="input-capsule">
-            <input type="text" id="presence-prompt-input" placeholder="Objective..." autocomplete="off" />
-            <button type="submit" title="Execute Objective">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
-          </form>
+      <!-- Real-Time Voice Conversation Container (Animated Expansion) -->
+      <div id="conversation-container" class="conversation-container">
+        <!-- User Command Box (Always Remains Visible) -->
+        <div id="user-caption-box" class="caption-card user-card">
+          <div class="caption-header">
+            <div class="badge-wrapper">
+              <span class="speaker-badge user-badge">
+                <svg class="mic-wave-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                </svg>
+                YOU
+              </span>
+              <span id="user-status-pill" class="status-pill listening-pill">LISTENING</span>
+            </div>
+            <span id="user-caption-time" class="caption-timestamp">LIVE</span>
+          </div>
+          <div id="user-caption-text" class="caption-text user-text">
+            <span class="caption-placeholder">Hold Ctrl+Space to speak...</span>
+          </div>
         </div>
+
+        <!-- SERA Response Box (Expands Below Command, Keeping Command Visible) -->
+        <div id="sera-caption-box" class="caption-card sera-card hidden">
+          <div class="caption-header">
+            <div class="badge-wrapper">
+              <span class="speaker-badge sera-badge">
+                <span class="sera-core-dot"></span>
+                SERA
+              </span>
+              <span id="sera-status-pill" class="status-pill responding-pill">PROCESSING</span>
+            </div>
+            <span id="sera-caption-time" class="caption-timestamp">CORE</span>
+          </div>
+          <div id="sera-caption-text" class="caption-text sera-text"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Kinetic Status Bar -->
+      <div class="bottom-bar">
+        <div id="kinetic-status" class="kinetic-status">VOICE READY</div>
+        <div id="kinetic-substatus" class="kinetic-substatus">HOLD CTRL+SPACE TO SPEAK</div>
       </div>
     </div>
   </div>
