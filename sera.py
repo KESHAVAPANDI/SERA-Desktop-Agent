@@ -150,6 +150,31 @@ def shutdown_handler(sig=None, frame=None):
     print("=" * 60, flush=True)
 
 
+def get_python_executable() -> str:
+    """Find the working Python interpreter that has the project dependencies installed."""
+    candidates = [
+        # 1. Current sys.executable if it can import dependencies
+        sys.executable,
+        # 2. Python 3.14 main installation with dependencies
+        r"C:\Users\kesha\AppData\Local\Programs\Python\Python314\python.exe",
+        # 3. Windows Python launcher
+        "py",
+        # 4. Project virtual environment (.venv)
+        os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe"),
+    ]
+    for cand in candidates:
+        if not cand:
+            continue
+        try:
+            cmd = [cand, "-c", "import numpy; import sounddevice"]
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+            if res.returncode == 0:
+                return cand
+        except Exception:
+            continue
+    return sys.executable
+
+
 def start_runtime_server() -> subprocess.Popen | None:
     """Start Python backend runtime if not already active."""
     if is_port_in_use(PORT, HOST):
@@ -160,10 +185,11 @@ def start_runtime_server() -> subprocess.Popen | None:
         log(f"Port {PORT} in use but unresponsive. Please free port {PORT} and retry.")
         return None
 
-    log(f"Starting SERA Runtime Server ({SERVER_SCRIPT})...")
+    python_bin = get_python_executable()
+    log(f"Starting SERA Runtime Server using {python_bin} ({SERVER_SCRIPT})...")
     env = os.environ.copy()
     proc = subprocess.Popen(
-        [sys.executable, SERVER_SCRIPT],
+        [python_bin, SERVER_SCRIPT],
         cwd=PROJECT_ROOT,
         env=env,
     )
