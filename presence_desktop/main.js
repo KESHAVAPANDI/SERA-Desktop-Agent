@@ -172,6 +172,22 @@ function setupIpc() {
     }
   });
 
+  ipcMain.on("window-show-and-focus", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+      mainWindow.focus();
+    }
+  });
+
+  ipcMain.on("self-close", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.close();
+    }
+    app.quit();
+  });
+
   ipcMain.on("open-command-center", () => {
     shell.openExternal(COMMAND_CENTER_URL);
   });
@@ -267,30 +283,9 @@ function setupTray() {
 }
 
 function registerShortcuts() {
-  // Global shortcut to summon/focus SERA from anywhere in Windows
-  const shortcut = "CommandOrControl+Space";
-  const registered = globalShortcut.register(shortcut, () => {
-    if (mainWindow) {
-      if (!mainWindow.isVisible()) {
-        mainWindow.show();
-      }
-      mainWindow.focus();
-      mainWindow.webContents.send("global-activate");
-    }
-  });
-
-  if (!registered) {
-    console.warn(`[Main] Failed to register global shortcut ${shortcut}, attempting Alt+Space fallback.`);
-    globalShortcut.register("Alt+Space", () => {
-      if (mainWindow) {
-        mainWindow.show();
-        mainWindow.focus();
-        mainWindow.webContents.send("global-activate");
-      }
-    });
-  } else {
-    console.log(`[Main] Successfully registered global shortcut ${shortcut}`);
-  }
+  // Global hotkey handling is centrally managed by Python GlobalHotkeyManager (GetAsyncKeyState),
+  // avoiding Win32 RegisterHotKey conflicts and eliminating first-press drops.
+  console.log("[Main] Global Hotkey (Ctrl+Space) delegated to Python SERA Runtime.");
 }
 
 app.whenReady().then(() => {

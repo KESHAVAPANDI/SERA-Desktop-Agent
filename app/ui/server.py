@@ -109,9 +109,16 @@ class SERAUIServer:
         if not self.runtime:
             return
 
+        # Deduplication guard: do not attach duplicate listeners to the same runtime
+        if getattr(self, "_listeners_runtime", None) is self.runtime:
+            return
+        self._listeners_runtime = self.runtime
+
         # 1. State Listener
         if hasattr(self.runtime, "state") and hasattr(self.runtime.state, "add_listener"):
             def on_state_change(old_s, new_s):
+                if old_s == new_s:
+                    return
                 status_val = new_s.value if hasattr(new_s, "value") else str(new_s)
                 try:
                     loop = getattr(self, "_loop", None)
@@ -137,7 +144,8 @@ class SERAUIServer:
                 "SCREEN_CAPTURE_STARTED", "SCREEN_CAPTURED",
                 "VISION_STARTED", "VISION_COMPLETED",
                 "AGENT_STARTED", "AGENT_COMPLETED", "AGENT_RESPONSE",
-                "TTS_STARTED", "TTS_INTERRUPTED",
+                "TTS_STARTED", "TTS_COMPLETED", "TTS_INTERRUPTED", "TTS_AUDIO_LEVELS",
+                "PRESENCE_CLOSE",
                 "SECURITY_CONFIRMATION_REQUIRED",
             ]
             for ev in event_names:
@@ -401,7 +409,30 @@ class SERAUIServer:
 
             # 1. State / Health
             if path in ("/api/health", "/api/state"):
-                return "200 OK", resp_headers, json.dumps({"status": "HEALTHY", "snapshot": self._get_initial_snapshot()}).encode("utf-8")
+                hotkey_running = bool(
+                    self.runtime
+                    and hasattr(self.runtime, "hotkey_manager")
+                    and getattr(self.runtime.hotkey_manager, "_running", False)
+                )
+                is_ready = bool(
+                    self.runtime
+                    and getattr(self.runtime, "is_ready", False)
+                    and hotkey_running
+                )
+
+                if getattr(self, "is_initializing_runtime", False) and not is_ready:
+                    return "503 Service Unavailable", resp_headers, json.dumps({
+                        "ready": False,
+                        "status": "INITIALIZING",
+                        "hotkey_running": False,
+                    }).encode("utf-8")
+
+                return "200 OK", resp_headers, json.dumps({
+                    "ready": is_ready if self.runtime else True,
+                    "status": "HEALTHY",
+                    "hotkey_running": hotkey_running,
+                    "snapshot": self._get_initial_snapshot(),
+                }).encode("utf-8")
 
             # 1b. Contextual Capabilities Endpoint
             if path.startswith("/api/capabilities"):
@@ -1538,6 +1569,7 @@ async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
     load_dotenv()
 
     server = SERAUIServer(host=host, port=port, runtime=None)
+    server.is_initializing_runtime = True
     await server.start()
     print(f"[SERA] Command Center running at http://{host}:{port}")
 
@@ -1548,6 +1580,7 @@ async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
         server.runtime = runtime
         server._setup_event_listeners()
     except Exception as e:
+        server.is_initializing_runtime = False
         logger.error(f"[SERA] Could not initialize SERARuntime: {e}")
         print(f"[SERA WARNING] Running UI server without voice runtime: {e}")
 
@@ -1557,11 +1590,18 @@ async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
 
     if runtime:
         runtime_task = asyncio.create_task(runtime.run())
+        # Confirm hotkey manager is active before marking fully ready
+        for _ in range(60):
+            if hasattr(runtime, "hotkey_manager") and getattr(runtime.hotkey_manager, "_running", False):
+                break
+            await asyncio.sleep(0.05)
+        server.is_initializing_runtime = False
         try:
             await runtime_task
         except (asyncio.CancelledError, KeyboardInterrupt):
             await server.stop()
     else:
+        server.is_initializing_runtime = False
         try:
             while True:
                 await asyncio.sleep(3600)

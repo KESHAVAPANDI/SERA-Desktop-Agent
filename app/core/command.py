@@ -215,6 +215,40 @@ class CommandParser:
                     ],
                 )
 
+        # Contextual setting continuation: "turn it back to 100%", "set it to 80%", "put it back to 100%", "change it to 50%"
+        turn_it_match = re.search(r"^(?:turn|set|change|put|make)\s+it\s+(?:back\s+)?to\s+(\d{1,3})\s*%?$", cleaned)
+        if turn_it_match:
+            val = max(0, min(100, int(turn_it_match.group(1))))
+            last_intent = context.get("last_intent") or getattr(context.get("last_command"), "intent", None) or context.get("last_tool")
+            if last_intent in ("set_brightness", "brightness") or "brightness" in str(context):
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="set_brightness",
+                    category=CommandCategory.SYSTEM,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={"brightness": val},
+                    required_tools=["set_brightness"],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal=f"Set display brightness to {val}%", action="set_brightness", arguments={"brightness": val}, timeout_seconds=5.0, verification_type="value_check"),
+                    ],
+                )
+            elif last_intent in ("set_volume", "volume") or "volume" in str(context):
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="set_volume",
+                    category=CommandCategory.SYSTEM,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={"volume": val},
+                    required_tools=["set_volume"],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal=f"Set system audio volume to {val}%", action="set_volume", arguments={"volume": val}, timeout_seconds=5.0, verification_type="value_check"),
+                    ],
+                )
+
         # =========================================================
         # 3. LAYER 1: COMPOUND COMMANDS (Multi-Step Deterministic)
         # =========================================================
@@ -635,6 +669,21 @@ class CommandParser:
                 required_tools=["list_running_applications"],
                 execution_plan=[
                     PlanStepItem(step_id=1, goal="List active applications and processes", action="list_running_applications", arguments={"filter_user_apps": True}, timeout_seconds=5.0),
+                ],
+            )
+
+        # 8a0. Dedicated Native SERA Self-Close ("close yourself", "quit yourself", "exit yourself", "close sera", "close presence")
+        if re.search(r"^(?:close|exit|quit|terminate|shutdown|shut\s+down)\s+(?:yourself|sera|presence|the\s+presence|sera\s+presence)$", cleaned) or cleaned in ("close yourself", "quit yourself", "exit yourself", "shutdown yourself", "close sera", "quit sera", "exit sera", "close presence", "exit presence", "quit presence", "shut yourself down"):
+            return CommandObject(
+                command_id=cmd_id,
+                task_id=t_id,
+                intent="sera_self_close",
+                category=CommandCategory.SYSTEM,
+                complexity=CommandComplexity.ONE_TOOL,
+                source_text=raw_text,
+                required_tools=["sera_self_close"],
+                execution_plan=[
+                    PlanStepItem(step_id=1, goal="Safely close SERA Presence window and process", action="sera_self_close", arguments={}, timeout_seconds=5.0),
                 ],
             )
 

@@ -26,7 +26,7 @@ class GlobalHotkeyManager:
         on_release: Callable[[], None] | None = None,
         on_trigger: Callable[[], None] | None = None,  # Backward compatibility
         loop: asyncio.AbstractEventLoop | None = None,
-        poll_interval_ms: float = 10.0,
+        poll_interval_ms: float = 5.0,
         debounce_ms: int = 300,
     ):
         self.hotkey_str = hotkey.lower()
@@ -119,6 +119,12 @@ class GlobalHotkeyManager:
     def _run_poll_loop(self) -> None:
         user32 = ctypes.windll.user32
         get_async_key_state = user32.GetAsyncKeyState
+
+        # Flush initial key state to clear any stale pressed bits before starting detection
+        get_async_key_state(VK_CONTROL)
+        get_async_key_state(VK_LCONTROL)
+        get_async_key_state(VK_RCONTROL)
+        get_async_key_state(VK_SPACE)
 
         while self._running:
             try:

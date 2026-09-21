@@ -997,6 +997,9 @@ export class PresenceEngine {
 
   // ─── State Behavior Transition ────────────────────────────────────────────
   setState(newState, taskType = "GENERAL", taskProgress = 0.0) {
+    if (this.state === newState && this.taskType === taskType && newState !== "COMPLETED") {
+      return;
+    }
     this.state = newState;
     this.taskType = taskType;
     if (this.behavior) {
@@ -1055,10 +1058,11 @@ export class PresenceEngine {
     // 1. Layer 1: Core Rotation, Lattice & Micro-Singularity
     this.coreUniforms.uDistortion.value = b.coreDistortion;
     this.coreUniforms.uGlitchIntensity.value = b.impulses.anomalyGlitch;
-    this.coreUniforms.uAmplitude.value = b.audio.rawAmp + b.impulses.energyFlash * 0.7;
+    this.coreUniforms.uAmplitude.value = b.audio.rawAmp * 1.6 + b.impulses.energyFlash * 0.7;
 
     const coreAtt = b.attention.core;
-    this.coreGroup.scale.setScalar(b.breathing * (0.85 + coreAtt * 0.2));
+    const audioScale = 1.0 + (b.audio.rawAmp * 0.22);
+    this.coreGroup.scale.setScalar(b.breathing * (0.85 + coreAtt * 0.2) * audioScale);
     this.coreMesh.rotation.y += (0.25 + b.energy * 0.45) * delta;
     this.coreMesh.rotation.x = Math.sin(this.time * 0.25) * (0.15 + b.energy * 0.15);
 

@@ -14,6 +14,7 @@ from app.tools.windows.system import (
     GetCurrentTimeTool,
     GetWiFiStatusTool,
 )
+from app.tools.windows.self_close import SeraSelfCloseTool
 
 from app.tools.windows.audio import (
     GetVolumeTool,
@@ -29,6 +30,7 @@ from app.tools.windows.display import (
 
 from app.tools.windows.power import (
     LockScreenTool,
+    LockComputerTool,
     SleepPCTool,
     RestartPCTool,
     ShutdownPCTool,
@@ -42,10 +44,16 @@ from app.tools.desktop.tools import (
     SelectTabTool,
 )
 
+from app.tools.filesystem.files import (
+    FindFilesTool,
+    CreateFolderTool,
+    CreateFileTool,
+)
 from app.tools.browser.web_search import WebSearchTool
 from app.tools.browser.browser import BrowserTool, ReadWebPageTool
+from app.tools.browser.youtube import YouTubeSearchTool
 from app.tools.screen.capture import ScreenCaptureTool
-from app.tools.screen.vision import AnalyzeScreenTool
+from app.tools.screen.vision import AnalyzeScreenTool, InspectScreenTool
 
 
 def create_tool_registry():
@@ -57,21 +65,27 @@ def create_tool_registry():
     registry.register(OpenFileTool())
     registry.register(CloseApplicationTool())
     registry.register(ListRunningApplicationsTool())
+    registry.register(FindFilesTool())
+    registry.register(CreateFolderTool())
+    registry.register(CreateFileTool())
 
     # Web & Browser
     registry.register(WebSearchTool())
     registry.register(BrowserTool())
     registry.register(ReadWebPageTool())
+    registry.register(YouTubeSearchTool())
 
     # Screen Capture & Vision
     registry.register(ScreenCaptureTool())
     registry.register(AnalyzeScreenTool())
+    registry.register(InspectScreenTool())
 
     # System & Diagnostics
     registry.register(GetSystemInfoTool())
     registry.register(GetBatteryStatusTool())
     registry.register(GetCurrentTimeTool())
     registry.register(GetWiFiStatusTool())
+    registry.register(SeraSelfCloseTool())
 
     # Audio Controls
     registry.register(GetVolumeTool())
@@ -85,6 +99,7 @@ def create_tool_registry():
 
     # Power Controls (with safety confirmations where needed)
     registry.register(LockScreenTool())
+    registry.register(LockComputerTool())
     registry.register(SleepPCTool())
     registry.register(RestartPCTool())
     registry.register(ShutdownPCTool())

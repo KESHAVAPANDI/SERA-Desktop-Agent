@@ -98,6 +98,10 @@ export class PresenceBehaviorEngine {
 
   // ─── State & Task Transitions ─────────────────────────────────────────────
   setState(state, taskType = "GENERAL", taskProgress = 0.0) {
+    if (this.targetState === state && this.taskType === taskType && state !== "COMPLETED") {
+      this.taskProgress = taskProgress;
+      return;
+    }
     this.targetState = state;
     this.taskType = taskType;
     this.taskProgress = taskProgress;
@@ -433,7 +437,7 @@ export class PresenceBehaviorEngine {
   computeCoreDistortion() {
     const base = 0.28 + this.energyBudget * 0.45;
     const impulse = this.impulse.coreShock * 0.4 + this.impulse.anomalyGlitch * 0.6;
-    const audioMod = this.audioBands.bass * 0.35;
+    const audioMod = this.audioBands.bass * 0.55 + this.audioBands.rawAmp * 0.25;
     return base + impulse + audioMod;
   }
 }

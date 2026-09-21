@@ -75,6 +75,9 @@ class CommandPipeline:
             "last_application": self.last_application,
             "last_folder": self.last_folder,
             "last_file": self.last_file,
+            "last_intent": self.context_state.get("last_intent") or (self.last_successful_command.intent if self.last_successful_command else None),
+            "last_tool": self.context_state.get("last_tool"),
+            "last_command": self.last_successful_command,
         }
 
         # 2. Parse into Normalized Command Object
@@ -175,12 +178,21 @@ class CommandPipeline:
                     self.last_folder = step.arguments.get("folder_name").capitalize()
                 elif step.action == "open_file" and step.arguments.get("file_path"):
                     self.last_file = step.arguments.get("file_path")
+                elif step.action == "set_brightness":
+                    self.context_state["last_intent"] = "set_brightness"
+                    self.context_state["last_tool"] = "set_brightness"
+                    self.context_state["last_brightness"] = step.arguments.get("brightness")
+                elif step.action == "set_volume":
+                    self.context_state["last_intent"] = "set_volume"
+                    self.context_state["last_tool"] = "set_volume"
+                    self.context_state["last_volume"] = step.arguments.get("volume")
 
             # Synthesize Clean Single Response
             final_spoken_response = self._synthesize_plan_response(cmd, step_results)
 
             # Record in context memory on success
             self.last_successful_command = cmd
+            self.context_state["last_intent"] = cmd.intent
             self.state.transition_to(SERAStatus.TASK_COMPLETED)
             return self._finalize_result(task_id, True, final_spoken_response, t_start, step_results=step_results)
 
@@ -426,6 +438,10 @@ class CommandPipeline:
             return "System audio muted."
         if intent == "unmute":
             return "System audio unmuted."
+
+        # Self Close
+        if intent == "sera_self_close":
+            return "SERA Presence has been safely closed."
 
         # Power
         if intent == "lock_computer":

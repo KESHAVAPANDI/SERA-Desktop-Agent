@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("seraNative", {
   },
   minimize: () => ipcRenderer.send("window-minimize"),
   close: () => ipcRenderer.send("window-close"),
+  showAndFocus: () => ipcRenderer.send("window-show-and-focus"),
+  selfClose: () => ipcRenderer.send("self-close"),
   
   // Custom drag
   dragWindow: (dx, dy) => ipcRenderer.send("window-drag", { dx, dy }),

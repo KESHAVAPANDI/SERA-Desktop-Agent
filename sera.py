@@ -10,6 +10,7 @@ Author: Keshava Pandi A S <keshavapandi@gmail.com>
 """
 
 import asyncio
+import json
 import os
 import signal
 import socket
@@ -46,17 +47,25 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         return s.connect_ex((host, port)) == 0
 
 
-def verify_http_endpoint(url: str, timeout: float = 10.0) -> bool:
-    """Poll HTTP health endpoint until responsive or timeout expires."""
+def verify_http_endpoint(url: str, timeout: float = 15.0) -> bool:
+    """Poll HTTP health endpoint until responsive and verified ready or timeout expires."""
     deadline = time.time() + timeout
     log(f"Verifying HTTP health endpoint at {url}...")
     while time.time() < deadline:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "SERALauncher/2.0"})
             with urllib.request.urlopen(req, timeout=1.0) as resp:
-                if resp.status in (200, 404):
-                    log(f"HTTP health check PASSED (Status: {resp.status})")
-                    return True
+                if resp.status == 200:
+                    try:
+                        raw = resp.read().decode("utf-8")
+                        data = json.loads(raw)
+                        if data.get("ready") is True and data.get("hotkey_running") is True:
+                            log("HTTP health check PASSED: SERA Runtime & Hotkey Manager Active (Status: 200)")
+                            return True
+                    except Exception:
+                        pass
+        except urllib.error.HTTPError:
+            time.sleep(0.3)
         except (urllib.error.URLError, ConnectionRefusedError, socket.timeout):
             time.sleep(0.3)
         except Exception:

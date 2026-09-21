@@ -207,6 +207,11 @@ class SERARuntime:
         self.active_task_info: dict[str, Any] | None = None
         self._active_task_handle: asyncio.Task | None = None
 
+        # Wire live TTS audio levels directly to EventBus/WebSocket for presence core reactivity
+        if hasattr(self.audio, "on_audio_levels"):
+            self.audio.on_audio_levels = lambda bands: self._emit_event("TTS_AUDIO_LEVELS", bands)
+
+        self.is_ready = True
         self._transition_state(SERAStatus.IDLE)
         print("=" * 60)
         print(f"SERA RUNTIME READY (Hold-To-Talk: {hotkey_combo} | Wake Word: '{self.wakeword_phrase}')")
@@ -293,7 +298,7 @@ class SERARuntime:
         if hasattr(self, "wakeword_detector") and self.wakeword_detector:
             self.wakeword_detector.pause()
 
-        # Transition to LISTENING and emit activation event
+        # Transition to LISTENING and emit canonical activation event
         self._transition_state(SERAStatus.LISTENING)
         self._emit_event(
             "ACTIVATION_STARTED",
@@ -301,13 +306,6 @@ class SERARuntime:
                 "source": "HOTKEY_HOLD",
                 "mode": "HOLD_TO_TALK",
                 "timestamp": self._hold_activation_time,
-            },
-        )
-        self._emit_event(
-            "LISTENING_STARTED",
-            {
-                "source": "HOTKEY_HOLD",
-                "mode": "HOLD_TO_TALK",
             },
         )
 
@@ -349,7 +347,6 @@ class SERARuntime:
                 "duration_seconds": release_time - self._hold_activation_time,
             },
         )
-        self._emit_event("LISTENING_STOPPED", {"source": "HOTKEY_HOLD"})
 
         # Schedule speech processing turn
         loop = getattr(self, "_loop", None)
@@ -600,6 +597,7 @@ class SERARuntime:
                 self.active_task_info["completed_at"] = time.time()
                 self.active_task_info["result"] = final_resp
 
+            # 1. Emit AGENT_RESPONSE immediately so UI displays response caption
             self._emit_event("AGENT_RESPONSE", {
                 "task_id": task_id,
                 "turn_id": task_id,
@@ -608,11 +606,25 @@ class SERARuntime:
                 "content": str(final_resp),
                 "status": "COMPLETED",
             })
+
+            # 2. Stay strictly in SPEAKING while real TTS audio plays
+            if final_resp and hasattr(self.audio, "speak"):
+                self._transition_state(SERAStatus.SPEAKING)
+                self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
+                try:
+                    await asyncio.to_thread(self.audio.speak, str(final_resp))
+                except Exception as e:
+                    logger.debug(f"[SERARuntime] TTS playback error: {e}")
+                finally:
+                    self._emit_event("TTS_COMPLETED", {"task_id": task_id})
+
+            # 3. Emit TASK_COMPLETED only after speech finishes
             self._emit_event("TASK_COMPLETED", {
                 "task_id": task_id,
                 "result": final_resp,
                 "duration_seconds": duration,
             })
+            self._transition_state(SERAStatus.IDLE)
 
             if hasattr(self, "events") and self.events:
                 await self.events.emit_async("latency_metrics", metrics=metrics)
@@ -884,13 +896,6 @@ class SERARuntime:
 
         resp_text = result.get("response", "")
         self.state.last_response = resp_text
-
-        # Audio playback if audio engine active
-        if resp_text and hasattr(self.audio, "speak") and self.state.status != SERAStatus.IDLE:
-            self._transition_state(SERAStatus.SPEAKING)
-            self.audio.speak(resp_text)
-            self._transition_state(SERAStatus.IDLE)
-
         return resp_text
 
     async def _stream_and_play_tts(self, text_or_tokens: Any, metrics: LatencyMetrics | None) -> None:

@@ -30,7 +30,7 @@ class AudioManager:
         tts_cfg = models_cfg.get("tts", {})
 
         stt_model = stt_cfg.get("model", "small")
-        if "nvidia" in str(stt_model).lower() or "canary" in str(stt_model).lower() or "/" in str(stt_model):
+        if "nvidia" in str(stt_model).lower() or "canary" in str(stt_model).lower() or "gemini" in str(stt_model).lower() or "transcribe" in str(stt_model).lower() or "/" in str(stt_model):
             stt_model = "small"
 
         self.stt = stt or SERA_STT(
@@ -51,6 +51,7 @@ class AudioManager:
         self._interrupted = False
         self._lock = threading.Lock()
         self._active_stream_tasks: list[asyncio.Task] = []
+        self.on_audio_levels: Callable[[dict[str, float]], None] | None = None
 
     @property
     def is_speaking(self) -> bool:
@@ -59,6 +60,45 @@ class AudioManager:
     @property
     def is_listening(self) -> bool:
         return self._is_listening
+
+    def _compute_chunk_levels(self, data: np.ndarray, rate: int, elapsed_time: float) -> dict[str, float]:
+        """Calculates multi-band audio intensity (rawAmp, bass, mid, treble) for real-time visual reactivity."""
+        if data is None or len(data) == 0:
+            return {"rawAmp": 0.0, "bass": 0.0, "mid": 0.0, "treble": 0.0}
+
+        curr_sample = int(elapsed_time * rate)
+        chunk_size = 1024
+        if curr_sample >= len(data):
+            return {"rawAmp": 0.0, "bass": 0.0, "mid": 0.0, "treble": 0.0}
+
+        chunk = data[curr_sample : curr_sample + chunk_size]
+        if len(chunk) < 64:
+            return {"rawAmp": 0.0, "bass": 0.0, "mid": 0.0, "treble": 0.0}
+
+        import numpy as np
+        if np.issubdtype(chunk.dtype, np.integer):
+            chunk_f = chunk.astype(np.float32) / 32768.0
+        else:
+            chunk_f = chunk.astype(np.float32)
+
+        if chunk_f.ndim > 1:
+            chunk_f = np.mean(chunk_f, axis=1)
+
+        rms = float(np.sqrt(np.mean(chunk_f**2)))
+        raw_amp = min(1.0, rms * 4.0)
+
+        fft_mags = np.abs(np.fft.rfft(chunk_f))
+        n_bins = len(fft_mags)
+        if n_bins > 0:
+            b_idx = max(1, int(n_bins * 0.12))
+            m_idx = max(b_idx + 1, int(n_bins * 0.55))
+            bass = min(1.0, float(np.mean(fft_mags[:b_idx])) * 0.15)
+            mid = min(1.0, float(np.mean(fft_mags[b_idx:m_idx])) * 0.12)
+            treble = min(1.0, float(np.mean(fft_mags[m_idx:])) * 0.10)
+        else:
+            bass = mid = treble = raw_amp
+
+        return {"rawAmp": raw_amp, "bass": bass, "mid": mid, "treble": treble}
 
     def stop_speaking(self) -> None:
         """Immediately halts any current TTS playback, cancels active streaming tasks, and resets speaking state."""
@@ -77,6 +117,12 @@ class AudioManager:
                 if not task.done():
                     task.cancel()
             self._active_stream_tasks.clear()
+
+        if self.on_audio_levels:
+            try:
+                self.on_audio_levels({"rawAmp": 0.0, "bass": 0.0, "mid": 0.0, "treble": 0.0})
+            except Exception:
+                pass
 
     def speak(self, text: str, on_playback_start: Callable[[], None] | None = None) -> None:
         """Plays speech output for single-sentence/short responses with immediate interruptibility."""
@@ -110,19 +156,32 @@ class AudioManager:
                     pass
 
             sd.play(data, rate)
+            play_start = time.time()
 
-            # Wait while audio is playing, checking for interruption flag
+            # Wait while audio is playing, streaming real audio levels and checking for interruption flag
             while sd.get_stream() and sd.get_stream().active:
                 if self._interrupted:
                     sd.stop()
                     break
-                time.sleep(0.01)
+                if self.on_audio_levels:
+                    elapsed = time.time() - play_start
+                    levels = self._compute_chunk_levels(data, rate, elapsed)
+                    try:
+                        self.on_audio_levels(levels)
+                    except Exception:
+                        pass
+                time.sleep(0.02)
 
         except Exception as e:
             logger.error(f"[AudioManager] Error during TTS playback: {e}")
         finally:
             with self._lock:
                 self._is_speaking = False
+            if self.on_audio_levels:
+                try:
+                    self.on_audio_levels({"rawAmp": 0.0, "bass": 0.0, "mid": 0.0, "treble": 0.0})
+                except Exception:
+                    pass
 
     async def speak_stream(
         self,
@@ -208,13 +267,21 @@ class AudioManager:
                                 pass
 
                     sd.play(data, rate)
+                    chunk_start = time.time()
 
-                    # Wait while audio is playing, checking for interruption flag
+                    # Wait while audio is playing, streaming levels and checking for interruption flag
                     while sd.get_stream() and sd.get_stream().active:
                         if self._interrupted:
                             sd.stop()
                             break
-                        await asyncio.sleep(0.01)
+                        if self.on_audio_levels:
+                            elapsed = time.time() - chunk_start
+                            levels = self._compute_chunk_levels(data, rate, elapsed)
+                            try:
+                                self.on_audio_levels(levels)
+                            except Exception:
+                                pass
+                        await asyncio.sleep(0.02)
 
                     audio_queue.task_done()
 

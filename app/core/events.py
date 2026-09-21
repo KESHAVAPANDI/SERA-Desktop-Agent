@@ -50,6 +50,10 @@ class EventBus:
             self._listeners[event_name] = []
         self._listeners[event_name].append(callback)
 
+    def on(self, event_name: str, callback: Callable):
+        """Alias for subscribe."""
+        self.subscribe(event_name, callback)
+
     async def emit_async(self, event_name: str, payload: Any = None, **kwargs):
         """Publishes event to all registered subscriber callbacks (handling both async and sync)."""
         if event_name in self._listeners:

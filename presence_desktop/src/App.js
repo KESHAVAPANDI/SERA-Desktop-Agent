@@ -57,7 +57,7 @@ class PresenceApp {
   }
 
   /**
-   * Real microphone stream using Web Audio API to modulate the 3D presence core.
+   * Real microphone stream using Web Audio API to continuously modulate the 3D presence core.
    */
   async initAudioReactivity() {
     try {
@@ -65,28 +65,40 @@ class PresenceApp {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 128;
-      analyser.smoothingTimeConstant = 0.8;
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.65;
       source.connect(analyser);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateAudio = () => {
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        let bassSum = 0, midSum = 0, trebleSum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-          if (i < 8) bassSum += dataArray[i];
-          else if (i < 28) midSum += dataArray[i];
-          else trebleSum += dataArray[i];
-        }
-        const avg = sum / dataArray.length;
-        const rawAmp = Math.min(1.0, avg / 60.0);
-        const bass = Math.min(1.0, (bassSum / 8) / 65.0);
-        const mid = Math.min(1.0, (midSum / 20) / 55.0);
-        const treble = Math.min(1.0, (trebleSum / Math.max(1, dataArray.length - 28)) / 45.0);
+        // While SERA speaks, output audio levels from backend have priority
+        if (this.engine.state !== "SPEAKING") {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          let bassSum = 0, midSum = 0, trebleSum = 0;
+          const count = dataArray.length;
 
-        this.engine.setAudioData({ rawAmp, bass, mid, treble });
+          for (let i = 0; i < count; i++) {
+            const v = dataArray[i];
+            sum += v;
+            if (i >= 1 && i <= 10) bassSum += v;
+            else if (i > 10 && i <= 45) midSum += v;
+            else if (i > 45 && i <= 90) trebleSum += v;
+          }
+
+          const avg = sum / count;
+          // Noise-floor gating (< 3.0 out of 255 is ambient quiet room)
+          if (avg < 3.0) {
+            this.engine.setAudioData({ rawAmp: 0.0, bass: 0.0, mid: 0.0, treble: 0.0 });
+          } else {
+            // Dynamic AGC expansion with non-linear curve so vocal inflection visibly deforms the core
+            const rawAmp = Math.min(1.0, Math.pow(avg / 42.0, 0.85));
+            const bass = Math.min(1.0, Math.pow((bassSum / 10) / 45.0, 0.8));
+            const mid = Math.min(1.0, Math.pow((midSum / 35) / 38.0, 0.85));
+            const treble = Math.min(1.0, Math.pow((trebleSum / 45) / 30.0, 0.9));
+            this.engine.setAudioData({ rawAmp, bass, mid, treble });
+          }
+        }
         requestAnimationFrame(updateAudio);
       };
       updateAudio();
@@ -334,10 +346,22 @@ class PresenceApp {
       }
 
       case "ACTIVATION_STARTED":
+        if (window.seraNative && window.seraNative.showAndFocus) {
+          window.seraNative.showAndFocus();
+        }
+        if (this.engine.state !== "LISTENING") {
+          this.engine.setState("LISTENING");
+          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
+          this.resetConversationForNewUtterance();
+        }
+        break;
+
       case "LISTENING_STARTED":
-        this.engine.setState("LISTENING");
-        this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
-        this.resetConversationForNewUtterance();
+        if (this.engine.state !== "LISTENING") {
+          this.engine.setState("LISTENING");
+          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
+          this.resetConversationForNewUtterance();
+        }
         break;
 
       case "PARTIAL_TRANSCRIPTION": {
@@ -416,9 +440,37 @@ class PresenceApp {
 
       case "TTS_STARTED":
         this.engine.setState("SPEAKING");
-        this.setStatus("SYNTHESIZING SPEECH", "F5-TTS STREAMING");
+        this.setStatus("SERA SPEAKING", "STREAMING VOICE AUDIO");
         if (this.seraStatusPill) {
           this.seraStatusPill.textContent = "SPEAKING";
+        }
+        break;
+
+      case "TTS_AUDIO_LEVELS": {
+        if (payload && this.engine) {
+          this.engine.setAudioData({
+            rawAmp: payload.rawAmp || 0.0,
+            bass: payload.bass || 0.0,
+            mid: payload.mid || 0.0,
+            treble: payload.treble || 0.0,
+          });
+        }
+        break;
+      }
+
+      case "TTS_COMPLETED":
+        if (this.seraStatusPill) {
+          this.seraStatusPill.textContent = "COMPLETE";
+        }
+        break;
+
+      case "PRESENCE_CLOSE":
+        console.log("[PresenceApp] Native self-close requested by SERA Runtime.");
+        this.setStatus("CLOSING PRESENCE", "SHUTDOWN VERIFIED");
+        if (window.seraNative && window.seraNative.selfClose) {
+          window.seraNative.selfClose();
+        } else {
+          window.close();
         }
         break;
 
@@ -435,7 +487,7 @@ class PresenceApp {
         setTimeout(() => {
           this.engine.setState("IDLE");
           this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
-        }, 2600);
+        }, 2200);
         this.scheduleConversationCollapse(8000);
         break;
       }
