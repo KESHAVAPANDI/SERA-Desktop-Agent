@@ -22,6 +22,14 @@ import urllib.request
 
 # Root paths
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# Ensure environment variables from .env are loaded authoritatively
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=os.path.join(PROJECT_ROOT, ".env"), override=True)
+except ImportError:
+    pass
+
 SERVER_SCRIPT = os.path.join(PROJECT_ROOT, "app", "ui", "server.py")
 PRESENCE_DIR = os.path.join(PROJECT_ROOT, "presence_desktop")
 ELECTRON_EXE = os.path.join(PRESENCE_DIR, "node_modules", "electron", "dist", "electron.exe")

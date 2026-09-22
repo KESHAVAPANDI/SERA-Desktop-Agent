@@ -60,7 +60,7 @@ class CommandObject:
 
 
 def normalize_conversational_utterance(text: str) -> tuple[str, bool]:
-    """Normalizes natural conversational addressing, vocatives, and courtesy prefixes.
+    """Normalizes natural conversational addressing, vocatives, and courtesy prefixes/suffixes.
 
     Returns:
         (normalized_text, is_pure_address)
@@ -86,22 +86,29 @@ def normalize_conversational_utterance(text: str) -> tuple[str, bool]:
         cleaned,
     )
 
-    # 2. Strip polite requests & courtesy modals: "could you please", "please", "can you", "would you kindly"
+    # 2. Strip polite requests & courtesy modals: "could you please", "please", "can you please", "would you kindly"
     cleaned = re.sub(
-        r"^(?:(?:could|can|would)\s+you\s+(?:please\s+)?(?:kindly\s+)?|please\s+|kindly\s+)",
+        r"^(?:(?:could|can|would|will)\s+you\s+(?:please\s+)?(?:kindly\s+)?|please\s+|kindly\s+)",
         "",
         cleaned,
     )
 
-    # 3. Strip trailing address & politeness: ", Sarah", ", please", " sera"
     # Preserve when sera/sarah/presence is the direct target of close/exit/quit/shutdown
     is_self_close_target = bool(re.match(r"^(?:close|exit|quit|terminate|shutdown|shut\s+down)\s+(?:yourself|sera|sarah|presence)$", cleaned))
+
+    # 3. Strip trailing benefactive & courtesy phrases: "for me", "for us", "please", "thanks", "if you can", "kindly"
     if not is_self_close_target:
-        cleaned = re.sub(
-            r"[\s,:\-]+(?:sera|sarah|sara|please)[\s\.]*$",
-            "",
-            cleaned,
-        )
+        for _ in range(3):
+            cleaned = re.sub(
+                r"[\s,:\-]+(?:for\s+me|for\s+us|if\s+you\s+(?:could|can|would|please)|if\s+possible|please|thanks|thank\s+you|kindly)[\s\.]*$",
+                "",
+                cleaned,
+            ).strip()
+            cleaned = re.sub(
+                r"[\s,:\-]+(?:sera|sarah|sara)[\s\.]*$",
+                "",
+                cleaned,
+            ).strip()
 
     cleaned = re.sub(r"^[\s,:\-]+|[\s,:\-]+$", "", cleaned).strip()
     return (cleaned, False)
@@ -173,6 +180,19 @@ class CommandParser:
                 raw_response="Yes, I'm here. How can I help you?",
             )
 
+        # Modifier extraction: identify repeat markers without corrupting the core target/entity
+        has_repeat_modifier = False
+        repeat_match = re.search(r"[\s,:\-]+(?:again|once\s+more|one\s+more\s+time)$", cleaned)
+        if repeat_match and cleaned not in ("again", "once more", "one more time", "do it again", "do that again", "run it again"):
+            has_repeat_modifier = True
+            cleaned = cleaned[:repeat_match.start()].strip()
+            # Clean any trailing courtesy phrase preceding the modifier (e.g. "open chrome for me again" -> "open chrome")
+            cleaned = re.sub(
+                r"[\s,:\-]+(?:for\s+me|for\s+us|if\s+you\s+(?:could|can|would|please)|if\s+possible|please|thanks|thank\s+you|kindly)[\s\.]*$",
+                "",
+                cleaned,
+            ).strip()
+
         # =========================================================
         # 1. LAYER 1: CONVERSATION (Zero Tools, <10ms Response)
         # =========================================================
@@ -243,8 +263,97 @@ class CommandParser:
                 source_text=raw_text,
             )
 
-        if cleaned in ("close it", "close that", "kill it", "exit it", "dismiss it"):
-            last_app = context.get("last_application") or context.get("last_opened_target") or "active_window"
+        # Contextual Ordinal Resolution ("open the first result", "click the second one", "result 1", "play first video")
+        ORDINAL_WORDS = {
+            "first": 0, "1st": 0, "one": 0, "1": 0,
+            "second": 1, "2nd": 1, "two": 1, "2": 1,
+            "third": 2, "3rd": 2, "three": 2, "3": 2,
+            "fourth": 3, "4th": 3, "four": 3, "4": 3,
+            "fifth": 4, "5th": 4, "five": 4, "5": 4,
+        }
+        ordinal_match = re.search(
+            r"^(?:open|play|click|select|choose|use|navigate\s+to|watch)\s+(?:the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|[1-5])(?:st|nd|rd|th)?(?:\s+(?:result|one|item|video|link))?$",
+            cleaned,
+        )
+        if not ordinal_match:
+            ordinal_match = re.search(
+                r"^(?:open|play|click|select|choose|use)\s+(?:result|video|item|link)\s+([1-5]|first|second|third|fourth|fifth)$",
+                cleaned,
+            )
+        if not ordinal_match:
+            ordinal_match = re.search(
+                r"^(?:the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|[1-5])(?:st|nd|rd|th)?\s+(?:result|one|item|video|link)$",
+                cleaned,
+            )
+
+        if ordinal_match:
+            ord_key = ordinal_match.group(1).lower()
+            ord_idx = ORDINAL_WORDS.get(ord_key, 0)
+            search_results = context.get("search_results") or []
+            if search_results and isinstance(search_results, list) and len(search_results) > ord_idx:
+                target_item = search_results[ord_idx]
+                target_url = target_item.get("url") or ""
+                target_title = target_item.get("title") or f"Result {ord_idx + 1}"
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="open_search_result",
+                    category=CommandCategory.BROWSER,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={
+                        "url": target_url,
+                        "title": target_title,
+                        "index": ord_idx,
+                        "reference": f"{ord_key} result",
+                    },
+                    entities={
+                        "reference": f"{ord_key} result",
+                        "ordinal": ord_idx,
+                        "resolved_target": target_url,
+                    },
+                    required_tools=["browser_open"],
+                    execution_plan=[
+                        PlanStepItem(
+                            step_id=1,
+                            goal=f"Open search result #{ord_idx + 1}: {target_title}",
+                            action="browser_open",
+                            arguments={"url": target_url},
+                            timeout_seconds=10.0,
+                            verification_type="url_check",
+                        ),
+                    ],
+                )
+            else:
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="context_reference_missing",
+                    category=CommandCategory.CONTEXT,
+                    complexity=CommandComplexity.SIMPLE,
+                    source_text=raw_text,
+                    raw_response="There are no active search results from a previous search to open. Please ask me to search first.",
+                )
+
+        if cleaned in ("search that again", "search again", "repeat search", "search that"):
+            last_query = context.get("last_search_query")
+            if last_query:
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="youtube_search",
+                    category=CommandCategory.BROWSER,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={"query": last_query},
+                    required_tools=["youtube_search"],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal=f"Search YouTube for '{last_query}' and navigate to results", action="youtube_search", arguments={"query": last_query}, timeout_seconds=10.0, verification_type="url_check"),
+                    ],
+                )
+
+        if cleaned in ("close it", "close that", "kill it", "exit it", "dismiss it", "close this", "close the window", "close that window", "shut it down") or re.match(r"^(?:close|exit|kill|dismiss|shut\s+down)\s+(?:it|that|this)(?:\s+down|\s+window)?$", cleaned):
+            last_app = context.get("last_application") or context.get("last_opened_target") or "chrome"
             return CommandObject(
                 command_id=cmd_id,
                 task_id=t_id,
@@ -770,6 +879,18 @@ class CommandParser:
         open_app_match = re.search(r"^(?:open|launch|start|run)\s+(?:the\s+)?([a-zA-Z0-9_\-\.\s]+?)(?:\s+application|\s+app)?$", cleaned)
         if open_app_match and not any(k in cleaned for k in ["folder", "file", "directory", "tab", "website", "url", "youtube"]):
             app_to_open = open_app_match.group(1).strip()
+            # Guard against contextual search result phrases being parsed as an application name
+            if any(w in app_to_open.lower() for w in ("result", "first", "second", "third", "search result")):
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="context_reference_missing",
+                    category=CommandCategory.CONTEXT,
+                    complexity=CommandComplexity.SIMPLE,
+                    source_text=raw_text,
+                    raw_response="There are no active search results to select from. Please ask me to search first.",
+                )
+
             # Check if this target is actually a standard folder (e.g. "open downloads")
             if app_to_open.lower() in ("downloads", "download", "documents", "document", "desktop", "pictures", "photos", "videos", "music"):
                 return CommandObject(
@@ -786,6 +907,12 @@ class CommandParser:
                     ],
                 )
 
+            app_params = {"application": app_to_open}
+            app_ents = {"target": app_to_open}
+            if has_repeat_modifier:
+                app_params["modifier"] = "repeat"
+                app_ents["modifier"] = "repeat"
+
             return CommandObject(
                 command_id=cmd_id,
                 task_id=t_id,
@@ -793,7 +920,8 @@ class CommandParser:
                 category=CommandCategory.APPLICATIONS,
                 complexity=CommandComplexity.ONE_TOOL,
                 source_text=raw_text,
-                parameters={"application": app_to_open},
+                parameters=app_params,
+                entities=app_ents,
                 required_tools=["open_application"],
                 execution_plan=[
                     PlanStepItem(step_id=1, goal=f"Opening {app_to_open.capitalize()}...", action="open_application", arguments={"application": app_to_open}, timeout_seconds=8.0, verification_type="window_check"),

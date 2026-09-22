@@ -4,6 +4,30 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase3a-c] — 2026-09-23
+
+### Fixed & Enhanced
+* **English-Constrained STT Policy:**
+  * Configured Google Gemini STT (`gemini-3.5-transcribe`) with explicit audio transcription parameters (`language_codes=['en-US', 'en']`, `mode='VERBATIM'`, `temperature=0.0`) and non-Latin character detection logging to prevent multilingual translation hallucinations.
+  * Hard-enforced English language decoding (`language="en"`) in Faster-Whisper fallback provider.
+* **Canonical Semantic Normalization Boundary (`app/core/command.py`):**
+  * Implemented multi-stage normalization cleanly stripping conversational addressing ("Hey Sarah, ...", "Sera, ...") and courtesy modals ("could you please...", "can you please...", "...for me", "...if you can") without corrupting target entity names.
+  * Extracted repeat markers ("again", "once more") as structured semantic modifiers (`modifier="repeat"`), ensuring "Open Chrome again" resolves to `target="chrome"` rather than "chrome again".
+* **Contextual Reference Resolution Gate:**
+  * Inserted ordinal search result resolution ("open the first result", "click second one", "result 1", "play first video") resolving deterministically against verified `search_results` in `context_state` into `browser_open(url=...)`.
+  * Added guard returning informative conversational feedback when no verified search results exist in session context, permanently preventing generic application parsing from interpreting "first result" as an executable application.
+  * Expanded pronoun resolution ("close it", "close that") to map to the last verified active application or browser.
+* **Terminal State Consistency & Single Event Source of Truth (`app/core/runtime.py`):**
+  * Eliminated erroneous `TASK_COMPLETED` emissions following `BROKEN`/`FAILED` executions: failure turns now speak the conversational failure message, emit `AGENT_RESPONSE` with status `FAILED`, and terminate exclusively with `TASK_FAILED`.
+  * Removed duplicate `MODEL_SELECTED` event trigger from `TASK_STARTED` in Electron Presence (`presence_desktop/src/App.js`).
+  * Added deduplication guard in `PresenceEngine.js` preventing duplicate `Manifesting Task Structure` logs when consecutive identical objectives are received.
+* **Deterministic Real Cancellation:**
+  * Wired `asyncio.Event` cancellation primitive from `SERARuntime.cancel_task()` through `CommandPipeline` into `StatefulGraphRuntime`. Active nodes halt immediately without traversing subsequent nodes, emitting no false success events and terminating in `CANCELLED`.
+* **Empirical Test Suite (`tests/test_phase3a_c_semantic_integrity.py`):**
+  * Added 22 tests verifying English STT config, addressing & politeness normalization, repeat modifier extraction, ordinal reference resolution, terminal failure semantics, and deterministic cancellation (all 22 passing in 4.4s).
+
+---
+
 ## [2.0.0-phase3a] — 2026-09-23
 
 ### Added

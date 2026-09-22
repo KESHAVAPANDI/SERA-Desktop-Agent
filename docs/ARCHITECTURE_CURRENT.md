@@ -28,25 +28,30 @@
       └──────────────────┘     └──────────────────┘
 ```
 
-* **`SERARuntime` (`app/core/runtime.py`):** Central coordinator initializing hotkeys, microphone streams, wake-word listeners, and WebSocket server dispatch. Supports clean task cancellation via `cancel_task()`.
-* **`CommandPipeline` (`app/core/command_pipeline.py`):** Orchestrator coordinating utterance normalization, deterministic intent resolution, and execution dispatch through the canonical `StatefulGraphRuntime`.
-* **`StatefulGraphRuntime` (`app/core/graph/`) — ✅ IMPLEMENTED (Phase 3A):**
+* **`SERARuntime` (`app/core/runtime.py`):** Central coordinator initializing hotkeys, microphone streams, wake-word listeners, and WebSocket server dispatch. Supports clean task cancellation via `cancel_task()`. Enforces strict terminal state semantics where failed/broken/cancelled tasks emit `TASK_FAILED`/`TASK_CANCELLED` and never emit `TASK_COMPLETED`.
+* **`CommandPipeline` (`app/core/command_pipeline.py`):** Orchestrator coordinating canonical multi-stage utterance normalization, deterministic intent resolution, verified context persistence, and execution dispatch through the canonical `StatefulGraphRuntime`.
+* **Semantic Normalization & Reference Resolution (Phase 3A-C):**
+  * Multi-stage normalization: Addressing/vocatives ("Hey Sarah, ...") and politeness/courtesy modals ("can you please...", "...for me") are cleanly stripped without corrupting target entities.
+  * Repeat modifiers: "again", "once more" are captured as semantic modifiers (`modifier="repeat"`) rather than becoming part of application names (e.g. "Open Chrome again" resolves to `action="open_application"`, `target="chrome"`, `modifier="repeat"`).
+  * Contextual Ordinal References: "Open the first result", "click second one", "result 1" resolve deterministically against verified `search_results` in `context_state` into `browser_open(url=...)`. If no search results exist in context, the system provides polite conversational guidance rather than falling through to generic application launching.
+* **`StatefulGraphRuntime` (`app/core/graph/`) — ✅ IMPLEMENTED (Phase 3A & 3A-C):**
   * Asynchronous directed execution graph engine orchestrating the canonical lifecycle: `PERCEIVE → NORMALIZE → CONTEXT → ROUTE → PLAN → EXECUTE → OBSERVE → VERIFY → DECIDE → RECOVER → RESPOND → DONE`.
   * Strongly-typed `GraphState` containing Identity (`execution_id`, `task_id`), Input, Context, Routing, Plan, Execution, Recovery, Outcome (`GraphExecutionStatus`), Presence, and Telemetry.
   * Node Contract: Receives `GraphState` and `asyncio.Event` cancellation primitive; produces updated state and structured `GraphDecision` (`CONTINUE`, `DONE`, `RETRY`, `REPLAN`, `HANDOFF`, `FAIL`, `CANCEL`).
   * First-Class Completion Gate: `VerifyNode` executes empirical inspection via `EvidenceVerificationFabric` before any task is permitted to commit `DONE`.
-  * Real-Time Interruption: `ExecuteNode` uses `asyncio.wait(..., return_when=FIRST_COMPLETED)` across tool execution and cancellation events, immediately halting tools and transitioning to `CANCELLED` with zero dangling tasks or misleading events.
+  * Real-Time Interruption & Deterministic Cancellation: `ExecuteNode` uses `asyncio.wait(..., return_when=FIRST_COMPLETED)` across tool execution and cancellation events, immediately halting tools and transitioning to `CANCELLED` with zero dangling tasks, running no subsequent nodes, and emitting no misleading success events.
   * Fast-Path Bypass: Trivial deterministic commands traverse the short path (`PERCEIVE → NORMALIZE → CONTEXT → ROUTE → EXECUTE → OBSERVE → VERIFY → DECIDE → RESPOND → DONE`) with sub-millisecond orchestration latency (<0.2ms).
 * **`SERAState` (`app/core/state.py`):** Deterministic state machine tracking `SERAStatus` (`IDLE`, `LISTENING`, `THINKING`, `EXECUTING`, `SPEAKING`, `ERROR`). Thread-safe state change listeners broadcast to UI clients.
-* **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus emitting correlated execution events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`).
+* **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus emitting correlated execution events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`). Presence deduplication ensures task structures and model selections are materialized exactly once per transition.
 * **`GlobalHotkeyManager` (`app/core/hotkey_manager.py`):** Single authoritative system-wide keyboard hook on Windows capturing `Ctrl+Alt+Space` for Hold-to-Talk audio recording with dual-release and Win32 focus recovery.
 
 ---
 
 ## 2. Speech Subsystem (`app/speech/`, `app/models/stt/`) — ✅ IMPLEMENTED
 
-* **Primary STT (`app/models/stt/gemini.py`):** Google Gemini 3.5 Transcribe (`gemini-3.5-transcribe`) using direct Google GenAI SDK. Streams 16-bit PCM WAV audio; handles punctuation, capitalization, and language detection.
-* **Fallback STT (`app/speech/stt.py`):** Local `faster-whisper` running on CUDA FP16 (small model) for complete offline resiliency.
+* **English-Constrained STT Policy (Phase 3A-C):** Explicitly requests English transcription (`en-US`, `en`) with verbatim configuration to prevent unwanted multilingual hallucination (e.g. Hindi translation of English voice commands).
+* **Primary STT (`app/models/stt/gemini.py`):** Google Gemini 3.5 Transcribe (`gemini-3.5-transcribe`) using direct Google GenAI SDK. Configured with verbatim audio transcription parameters and explicit English language constraints.
+* **Fallback STT (`app/models/stt/whisper.py`):** Local `faster-whisper` running on CUDA FP16 (small model) with hard-enforced English language code decoding (`language="en"`) for offline resiliency.
 * **Audio Manager (`app/speech/audio_manager.py`):** PyAudio non-blocking stream capture with VAD energy thresholding.
 * **TTS (`app/speech/tts.py`):** Streaming TTS output with instant energy-based voice interruption cutoff.
 * **Spatial Audio Cues (`app/speech/audio_cues.py`):** High-frequency chimes and acoustic feedback for state transitions (`listen_start`, `listen_stop`, `task_complete`, `task_fail`).

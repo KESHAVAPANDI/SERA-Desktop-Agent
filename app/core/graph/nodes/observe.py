@@ -59,6 +59,11 @@ class ObserveNode(GraphNode):
                 summary_text = f"Screen buffer dimensions: {observed_dict['dimensions']}"
             elif "results" in observed_dict and isinstance(observed_dict["results"], list):
                 summary_text = f"Found {len(observed_dict['results'])} structured results"
+                state.context_state["search_results"] = observed_dict["results"]
+                if "query" in observed_dict:
+                    state.context_state["last_search_query"] = observed_dict["query"]
+                if "url" in observed_dict:
+                    state.current_url = observed_dict["url"]
             elif "message" in observed_dict:
                 summary_text = str(observed_dict["message"])
             else:

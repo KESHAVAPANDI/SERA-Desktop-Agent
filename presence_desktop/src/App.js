@@ -413,7 +413,6 @@ class PresenceApp {
         const taskType = this.classifyTask(taskText);
         this.engine.setState("THINKING", taskType);
         this.engine.setTaskVisualization(taskType, taskText);
-        this.engine.triggerEvent("MODEL_SELECTED", payload);
         this.setStatus("SYNTHESIZING PATH", taskText.toUpperCase());
         this.updateSeraResponse("Synthesizing neural execution plan...", "PLANNING");
         break;

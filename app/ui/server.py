@@ -14,6 +14,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=os.path.join(PROJECT_ROOT, ".env"), override=True)
+except ImportError:
+    pass
+
 from app.core.router import RoleCandidate
 from app.core.capabilities import CapabilityRegistry
 from app.utils.security import SecurityManager
@@ -1578,7 +1584,7 @@ class SERAUIServer:
 
 async def _run_standalone(host: str = "127.0.0.1", port: int = 8765):
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(dotenv_path=os.path.join(PROJECT_ROOT, ".env"), override=True)
 
     server = SERAUIServer(host=host, port=port, runtime=None)
     server.is_initializing_runtime = True

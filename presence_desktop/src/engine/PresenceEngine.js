@@ -985,9 +985,12 @@ export class PresenceEngine {
   }
 
   // ─── Set Task Visualization Bridge ────────────────────────────────────────
-  // ─── Task Visualization & Behavior Bridge ─────────────────────────────────
   setTaskVisualization(taskType, objective = "") {
+    if (this.activeTaskType === taskType && this.lastObjective === objective) {
+      return;
+    }
     this.activeTaskType = taskType;
+    this.lastObjective = objective;
     this.taskStartTime = this.time;
     if (this.behavior) {
       this.behavior.setState(this.state, taskType, 0.0);

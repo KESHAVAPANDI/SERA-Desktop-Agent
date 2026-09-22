@@ -58,6 +58,12 @@ class SERARuntime:
         print("INITIALIZING SERA RUNTIME 1.0")
         print("=" * 60)
 
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(override=True)
+        except ImportError:
+            pass
+
         self.config = SERAConfig(config_path)
         models_cfg = self.config.data.get("models", {})
         hotkey_cfg = self.config.data.get("hotkey", {})
@@ -592,39 +598,79 @@ class SERARuntime:
             duration = time.time() - t_turn_start
             final_resp = response_text or self.state.last_response or "All set."
 
-            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
-                self.active_task_info["status"] = "COMPLETED"
-                self.active_task_info["completed_at"] = time.time()
-                self.active_task_info["result"] = final_resp
+            exec_res = getattr(self, "last_execution_result", None) or {}
+            is_success = exec_res.get("success", False) and (self.state.status != SERAStatus.BROKEN)
 
-            # 1. Emit AGENT_RESPONSE immediately so UI displays response caption
-            self._emit_event("AGENT_RESPONSE", {
-                "task_id": task_id,
-                "turn_id": task_id,
-                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
-                "type": "ASSISTANT_MESSAGE",
-                "content": str(final_resp),
-                "status": "COMPLETED",
-            })
+            if not is_success:
+                err_msg = exec_res.get("error") or final_resp
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "FAILED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["error"] = err_msg
 
-            # 2. Stay strictly in SPEAKING while real TTS audio plays
-            if final_resp and hasattr(self.audio, "speak"):
-                self._transition_state(SERAStatus.SPEAKING)
-                self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
-                try:
-                    await asyncio.to_thread(self.audio.speak, str(final_resp))
-                except Exception as e:
-                    logger.debug(f"[SERARuntime] TTS playback error: {e}")
-                finally:
-                    self._emit_event("TTS_COMPLETED", {"task_id": task_id})
+                # 1. Emit AGENT_RESPONSE with status FAILED
+                self._emit_event("AGENT_RESPONSE", {
+                    "task_id": task_id,
+                    "turn_id": task_id,
+                    "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                    "type": "ASSISTANT_MESSAGE",
+                    "content": str(final_resp),
+                    "status": "FAILED",
+                })
 
-            # 3. Emit TASK_COMPLETED only after speech finishes
-            self._emit_event("TASK_COMPLETED", {
-                "task_id": task_id,
-                "result": final_resp,
-                "duration_seconds": duration,
-            })
-            self._transition_state(SERAStatus.IDLE)
+                # 2. Stay strictly in SPEAKING while real TTS audio plays
+                if final_resp and hasattr(self.audio, "speak"):
+                    self._transition_state(SERAStatus.SPEAKING)
+                    self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
+                    try:
+                        await asyncio.to_thread(self.audio.speak, str(final_resp))
+                    except Exception as e:
+                        logger.debug(f"[SERARuntime] TTS playback error: {e}")
+                    finally:
+                        self._emit_event("TTS_COMPLETED", {"task_id": task_id})
+
+                # 3. Emit TASK_FAILED (NEVER TASK_COMPLETED!)
+                self._emit_event("TASK_FAILED", {
+                    "task_id": task_id,
+                    "error": str(err_msg),
+                    "duration_seconds": duration,
+                    "status": "FAILED",
+                })
+                self._transition_state(SERAStatus.IDLE)
+            else:
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "COMPLETED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["result"] = final_resp
+
+                # 1. Emit AGENT_RESPONSE immediately so UI displays response caption
+                self._emit_event("AGENT_RESPONSE", {
+                    "task_id": task_id,
+                    "turn_id": task_id,
+                    "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                    "type": "ASSISTANT_MESSAGE",
+                    "content": str(final_resp),
+                    "status": "COMPLETED",
+                })
+
+                # 2. Stay strictly in SPEAKING while real TTS audio plays
+                if final_resp and hasattr(self.audio, "speak"):
+                    self._transition_state(SERAStatus.SPEAKING)
+                    self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
+                    try:
+                        await asyncio.to_thread(self.audio.speak, str(final_resp))
+                    except Exception as e:
+                        logger.debug(f"[SERARuntime] TTS playback error: {e}")
+                    finally:
+                        self._emit_event("TTS_COMPLETED", {"task_id": task_id})
+
+                # 3. Emit TASK_COMPLETED only after speech finishes
+                self._emit_event("TASK_COMPLETED", {
+                    "task_id": task_id,
+                    "result": final_resp,
+                    "duration_seconds": duration,
+                })
+                self._transition_state(SERAStatus.IDLE)
 
             if hasattr(self, "events") and self.events:
                 await self.events.emit_async("latency_metrics", metrics=metrics)
@@ -669,6 +715,9 @@ class SERARuntime:
             self.audio.stop_speaking()
         if hasattr(self, "audio_cues") and self.audio_cues and hasattr(self.audio_cues, "play_interrupted_cue"):
             self.audio_cues.play_interrupted_cue()
+
+        if hasattr(self, "command_pipeline") and hasattr(self.command_pipeline, "cancel_current_task"):
+            self.command_pipeline.cancel_current_task()
 
         if self.active_task_info:
             self.active_task_info["status"] = "CANCELLED"
@@ -840,24 +889,54 @@ class SERARuntime:
             duration = time.time() - t_turn_start
             final_resp = response or self.state.last_response or "Action completed."
 
-            if self.active_task_info and self.active_task_info.get("task_id") == task_id:
-                self.active_task_info["status"] = "COMPLETED"
-                self.active_task_info["completed_at"] = time.time()
-                self.active_task_info["result"] = final_resp
+            exec_res = getattr(self, "last_execution_result", None) or {}
+            is_success = exec_res.get("success", False) and (self.state.status != SERAStatus.BROKEN)
 
-            self._emit_event("AGENT_RESPONSE", {
-                "task_id": task_id,
-                "turn_id": task_id,
-                "message_id": f"msg_{uuid.uuid4().hex[:8]}",
-                "type": "ASSISTANT_MESSAGE",
-                "content": str(final_resp),
-                "status": "COMPLETED",
-            })
-            self._emit_event("TASK_COMPLETED", {
-                "task_id": task_id,
-                "result": final_resp,
-                "duration_seconds": duration,
-            })
+            if not is_success:
+                err_msg = exec_res.get("error") or final_resp
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "FAILED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["error"] = err_msg
+
+                # 1. Emit AGENT_RESPONSE with status FAILED
+                self._emit_event("AGENT_RESPONSE", {
+                    "task_id": task_id,
+                    "turn_id": task_id,
+                    "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                    "type": "ASSISTANT_MESSAGE",
+                    "content": str(final_resp),
+                    "status": "FAILED",
+                })
+
+                # 2. Emit TASK_FAILED (NEVER TASK_COMPLETED!)
+                self._emit_event("TASK_FAILED", {
+                    "task_id": task_id,
+                    "error": str(err_msg),
+                    "duration_seconds": duration,
+                    "status": "FAILED",
+                })
+                self._transition_state(SERAStatus.IDLE)
+            else:
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "COMPLETED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["result"] = final_resp
+
+                self._emit_event("AGENT_RESPONSE", {
+                    "task_id": task_id,
+                    "turn_id": task_id,
+                    "message_id": f"msg_{uuid.uuid4().hex[:8]}",
+                    "type": "ASSISTANT_MESSAGE",
+                    "content": str(final_resp),
+                    "status": "COMPLETED",
+                })
+                self._emit_event("TASK_COMPLETED", {
+                    "task_id": task_id,
+                    "result": final_resp,
+                    "duration_seconds": duration,
+                })
+                self._transition_state(SERAStatus.IDLE)
 
             # Emit latency telemetry
             print(f"\n{metrics.format_summary()}")
@@ -892,6 +971,13 @@ class SERARuntime:
         if not text:
             return ""
 
+        if hasattr(self, "vision") and self.vision and hasattr(self.vision, "is_vision_query") and self.vision.is_vision_query(text):
+            ctx, summary = await self.vision.analyze_screen(text)
+            self.state.last_response = summary
+            if hasattr(self.audio, "speak"):
+                self.audio.speak(summary)
+            return summary
+
         turn_id = turn_id or f"turn-{self.turn_count}"
 
         result = await self.command_pipeline.execute_text(
@@ -903,6 +989,7 @@ class SERARuntime:
 
         resp_text = result.get("response", "")
         self.state.last_response = resp_text
+        self.last_execution_result = result
         return resp_text
 
     async def _stream_and_play_tts(self, text_or_tokens: Any, metrics: LatencyMetrics | None) -> None:

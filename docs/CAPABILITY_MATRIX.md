@@ -10,13 +10,14 @@
 | Capability | Status | Current Implementation | Verification Method | Known Issues | Next Step |
 | :--- | :---: | :--- | :--- | :--- | :--- |
 | **Voice Audio Pipeline** | ✅ IMPLEMENTED | PyAudio non-blocking stream capture, VAD thresholding | Hardware mic capture test in `test_microphone.py` | Requires correct Windows default audio input device | Add dynamic audio device selection in Settings |
-| **Speech-to-Text (STT)** | ✅ IMPLEMENTED | Google Gemini 3.5 Transcribe primary; Faster-Whisper CUDA fallback | `tests/test_task1_gemini_stt.py` real mic transcription test | Online mode requires active `GEMINI_API_KEY` | Implement streaming chunked transcription |
+| **Speech-to-Text (STT)** | ✅ IMPLEMENTED | Google Gemini 3.5 Transcribe primary (`en-US`/`en` verbatim); Faster-Whisper CUDA fallback (`en`) | `tests/test_phase3a_c_semantic_integrity.py` and `tests/test_task1_gemini_stt.py` | Online mode requires active `GEMINI_API_KEY` | Implement streaming chunked transcription |
 | **Text-to-Speech (TTS)** | ✅ IMPLEMENTED | Streaming audio playback with energy-based voice interruption | Voice consistency test in `test_voice_consistency.py` | Windows sound device locks if exclusive mode active | Add multi-voice persona selector in Settings |
-| **Global Hotkey** | ✅ IMPLEMENTED | `app/core/hotkey.py` hook on `Ctrl+Space` for Hold-to-Talk | Keydown/keyup cycle verified in runtime test | Requires admin rights if target window has elevated integrity | Add secondary global shortcut configuration |
+| **Global Hotkey** | ✅ IMPLEMENTED | `app/core/hotkey_manager.py` hook on `Ctrl+Alt+Space` for Hold-to-Talk with authoritative single owner | Verified in `tests/test_hotkey_authority.py` | Requires admin rights if target window has elevated integrity | Add secondary global shortcut configuration |
+| **Semantic Normalization & Context** | ✅ IMPLEMENTED | `app/core/command.py` multi-stage vocative/politeness stripping, repeat modifier extraction, and ordinal search result resolution | `tests/test_phase3a_c_semantic_integrity.py` (22 tests) | None | Expand to multi-turn pronoun chaining in Phase 3B |
 | **Wake Word** | ⚠️ PARTIAL | Local `openWakeWord` detector for phrase "SERA" | Keyword test in `wakeword/evaluator.py` | False positives in noisy office environments | Retrain acoustic model with customized user voice samples |
 | **Desktop Automation** | ✅ IMPLEMENTED | `app/tools/windows/apps.py` launcher with process & window title verification | `tests/vertical_slices/applications/` | UWP apps require special shell URI resolution | Expand Win32 window focus & keyboard macro injection |
 | **Browser Automation** | ⚠️ PARTIAL | Shell launching of Chrome / Edge; URL dispatch | Process check for `chrome.exe` in vertical slices | No direct DOM manipulation via CDP yet | Integrate Playwright MCP client |
-| **YouTube Navigation** | ✅ IMPLEMENTED | `app/tools/browser/youtube.py` search & direct video launcher | E2E browser launch and URL verification | Relies on default browser window focus | Add inline video metadata parsing |
+| **YouTube Navigation** | ✅ IMPLEMENTED | `app/tools/browser/youtube.py` search & direct video launcher with structured results | E2E browser launch, structured result extraction, and URL verification | Relies on default browser window focus | Add inline video metadata parsing |
 | **Web Search** | ✅ IMPLEMENTED | DuckDuckGo HTML parser, ad-filter, strict contract parsing | `tests/vertical_slices/web_search/test_web_search_suite.py` (5 tests) | Rapid queries may trigger temporary rate limiting | Add Brave Search API as secondary engine |
 | **Screen Capture** | ✅ IMPLEMENTED | `app/tools/screen/capture.py` multi-monitor screen grab | `tests/vertical_slices/screenshot/` DXGI image buffer test | Multi-monitor DPI scaling requires coordinate normalization | Optimize with direct GPU frame capture |
 | **Vision Perception** | ⚠️ PARTIAL | `app/tools/screen/vision.py` multimodal prompt via Groq/Gemini | Screenshot payload submission test in `test_tools.py` | High token consumption on large 4K resolution screens | Implement local image downscaling & region of interest cropping |
@@ -37,12 +38,12 @@
 | **Presence Behavior Engine** | ✅ IMPLEMENTED | Adaptive simulation engine (`PresenceBehaviorEngine.js`): Energy budget, attention model, organic pacing, visual memory, multi-band audio, and 7-phase cellular regeneration | Automated desktop frame captures (`desktop_behavior_idle_variation.png`, `desktop_behavior_thinking_branches.png`, `desktop_behavior_execution_progress.png`, `desktop_behavior_regeneration.png`) | None | Add emotional valence modulation |
 | **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
 | **Native Desktop Shell** | ✅ IMPLEMENTED | Electron 33 borderless overlay (`presence_desktop/main.js`) with 100% DWM alpha transparency & global shortcut | Empirical process check (HWND 0x0c070d0000000000) & native desktop capturePage | None | Add multi-monitor display selector in Command Center |
-| **Stateful Graph Runtime** | ✅ IMPLEMENTED | `app/core/graph/` asynchronous directed execution graph with typed `GraphState`, `VerifyNode` gate, and real-time cancellation | 14 empirical test cases in `tests/test_stateful_graph_runtime.py` | None | Expand specialist delegation agents in Phase 3B |
+| **Stateful Graph Runtime** | ✅ IMPLEMENTED | `app/core/graph/` asynchronous directed execution graph with typed `GraphState`, `VerifyNode` gate, and real-time cancellation | 14 empirical test cases in `tests/test_stateful_graph_runtime.py` and 22 in `tests/test_phase3a_c_semantic_integrity.py` | None | Expand specialist delegation agents in Phase 3B |
 
 ---
 
 ### Status Summary
-* **✅ IMPLEMENTED:** 20 capabilities fully operational and verified.
+* **✅ IMPLEMENTED:** 21 capabilities fully operational and verified.
 * **⚠️ PARTIAL:** 5 capabilities working but undergoing active rework or enhancement.
 * **📋 PLANNED:** 3 capabilities architecturally specified for upcoming phases.
 * **❌ BROKEN:** 0 active regressions.

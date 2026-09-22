@@ -58,6 +58,7 @@ class CommandPipeline:
 
         # Execution Deduplication Cache
         self._executed_signatures: set[str] = set()
+        self.active_cancellation_event: asyncio.Event = asyncio.Event()
 
         # Canonical Phase 3A Stateful Graph Runtime Foundation
         self.graph_runtime = create_default_graph_runtime(
@@ -67,6 +68,11 @@ class CommandPipeline:
             fabric=self.evidence_fabric,
             context_provider=self.context_state,
         )
+
+    def cancel_current_task(self) -> None:
+        """Flags the active task cancellation event."""
+        if hasattr(self, "active_cancellation_event") and self.active_cancellation_event:
+            self.active_cancellation_event.set()
 
     async def execute_text(
         self,
@@ -145,9 +151,11 @@ class CommandPipeline:
         else:
             task_timeout = 45.0
 
+        self.active_cancellation_event = asyncio.Event()
+
         try:
             return await asyncio.wait_for(
-                self._execute_command_internal(cmd, task_id, t_start, metrics),
+                self._execute_command_internal(cmd, task_id, t_start, metrics, cancellation_event=self.active_cancellation_event),
                 timeout=task_timeout,
             )
         except asyncio.TimeoutError:
@@ -230,6 +238,10 @@ class CommandPipeline:
             for step in cmd.execution_plan:
                 if step.action == "open_application" and step.arguments.get("application"):
                     self.last_application = step.arguments.get("application").lower()
+                elif step.action in ("browser_open", "youtube_search", "web_search"):
+                    self.last_application = "chrome"
+                    if step.arguments.get("query"):
+                        self.context_state["last_search_query"] = step.arguments.get("query")
                 elif step.action == "open_folder" and step.arguments.get("folder_name"):
                     self.last_folder = step.arguments.get("folder_name").capitalize()
                 elif step.action == "open_file" and step.arguments.get("file_path"):

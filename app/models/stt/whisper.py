@@ -109,7 +109,8 @@ class FasterWhisperSTTProvider(STTProvider):
         audio_data = self._audio_to_float32(audio, sample_rate)
         duration_s = len(audio_data) / sample_rate if sample_rate > 0 else 5.0
 
-        lang_code = "en" if language.lower().startswith("en") else language
+        # Strict English-only policy enforcement for fallback STT
+        lang_code = "en"
 
         segments, info = model.transcribe(
             audio_data,
