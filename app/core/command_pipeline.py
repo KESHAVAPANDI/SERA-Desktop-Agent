@@ -59,15 +59,18 @@ class CommandPipeline:
         task_id: str | None = None,
         source: str = "TEXT",
         metrics: Any = None,
+        is_voice_turn: bool = False,
     ) -> dict[str, Any]:
         """Entrypoint to parse, validate, execute, and verify a user command utterance."""
         t_start = time.time()
         task_id = task_id or f"task_{uuid.uuid4().hex[:8]}"
+        self._current_is_voice_turn = is_voice_turn
 
         # 1. State: RECEIVED -> CLASSIFYING
         self.state.transition_to(SERAStatus.THINKING)
         self.state.last_user_message = text
-        self._emit_event("TASK_STARTED", {"task_id": task_id, "user_input": text, "source": source})
+        if not is_voice_turn:
+            self._emit_event("TASK_STARTED", {"task_id": task_id, "user_input": text, "source": source})
 
         # Update context map
         ctx = {
@@ -135,7 +138,8 @@ class CommandPipeline:
             logger.warning(f"[CommandPipeline] {err_msg}")
             self.state.transition_to(SERAStatus.BROKEN)
             self._emit_event("TASK_FAILED", {"task_id": task_id, "error": err_msg})
-            return self._finalize_result(task_id, False, err_msg, t_start, error=err_msg)
+            spoken_err = "That request took a little too long to finish. Let's try that again."
+            return self._finalize_result(task_id, False, spoken_err, t_start, error=err_msg)
 
     async def _execute_command_internal(
         self,
@@ -164,11 +168,7 @@ class CommandPipeline:
                     err = step_res.get("error") or f"Step {step.step_id} ({step.action}) failed."
                     self.state.transition_to(SERAStatus.BROKEN)
                     self._emit_event("TASK_FAILED", {"task_id": task_id, "error": err, "status": "BROKEN"})
-                    if cmd.intent == "open_application":
-                        app_name = cmd.parameters.get("application", "")
-                        spoken_err = f"I couldn't open {app_name}." if app_name else "I couldn't open the application."
-                    else:
-                        spoken_err = err
+                    spoken_err = self._synthesize_conversational_error(cmd.intent, err, cmd.parameters)
                     return self._finalize_result(task_id, False, spoken_err, t_start, error=err)
 
                 # Capture entity context
@@ -280,7 +280,8 @@ class CommandPipeline:
                 is_success = False
 
             if not is_success:
-                err_text = evidence.failure_reason or (tool_res.get("error") if isinstance(tool_res, dict) else str(tool_res)) or f"Execution of {tool_name} failed."
+                tool_err = tool_res.get("error") if isinstance(tool_res, dict) else None
+                err_text = tool_err or evidence.failure_reason or f"Execution of {tool_name} failed."
                 self._emit_event("TOOL_FAILED", {"task_id": task_id, "tool_name": tool_name, "error": err_text, "evidence": evidence.to_dict()})
                 return {"success": False, "tool": tool_name, "error": err_text, "latency_ms": step_latency_ms, "evidence": evidence.to_dict()}
 
@@ -353,33 +354,88 @@ class CommandPipeline:
             q = cmd.parameters.get("query", "")
             return f"Searched YouTube for '{q}' and opened the results."
 
+    def _synthesize_conversational_error(self, intent: str, technical_error: str, parameters: dict | None = None) -> str:
+        """Shields the user and Primary Presence from raw exceptions, process exit codes, and Win32 errors."""
+        params = parameters or {}
+        t_err = (technical_error or "").lower()
+
+        if "timeout" in t_err or "deadline" in t_err:
+            return "That request took a little too long to finish. Let's try that again."
+
+        if intent == "open_application":
+            app = params.get("application", "that application")
+            return f"I couldn't find or open {app}."
+
+        if intent == "close_application":
+            app = params.get("application", "that application")
+            return f"I wasn't able to close {app}."
+
+        if intent == "set_brightness":
+            return "I wasn't able to adjust the brightness on this display."
+
+        if intent in ("set_volume", "mute", "unmute"):
+            return "I couldn't change the audio volume right now."
+
+        if intent in ("web_search", "youtube_search"):
+            return "I had trouble searching right now. Please check your internet connection."
+
+        if intent in ("find_files", "open_folder", "open_file"):
+            return "I couldn't locate that file or folder on your computer."
+
+        if intent in ("screen_capture_only", "inspect_screen", "analyze_screen"):
+            return "I had trouble capturing your screen just now."
+
+        if intent == "sera_self_close":
+            return "I wasn't able to close the presence window automatically."
+
+        return "I ran into a problem taking care of that. Could you ask me again?"
+
+    def _synthesize_plan_response(self, cmd: CommandObject, step_results: list[dict[str, Any]]) -> str:
+        """Synthesizes an intelligent, concise, conversational response for multi-step or single-step plans."""
+        intent = cmd.intent
+        last_step_res = step_results[-1].get("result") if step_results else {}
+
+        # Screen Capture & Vision
+        if intent == "screen_capture_only":
+            return "I've captured your screen for you."
+
+        if intent in ("screen_capture_and_inspect", "inspect_screen"):
+            if isinstance(last_step_res, dict) and last_step_res.get("summary"):
+                return str(last_step_res.get("summary"))
+            return "Here is what I see on your screen."
+
+        # YouTube Search
+        if intent in ("youtube_search", "open_and_youtube_search"):
+            q = cmd.parameters.get("query", "")
+            return f"I've searched YouTube for '{q}'."
+
         # Web Search
         if intent in ("web_search", "open_and_web_search"):
             q = cmd.parameters.get("query", "")
             count = last_step_res.get("count", 0) if isinstance(last_step_res, dict) else (len(last_step_res.get("results", [])) if isinstance(last_step_res, dict) else 0)
             if count > 0:
                 return f"I found {count} results for {q}."
-            return f"Searched the web for '{q}'."
+            return f"Here's what I found for '{q}'."
 
         # Open Application
         if intent == "open_application":
             app = cmd.parameters.get("application", "").strip()
             if app.lower() in ("chrome", "google chrome"):
-                return "Chrome is now open."
-            return f"Opened {app.capitalize()}."
+                return "I've opened Chrome for you."
+            return f"I've opened {app.capitalize()}."
 
         # Close Application
         if intent == "close_application":
             app = cmd.parameters.get("application", "")
-            return f"Closed {app.capitalize()}."
+            return f"I've closed {app.capitalize()}."
 
         # Open Folder
         if intent in ("open_folder", "open_folder_and_find"):
             folder = cmd.parameters.get("folder_name", "")
             if intent == "open_folder_and_find":
                 pat = cmd.parameters.get("pattern", "")
-                return f"Opened {folder.capitalize()} folder and searched for '{pat}'."
-            return f"Opened {folder.capitalize()} folder in File Explorer."
+                return f"I've opened your {folder.capitalize()} folder and searched for '{pat}'."
+            return f"I've opened your {folder.capitalize()} folder."
 
         # Find Files
         if intent == "find_files":
@@ -389,75 +445,79 @@ class CommandPipeline:
             if count > 0:
                 latest = last_step_res.get("latest_file", {}).get("name") if isinstance(last_step_res, dict) else ""
                 if latest:
-                    return f"Found '{latest}' in {folder}."
-                return f"Found {count} file(s) matching '{pat}' in {folder}."
-            return f"No files matching '{pat}' were found in {folder}."
+                    return f"I found '{latest}' in your {folder} folder."
+                return f"I found {count} file{'s' if count != 1 else ''} matching '{pat}' in your {folder} folder."
+            return f"I couldn't find any files matching '{pat}' in your {folder} folder."
 
         # Open File
         if intent == "open_file":
             fp = cmd.parameters.get("file_path", "")
-            return f"Opened file '{os.path.basename(fp)}'."
+            return f"I've opened '{os.path.basename(fp)}'."
 
         # System: Time
         if intent == "get_current_time":
             if isinstance(last_step_res, dict) and last_step_res.get("time"):
-                return f"The current time is {last_step_res.get('time')}, {last_step_res.get('date')}."
-            return "Retrieved current time."
+                return f"It's {last_step_res.get('time')} on {last_step_res.get('date')}."
+            return "The current time has been retrieved."
 
         # System: System Info
         if intent == "get_system_info":
             if isinstance(last_step_res, dict):
                 cpu = last_step_res.get("cpu_percent", "N/A")
                 ram = last_step_res.get("memory", {}).get("percent", "N/A")
-                return f"CPU usage is at {cpu}%, and RAM usage is at {ram}%."
-            return "System diagnostic complete."
+                return f"Your CPU is at {cpu} percent, and memory is at {ram} percent."
+            return "All system diagnostics look healthy."
 
         # System: Battery
         if intent == "get_battery_status":
             if isinstance(last_step_res, dict) and last_step_res.get("percentage") is not None:
                 pct = last_step_res.get("percentage")
                 plugged = "charging" if last_step_res.get("charging") else "on battery power"
-                return f"Battery is at {pct}% ({plugged})."
-            return "Battery status checked."
+                return f"Your battery is at {pct} percent and currently {plugged}."
+            return "Your battery status is steady."
 
         # System: Wi-Fi
         if intent == "get_wifi_status":
             if isinstance(last_step_res, dict):
                 ssid = last_step_res.get("ssid")
                 if ssid and ssid != "Not connected":
-                    return f"Connected to Wi-Fi network '{ssid}'."
-                return "Wi-Fi is disconnected or unavailable."
-            return "Wi-Fi status checked."
+                    return f"You're connected to {ssid}."
+                return "Your Wi-Fi is currently disconnected."
+            return "Your network status is steady."
 
         # System: Brightness / Volume / Mute
         if intent == "set_brightness":
-            return f"Brightness has been set to {cmd.parameters.get('brightness')} percent."
+            return f"I've set the brightness to {cmd.parameters.get('brightness')} percent."
         if intent == "set_volume":
-            return f"Volume set to {cmd.parameters.get('volume')} percent."
+            return f"I've set the volume to {cmd.parameters.get('volume')} percent."
         if intent == "mute":
-            return "System audio muted."
+            return "I've muted your audio."
         if intent == "unmute":
-            return "System audio unmuted."
+            return "I've unmuted your audio."
 
         # Self Close
         if intent == "sera_self_close":
-            return "SERA Presence has been safely closed."
+            return "Goodbye! Closing presence now."
 
         # Power
         if intent == "lock_computer":
-            return "Computer screen locked."
+            return "I've locked your computer."
         if intent == "sleep_computer":
-            return "Computer placed in sleep mode."
+            return "Putting your computer to sleep."
 
         # List Running Applications
         if intent == "list_running_applications":
             count = last_step_res.get("count", 0) if isinstance(last_step_res, dict) else 0
-            return f"There are currently {count} active application processes running."
+            return f"You currently have {count} active applications running."
+
+        # Assistant Attention / Wake
+        if intent == "assistant_wake":
+            return "Yes, I'm here. How can I help you?"
 
         # General
         if isinstance(last_step_res, dict) and last_step_res.get("message"):
             return str(last_step_res.get("message"))
-        return "Action completed successfully."
+        return "I've taken care of that for you."
 
     def _finalize_result(
         self,
@@ -471,34 +531,46 @@ class CommandPipeline:
         """Ensures terminal state, updates state machine, and broadcasts single response event."""
         duration = round(time.time() - t_start, 2)
         self.state.last_response = response_text
+        is_voice = getattr(self, "_current_is_voice_turn", False)
 
-        # 1. Emit Authoritative Single Response Payload
-        self._emit_event("AGENT_RESPONSE", {
-            "task_id": task_id,
-            "turn_id": task_id,
-            "type": "ASSISTANT_MESSAGE",
-            "content": response_text,
-            "status": "COMPLETED" if success else "BROKEN",
-        })
-
-        # 2. Emit Terminal State Event
-        if success:
-            self.state.transition_to(SERAStatus.IDLE)
-            self._emit_event("TASK_COMPLETED", {
+        if not is_voice:
+            # 1. Emit Authoritative Single Response Payload for standalone calls
+            self._emit_event("AGENT_RESPONSE", {
                 "task_id": task_id,
-                "status": "COMPLETED",
-                "result": response_text,
-                "duration_seconds": duration,
-                "steps": step_results or [],
+                "turn_id": task_id,
+                "type": "ASSISTANT_MESSAGE",
+                "content": response_text,
+                "status": "COMPLETED" if success else "BROKEN",
             })
+
+            # 2. Emit Terminal State Event
+            if success:
+                self.state.transition_to(SERAStatus.IDLE)
+                self._emit_event("TASK_COMPLETED", {
+                    "task_id": task_id,
+                    "status": "COMPLETED",
+                    "result": response_text,
+                    "duration_seconds": duration,
+                    "steps": step_results or [],
+                })
+            else:
+                self.state.transition_to(SERAStatus.BROKEN)
+                self._emit_event("TASK_FAILED", {
+                    "task_id": task_id,
+                    "status": "BROKEN",
+                    "error": error or response_text,
+                    "duration_seconds": duration,
+                })
         else:
-            self.state.transition_to(SERAStatus.BROKEN)
-            self._emit_event("TASK_FAILED", {
-                "task_id": task_id,
-                "status": "BROKEN",
-                "error": error or response_text,
-                "duration_seconds": duration,
-            })
+            # Under voice turns, SERARuntime manages AGENT_RESPONSE -> SPEAKING -> TTS -> TASK_COMPLETED -> IDLE
+            if not success:
+                self.state.transition_to(SERAStatus.BROKEN)
+                self._emit_event("TASK_FAILED", {
+                    "task_id": task_id,
+                    "status": "BROKEN",
+                    "error": error or response_text,
+                    "duration_seconds": duration,
+                })
 
         print(f"\n[SERA RESPONSE] ({duration}s) {response_text}")
 
@@ -518,3 +590,4 @@ class CommandPipeline:
                 self.event_bus.emit(event_name, payload)
             except Exception as e:
                 logger.debug(f"[CommandPipeline] EventBus emit error: {e}")
+

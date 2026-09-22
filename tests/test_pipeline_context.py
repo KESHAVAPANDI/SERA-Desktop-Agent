@@ -52,7 +52,8 @@ class TestPipelineContext(unittest.IsolatedAsyncioTestCase):
 
         res = await pipeline.execute_text("close yourself")
         self.assertTrue(res.get("success"))
-        self.assertIn("safely closed", res.get("response").lower())
+        resp_lower = res.get("response", "").lower()
+        self.assertTrue("closing presence" in resp_lower or "safely closed" in resp_lower)
         close_tool.execute.assert_called_once()
 
 

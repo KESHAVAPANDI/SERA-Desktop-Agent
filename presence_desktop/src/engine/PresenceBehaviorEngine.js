@@ -303,10 +303,31 @@ export class PresenceBehaviorEngine {
 
   setAudioData(bands) {
     if (!bands) return;
-    this.audioBands.rawAmp = bands.rawAmp || 0.0;
-    this.audioBands.bass = bands.bass || 0.0;
-    this.audioBands.mid = bands.mid || 0.0;
-    this.audioBands.treble = bands.treble || 0.0;
+    const rawIn = Math.max(0.0, Math.min(1.0, bands.rawAmp || 0.0));
+    const bassIn = Math.max(0.0, Math.min(1.0, bands.bass || 0.0));
+    const midIn = Math.max(0.0, Math.min(1.0, bands.mid || 0.0));
+    const trebleIn = Math.max(0.0, Math.min(1.0, bands.treble || 0.0));
+
+    // Attack / Decay Spectral Integrator (Fast attack ~15ms, smooth exponential decay ~150ms)
+    const attack = 0.65;
+    const decay = 0.14;
+
+    this.audioBands.rawAmp += (rawIn > this.audioBands.rawAmp ? attack : decay) * (rawIn - this.audioBands.rawAmp);
+    this.audioBands.bass += (bassIn > this.audioBands.bass ? attack : decay) * (bassIn - this.audioBands.bass);
+    this.audioBands.mid += (midIn > this.audioBands.mid ? attack : decay) * (midIn - this.audioBands.mid);
+    this.audioBands.treble += (trebleIn > this.audioBands.treble ? attack : decay) * (trebleIn - this.audioBands.treble);
+
+    // Ambient noise-floor gate (below 0.015 cleanly settles to zero)
+    if (this.audioBands.rawAmp < 0.015) this.audioBands.rawAmp = 0.0;
+    if (this.audioBands.bass < 0.015) this.audioBands.bass = 0.0;
+    if (this.audioBands.mid < 0.015) this.audioBands.mid = 0.0;
+    if (this.audioBands.treble < 0.015) this.audioBands.treble = 0.0;
+
+    // Organic Energy Coupling: speech dynamically elevates computational budget
+    if (this.targetState === "LISTENING" || this.targetState === "SPEAKING") {
+      const speechEnergyBoost = this.audioBands.rawAmp * 0.35 + this.audioBands.mid * 0.20;
+      this.energyBudget = Math.min(1.0, Math.max(this.energyBudget, (this.energyLevels[this.targetState] || 0.5) + speechEnergyBoost));
+    }
   }
 
   // ─── Per-Frame Simulation Loop ────────────────────────────────────────────
@@ -423,21 +444,24 @@ export class PresenceBehaviorEngine {
     // Non-linear cardiac oscillation: slow diastolic expansion, swift systolic intake
     const cycle = (this.time * 0.6) % (Math.PI * 2);
     const asymmetricWave = Math.sin(cycle) + Math.sin(cycle * 2.0) * 0.25;
-    return 1.0 + asymmetricWave * (0.04 + this.energyBudget * 0.08);
+    const vocalPuff = this.audioBands.bass * 0.18 + this.audioBands.rawAmp * 0.10;
+    return 1.0 + asymmetricWave * (0.04 + this.energyBudget * 0.08) + vocalPuff;
   }
 
   computeTopologyWanderRate() {
-    // Wandering velocity scales with energy budget and state
-    if (this.targetState === "THINKING") return 0.045;
-    if (this.targetState === "EXECUTING") return 0.030;
+    // Wandering velocity scales with energy budget, voice formants, and state
+    const voiceWander = this.audioBands.mid * 0.025;
+    if (this.targetState === "THINKING") return 0.045 + voiceWander;
+    if (this.targetState === "EXECUTING") return 0.030 + voiceWander;
     if (this.targetState === "BROKEN") return 0.080;
-    return 0.012 + (this.energyBudget - 0.25) * 0.02;
+    return 0.012 + (this.energyBudget - 0.25) * 0.02 + voiceWander;
   }
 
   computeCoreDistortion() {
     const base = 0.28 + this.energyBudget * 0.45;
     const impulse = this.impulse.coreShock * 0.4 + this.impulse.anomalyGlitch * 0.6;
-    const audioMod = this.audioBands.bass * 0.55 + this.audioBands.rawAmp * 0.25;
+    // Acoustic chamber resonance displacement from vocal fundamentals
+    const audioMod = this.audioBands.bass * 0.70 + this.audioBands.rawAmp * 0.35;
     return base + impulse + audioMod;
   }
 }

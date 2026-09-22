@@ -26,7 +26,7 @@ let mainWindow = null;
 let tray = null;
 
 const WINDOW_WIDTH = 380;
-const WINDOW_HEIGHT = 380;
+const WINDOW_HEIGHT = 500;
 const COMMAND_CENTER_URL = "http://127.0.0.1:8765";
 
 function calculateDefaultPosition() {
@@ -236,7 +236,7 @@ function setupTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Show / Focus SERA (Ctrl+Space)",
+      label: "Show / Focus SERA (Ctrl+Alt+Space)",
       click: () => {
         if (mainWindow) {
           mainWindow.show();
@@ -285,7 +285,7 @@ function setupTray() {
 function registerShortcuts() {
   // Global hotkey handling is centrally managed by Python GlobalHotkeyManager (GetAsyncKeyState),
   // avoiding Win32 RegisterHotKey conflicts and eliminating first-press drops.
-  console.log("[Main] Global Hotkey (Ctrl+Space) delegated to Python SERA Runtime.");
+  console.log("[Main] Global Hotkey (Ctrl+Alt+Space) delegated to Python SERA Runtime.");
 }
 
 app.whenReady().then(() => {

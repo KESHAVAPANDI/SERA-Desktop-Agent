@@ -9,24 +9,26 @@
 <body>
   <!-- Fixed Translucent Glass Box Container -->
   <div id="glass-panel" class="glass-panel">
-    <!-- 1. Master WebGL Transparent Visual Canvas -->
-    <canvas id="presence-canvas"></canvas>
-
-    <!-- 2. Minimal HUD Layer -->
-    <div id="hud-overlay">
-      <!-- Header Bar (Only Draggable Region) -->
-      <div class="top-bar">
-        <div class="sera-brand">
-          <span class="status-dot"></span>
-          <span>SERA</span>
-        </div>
-        <div class="window-actions">
-          <button id="command-center-btn" class="action-btn" title="Open Technical Command Center">CMD</button>
-          <button id="minimize-btn" class="action-btn" title="Minimize to Tray">−</button>
-          <button id="close-btn" class="action-btn close-action" title="Close Presence">×</button>
-        </div>
+    <!-- Header Bar (Only Draggable Region) -->
+    <div class="top-bar">
+      <div class="sera-brand">
+        <span class="status-dot"></span>
+        <span>SERA</span>
       </div>
+      <div class="window-actions">
+        <button id="command-center-btn" class="action-btn" title="Open Technical Command Center">CMD</button>
+        <button id="minimize-btn" class="action-btn" title="Minimize to Tray">−</button>
+        <button id="close-btn" class="action-btn close-action" title="Close Presence">×</button>
+      </div>
+    </div>
 
+    <!-- 1. Protected Visual Viewport: Dedicated exclusively to 3D Consciousness Core -->
+    <div id="core-viewport" class="core-viewport">
+      <canvas id="presence-canvas"></canvas>
+    </div>
+
+    <!-- 2. Separate Bottom Conversation Drawer: Lives strictly below the core viewport -->
+    <div id="bottom-drawer" class="bottom-drawer">
       <!-- Real-Time Voice Conversation Container (Animated Expansion) -->
       <div id="conversation-container" class="conversation-container">
         <!-- User Command Box (Always Remains Visible) -->
@@ -45,7 +47,7 @@
             <span id="user-caption-time" class="caption-timestamp">LIVE</span>
           </div>
           <div id="user-caption-text" class="caption-text user-text">
-            <span class="caption-placeholder">Hold Ctrl+Space to speak...</span>
+            <span class="caption-placeholder">Hold Ctrl+Alt+Space to speak...</span>
           </div>
         </div>
 
@@ -68,7 +70,7 @@
       <!-- Bottom Kinetic Status Bar -->
       <div class="bottom-bar">
         <div id="kinetic-status" class="kinetic-status">VOICE READY</div>
-        <div id="kinetic-substatus" class="kinetic-substatus">HOLD CTRL+SPACE TO SPEAK</div>
+        <div id="kinetic-substatus" class="kinetic-substatus">HOLD CTRL+ALT+SPACE TO SPEAK</div>
       </div>
     </div>
   </div>

@@ -3,7 +3,7 @@
  * Completely Voice-Driven Interaction Engine
  * 
  * Features:
- * - Pure voice interaction (Hold-To-Talk via Ctrl+Space & Wake Word)
+ * - Pure voice interaction (Hold-To-Talk via Ctrl+Alt+Space & Wake Word)
  * - Real-time multi-band microphone audio driving the 3D core shaders
  * - Live STT partial captions streaming during speech
  * - Finalized command caption stays pinned and visible
@@ -32,6 +32,8 @@ class PresenceApp {
     this.substatusEl = document.getElementById("kinetic-substatus");
 
     // Voice Conversation Container Elements
+    this.glassPanel = document.getElementById("glass-panel");
+    this.bottomDrawer = document.getElementById("bottom-drawer");
     this.convContainer = document.getElementById("conversation-container");
     this.userBox = document.getElementById("user-caption-box");
     this.userTextEl = document.getElementById("user-caption-text");
@@ -113,7 +115,7 @@ class PresenceApp {
     if (window.seraNative && window.seraNative.onGlobalActivate) {
       window.seraNative.onGlobalActivate(() => {
         this.expandConversation();
-        this.setStatus("VOICE ACTIVE", "HOLD CTRL+SPACE TO SPEAK");
+        this.setStatus("VOICE ACTIVE", "HOLD CTRL+ALT+SPACE TO SPEAK");
       });
     }
 
@@ -123,7 +125,7 @@ class PresenceApp {
         this.scheduleConversationCollapse(3000);
       } else {
         this.expandConversation();
-        this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+        this.setStatus("VOICE READY", "HOLD CTRL+ALT+SPACE TO SPEAK");
         this.scheduleConversationCollapse(5000);
       }
     });
@@ -175,11 +177,23 @@ class PresenceApp {
     if (this.convContainer) {
       this.convContainer.classList.add("active");
     }
+    if (this.bottomDrawer) {
+      this.bottomDrawer.classList.add("active");
+    }
+    if (this.glassPanel) {
+      this.glassPanel.classList.add("conversation-active");
+    }
   }
 
   collapseConversation() {
     if (this.convContainer) {
       this.convContainer.classList.remove("active");
+    }
+    if (this.bottomDrawer) {
+      this.bottomDrawer.classList.remove("active");
+    }
+    if (this.glassPanel) {
+      this.glassPanel.classList.remove("conversation-active");
     }
   }
 
@@ -297,7 +311,7 @@ class PresenceApp {
 
       this.ws.onopen = () => {
         console.log("[PresenceApp] Connected to SERA Python Runtime EventBus.");
-        this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+        this.setStatus("VOICE READY", "HOLD CTRL+ALT+SPACE TO SPEAK");
       };
 
       this.ws.onmessage = (event) => {
@@ -338,7 +352,7 @@ class PresenceApp {
           this.engine.setTaskVisualization(taskType, taskText);
         }
         if (status === "IDLE") {
-          this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+          this.setStatus("VOICE READY", "HOLD CTRL+ALT+SPACE TO SPEAK");
         } else {
           this.setStatus(status, payload?.task || "PROCESSING RUNTIME STATE");
         }
@@ -351,7 +365,7 @@ class PresenceApp {
         }
         if (this.engine.state !== "LISTENING") {
           this.engine.setState("LISTENING");
-          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
+          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+ALT+SPACE • RELEASE TO EXECUTE");
           this.resetConversationForNewUtterance();
         }
         break;
@@ -359,7 +373,7 @@ class PresenceApp {
       case "LISTENING_STARTED":
         if (this.engine.state !== "LISTENING") {
           this.engine.setState("LISTENING");
-          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+SPACE • RELEASE TO EXECUTE");
+          this.setStatus("LISTENING TO AUDIO STREAM", "HOLD CTRL+ALT+SPACE • RELEASE TO EXECUTE");
           this.resetConversationForNewUtterance();
         }
         break;
@@ -486,7 +500,7 @@ class PresenceApp {
         this.setStatus("OBJECTIVE COMPLETE", "COMPUTATIONAL REGENERATION");
         setTimeout(() => {
           this.engine.setState("IDLE");
-          this.setStatus("VOICE READY", "HOLD CTRL+SPACE TO SPEAK");
+          this.setStatus("VOICE READY", "HOLD CTRL+ALT+SPACE TO SPEAK");
         }, 2200);
         this.scheduleConversationCollapse(8000);
         break;

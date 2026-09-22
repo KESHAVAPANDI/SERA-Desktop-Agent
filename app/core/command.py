@@ -59,6 +59,54 @@ class CommandObject:
     raw_response: str | None = None
 
 
+def normalize_conversational_utterance(text: str) -> tuple[str, bool]:
+    """Normalizes natural conversational addressing, vocatives, and courtesy prefixes.
+
+    Returns:
+        (normalized_text, is_pure_address)
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return ("", False)
+
+    cleaned = raw.lower().strip().rstrip(".!?")
+    cleaned = re.sub(r"^[\s,:\-]+|[\s,:\-]+$", "", cleaned).strip()
+
+    # Pure address check: "Sarah", "Sera", "Hey Sarah", "Hi Sera", "Ok Sera"
+    pure_address_patterns = [
+        r"^(?:hey|hi|hello|ok|okay)?\s*(?:sera|sarah|sara)$",
+    ]
+    if any(re.match(p, cleaned) for p in pure_address_patterns):
+        return ("", True)
+
+    # 1. Strip leading vocatives & greetings: "Sarah, ...", "Hey Sera, ...", "Ok Sarah "
+    cleaned = re.sub(
+        r"^(?:(?:hey|hi|hello|ok|okay)\s+)?(?:sera|sarah|sara)\b[\s,:\-]*",
+        "",
+        cleaned,
+    )
+
+    # 2. Strip polite requests & courtesy modals: "could you please", "please", "can you", "would you kindly"
+    cleaned = re.sub(
+        r"^(?:(?:could|can|would)\s+you\s+(?:please\s+)?(?:kindly\s+)?|please\s+|kindly\s+)",
+        "",
+        cleaned,
+    )
+
+    # 3. Strip trailing address & politeness: ", Sarah", ", please", " sera"
+    # Preserve when sera/sarah/presence is the direct target of close/exit/quit/shutdown
+    is_self_close_target = bool(re.match(r"^(?:close|exit|quit|terminate|shutdown|shut\s+down)\s+(?:yourself|sera|sarah|presence)$", cleaned))
+    if not is_self_close_target:
+        cleaned = re.sub(
+            r"[\s,:\-]+(?:sera|sarah|sara|please)[\s\.]*$",
+            "",
+            cleaned,
+        )
+
+    cleaned = re.sub(r"^[\s,:\-]+|[\s,:\-]+$", "", cleaned).strip()
+    return (cleaned, False)
+
+
 class CommandParser:
     """Multi-layer command interpretation engine."""
 
@@ -107,10 +155,23 @@ class CommandParser:
     ) -> CommandObject:
         """Parses natural-language user utterance into a normalized CommandObject."""
         raw_text = text.strip()
-        cleaned = raw_text.lower().strip().rstrip(".!?")
+        normalized, is_pure_address = normalize_conversational_utterance(raw_text)
+        cleaned = normalized if normalized else raw_text.lower().strip().rstrip(".!?")
         cmd_id = f"cmd_{uuid.uuid4().hex[:8]}"
         t_id = task_id or f"task_{uuid.uuid4().hex[:8]}"
         context = context or {}
+
+        # Pure address wake / attention call
+        if is_pure_address:
+            return CommandObject(
+                command_id=cmd_id,
+                task_id=t_id,
+                intent="assistant_wake",
+                category=CommandCategory.CONVERSATION,
+                complexity=CommandComplexity.SIMPLE,
+                source_text=raw_text,
+                raw_response="Yes, I'm here. How can I help you?",
+            )
 
         # =========================================================
         # 1. LAYER 1: CONVERSATION (Zero Tools, <10ms Response)
@@ -673,7 +734,7 @@ class CommandParser:
             )
 
         # 8a0. Dedicated Native SERA Self-Close ("close yourself", "quit yourself", "exit yourself", "close sera", "close presence")
-        if re.search(r"^(?:close|exit|quit|terminate|shutdown|shut\s+down)\s+(?:yourself|sera|presence|the\s+presence|sera\s+presence)$", cleaned) or cleaned in ("close yourself", "quit yourself", "exit yourself", "shutdown yourself", "close sera", "quit sera", "exit sera", "close presence", "exit presence", "quit presence", "shut yourself down"):
+        if re.search(r"^(?:close|exit|quit|terminate|shutdown|shut\s+down)\s+(?:yourself|sera|sarah|sara|presence|the\s+presence|sera\s+presence)$", cleaned) or cleaned in ("close yourself", "quit yourself", "exit yourself", "shutdown yourself", "close sera", "quit sera", "exit sera", "close presence", "exit presence", "quit presence", "shut yourself down", "close sarah", "quit sarah", "exit sarah"):
             return CommandObject(
                 command_id=cmd_id,
                 task_id=t_id,

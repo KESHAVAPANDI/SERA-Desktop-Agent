@@ -409,28 +409,40 @@ class SERAUIServer:
 
             # 1. State / Health
             if path in ("/api/health", "/api/state"):
-                hotkey_running = bool(
-                    self.runtime
-                    and hasattr(self.runtime, "hotkey_manager")
-                    and getattr(self.runtime.hotkey_manager, "_running", False)
-                )
+                hotkey_mgr = getattr(self.runtime, "hotkey_manager", None)
+                hotkey_running = bool(hotkey_mgr and getattr(hotkey_mgr, "_running", False) is True)
+                thread_alive = bool(hotkey_mgr and getattr(hotkey_mgr, "_thread", None) and getattr(hotkey_mgr._thread, "is_alive", lambda: False)())
+                raw_combo = getattr(hotkey_mgr, "hotkey_str", "ctrl+alt+space") if hotkey_mgr else "ctrl+alt+space"
+                hotkey_combo = str(raw_combo) if isinstance(raw_combo, str) else "ctrl+alt+space"
+                raw_count = getattr(self.runtime, "hotkey_event_count", 0)
+                hotkey_event_count = int(raw_count) if isinstance(raw_count, (int, float)) else 0
+
                 is_ready = bool(
                     self.runtime
-                    and getattr(self.runtime, "is_ready", False)
+                    and getattr(self.runtime, "is_ready", False) is True
                     and hotkey_running
                 )
+
+                hotkey_meta = {
+                    "combination": hotkey_combo,
+                    "running": hotkey_running,
+                    "thread_alive": thread_alive,
+                    "event_count": hotkey_event_count,
+                }
 
                 if getattr(self, "is_initializing_runtime", False) and not is_ready:
                     return "503 Service Unavailable", resp_headers, json.dumps({
                         "ready": False,
                         "status": "INITIALIZING",
                         "hotkey_running": False,
+                        "hotkey": hotkey_meta,
                     }).encode("utf-8")
 
                 return "200 OK", resp_headers, json.dumps({
                     "ready": is_ready if self.runtime else True,
                     "status": "HEALTHY",
                     "hotkey_running": hotkey_running,
+                    "hotkey": hotkey_meta,
                     "snapshot": self._get_initial_snapshot(),
                 }).encode("utf-8")
 

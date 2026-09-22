@@ -196,7 +196,7 @@ IDENTITY:
                 # If a deterministic action succeeded, return natural spoken response immediately
                 deterministic_actions = (
                     "open_application", "close_application", "open_folder", "open_file",
-                    "browser_open", "capture_screen", "set_brightness", "set_volume",
+                    "browser_open", "youtube_search", "capture_screen", "set_brightness", "set_volume",
                     "mute_system", "unmute_system", "lock_screen"
                 )
                 if tool_call.name in deterministic_actions:
@@ -214,7 +214,10 @@ IDENTITY:
                             file_name = args_dict.get("file_path", "file")
                             final_resp = f"Opened {file_name}."
                         elif tool_call.name == "capture_screen":
-                            final_resp = "I have captured a screenshot of your screen."
+                            final_resp = "Screenshot captured."
+                        elif tool_call.name == "youtube_search":
+                            q = args_dict.get("query", "videos")
+                            final_resp = f"Searched YouTube for '{q}'."
                         else:
                             final_resp = str(result.get("message") or "Action completed.")
 

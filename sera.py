@@ -47,14 +47,15 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
         return s.connect_ex((host, port)) == 0
 
 
-def verify_http_endpoint(url: str, timeout: float = 15.0) -> bool:
+def verify_http_endpoint(url: str, timeout: float = 45.0) -> bool:
     """Poll HTTP health endpoint until responsive and verified ready or timeout expires."""
     deadline = time.time() + timeout
-    log(f"Verifying HTTP health endpoint at {url}...")
+    log(f"Verifying HTTP health endpoint at {url} (timeout: {timeout}s)...")
+    last_log_time = 0.0
     while time.time() < deadline:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "SERALauncher/2.0"})
-            with urllib.request.urlopen(req, timeout=1.0) as resp:
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
                 if resp.status == 200:
                     try:
                         raw = resp.read().decode("utf-8")
@@ -64,13 +65,81 @@ def verify_http_endpoint(url: str, timeout: float = 15.0) -> bool:
                             return True
                     except Exception:
                         pass
-        except urllib.error.HTTPError:
-            time.sleep(0.3)
+        except urllib.error.HTTPError as he:
+            if time.time() - last_log_time > 3.0:
+                log(f"Runtime is initializing... (HTTP {he.code})")
+                last_log_time = time.time()
+            time.sleep(0.4)
         except (urllib.error.URLError, ConnectionRefusedError, socket.timeout):
+            time.sleep(0.4)
+        except Exception:
+            time.sleep(0.4)
+    log("HTTP health check FAILED: Timeout reached")
+    return False
+
+
+def reclaim_port(port: int, host: str = "127.0.0.1") -> bool:
+    """Identifies and terminates any stale/orphaned process occupying the target port."""
+    if not is_port_in_use(port, host):
+        return True
+
+    log(f"Port {port} is occupied by an existing process. Reclaiming port for authoritative master...")
+    try:
+        cmd = f"netstat -ano | findstr :{port}"
+        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+        pids = set()
+        for line in output.strip().splitlines():
+            parts = line.split()
+            if len(parts) >= 5 and f":{port}" in parts[1] and parts[3] == "LISTENING":
+                pid = parts[4]
+                if pid.isdigit() and int(pid) != os.getpid():
+                    pids.add(int(pid))
+
+        for pid in pids:
+            log(f"Terminating stale/orphaned process on port {port} (PID: {pid})...")
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            if not is_port_in_use(port, host):
+                log(f"Port {port} successfully reclaimed and ready.")
+                return True
+            time.sleep(0.2)
+    except Exception as e:
+        log(f"Port reclamation note: {e}")
+
+    return not is_port_in_use(port, host)
+
+
+def verify_hotkey_authority(url: str, expected_combo: str = "ctrl+alt+space", timeout: float = 30.0) -> bool:
+    """Verifies that the authoritative runtime has an active, live hotkey listener thread."""
+    deadline = time.time() + timeout
+    log(f"Verifying Hotkey Authority ({expected_combo.upper()}) at {url}...")
+    last_log_time = 0.0
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "SERALauncher/2.0"})
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    raw = resp.read().decode("utf-8")
+                    data = json.loads(raw)
+                    hotkey = data.get("hotkey", {})
+                    is_ready = data.get("ready") is True
+                    running = hotkey.get("running") is True
+                    thread_alive = hotkey.get("thread_alive") is True
+                    combo = hotkey.get("combination", "").lower()
+
+                    if is_ready and running and thread_alive:
+                        log(f"Hotkey Authority VERIFIED: Active runtime listener confirmed for '{combo.upper()}'.")
+                        return True
+        except urllib.error.HTTPError as he:
+            if time.time() - last_log_time > 3.0:
+                log(f"Runtime hotkey subsystem initializing... (HTTP {he.code})")
+                last_log_time = time.time()
             time.sleep(0.3)
         except Exception:
             time.sleep(0.3)
-    log("HTTP health check FAILED: Timeout reached")
+    log("Hotkey Authority FAILED: Listener thread not confirmed within timeout.")
     return False
 
 
@@ -155,6 +224,9 @@ def shutdown_handler(sig=None, frame=None):
             except Exception:
                 pass
 
+    # Ensure port 8765 is completely freed
+    reclaim_port(PORT, HOST)
+
     log("All child processes terminated cleanly. SERA shutdown complete.")
     print("=" * 60, flush=True)
 
@@ -184,19 +256,16 @@ def get_python_executable() -> str:
     return sys.executable
 
 
-def start_runtime_server() -> subprocess.Popen | None:
-    """Start Python backend runtime if not already active."""
-    if is_port_in_use(PORT, HOST):
-        log(f"Detected existing service on port {PORT}. Checking health...")
-        if verify_http_endpoint(HTTP_HEALTH_URL, timeout=2.0):
-            log(f"Existing SERA runtime is active and healthy on port {PORT}.")
-            return None
-        log(f"Port {PORT} in use but unresponsive. Please free port {PORT} and retry.")
-        return None
+def start_runtime_server() -> subprocess.Popen:
+    """Start authoritative Python backend runtime as an owned child process."""
+    if not reclaim_port(PORT, HOST):
+        log(f"FATAL: Port {PORT} is occupied and could not be reclaimed. Free port {PORT} and retry.")
+        sys.exit(1)
 
     python_bin = get_python_executable()
-    log(f"Starting SERA Runtime Server using {python_bin} ({SERVER_SCRIPT})...")
+    log(f"Starting Authoritative SERA Runtime Server using {python_bin} ({SERVER_SCRIPT})...")
     env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     proc = subprocess.Popen(
         [python_bin, SERVER_SCRIPT],
         cwd=PROJECT_ROOT,
@@ -246,24 +315,31 @@ def main():
     print("  Surface: Native Windows Transparent Presence + Command Center")
     print("=" * 60)
 
-    # 1. Start Runtime Server
+    # 1. Start Runtime Server (Sole Master Authority)
     server_proc = start_runtime_server()
 
     # 2. Verify HTTP port 8765
-    http_ok = verify_http_endpoint(HTTP_HEALTH_URL, timeout=30.0)
+    http_ok = verify_http_endpoint(HTTP_HEALTH_URL, timeout=45.0)
     if not http_ok:
         log("FATAL: SERA Runtime Server failed to respond on HTTP health check.")
         shutdown_handler()
         sys.exit(1)
 
-    # 3. Verify real WebSocket connection
+    # 3. Verify Hotkey Authority before launching Presence
+    hotkey_ok = verify_hotkey_authority(HTTP_HEALTH_URL, expected_combo="ctrl+alt+space", timeout=20.0)
+    if not hotkey_ok:
+        log("FATAL: Hotkey Authority verification failed. Master presence aborted.")
+        shutdown_handler()
+        sys.exit(1)
+
+    # 4. Verify real WebSocket connection
     ws_ok = verify_websocket_endpoint(WS_URL, timeout=6.0)
     if not ws_ok:
         log("FATAL: WebSocket endpoint verification failed. Cannot claim PASS.")
         shutdown_handler()
         sys.exit(1)
 
-    log("Core Runtime & WebSocket Bridge verified operational!")
+    log("Core Runtime, Hotkey Authority & WebSocket Bridge verified operational!")
 
     if headless:
         log("Headless mode requested. Server running. Press Ctrl+C to stop.")
@@ -296,7 +372,7 @@ def main():
             sys.exit(1)
 
     # 5. Normal Interactive Loop
-    log("SERA 2.0 is running live! Press Ctrl+Space on your desktop to summon.")
+    log("SERA 2.0 is running live! Press Ctrl+Alt+Space on your desktop to summon.")
     log("Press Ctrl+C in this terminal (or close the Presence window) to exit.")
 
     try:

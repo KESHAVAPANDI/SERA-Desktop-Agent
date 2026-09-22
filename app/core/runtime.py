@@ -194,7 +194,7 @@ class SERARuntime:
         )
 
         # Global Hotkey Manager with Hold-To-Talk
-        hotkey_combo = hotkey_cfg.get("combination", "ctrl+space")
+        hotkey_combo = hotkey_cfg.get("combination", "ctrl+alt+space")
         self.hotkey_manager = GlobalHotkeyManager(
             hotkey=hotkey_combo,
             on_press=self.handle_hotkey_press,
@@ -587,10 +587,10 @@ class SERARuntime:
                 "started_at": t_turn_start,
             })
 
-            response_text = await self.process_text(raw_text, metrics=metrics, turn_id=task_id)
+            response_text = await self.process_text(raw_text, metrics=metrics, turn_id=task_id, is_voice_turn=True)
             metrics.turn_completed_at = time.time()
             duration = time.time() - t_turn_start
-            final_resp = response_text or self.state.last_response or "Action completed."
+            final_resp = response_text or self.state.last_response or "All set."
 
             if self.active_task_info and self.active_task_info.get("task_id") == task_id:
                 self.active_task_info["status"] = "COMPLETED"
@@ -880,7 +880,13 @@ class SERARuntime:
             if hasattr(self, "wakeword_detector") and self.wakeword_detector:
                 self.wakeword_detector.resume()
 
-    async def process_text(self, text: str, metrics: LatencyMetrics | None = None, turn_id: str | None = None) -> str:
+    async def process_text(
+        self,
+        text: str,
+        metrics: LatencyMetrics | None = None,
+        turn_id: str | None = None,
+        is_voice_turn: bool = False,
+    ) -> str:
         """Processes a text utterance through the deterministic CommandPipeline."""
         text = text.strip()
         if not text:
@@ -892,6 +898,7 @@ class SERARuntime:
             text=text,
             task_id=turn_id,
             metrics=metrics,
+            is_voice_turn=is_voice_turn,
         )
 
         resp_text = result.get("response", "")

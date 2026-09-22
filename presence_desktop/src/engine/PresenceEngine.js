@@ -69,8 +69,8 @@ float snoise(vec3 v){
 export class PresenceEngine {
   constructor(canvas) {
     this.canvas = canvas;
-    this.width = canvas.clientWidth || window.innerWidth;
-    this.height = canvas.clientHeight || window.innerHeight;
+    this.width = canvas.clientWidth || 356;
+    this.height = canvas.clientHeight || 250;
 
     // Operational State
     this.state = "IDLE";
@@ -1058,24 +1058,25 @@ export class PresenceEngine {
     // 1. Layer 1: Core Rotation, Lattice & Micro-Singularity
     this.coreUniforms.uDistortion.value = b.coreDistortion;
     this.coreUniforms.uGlitchIntensity.value = b.impulses.anomalyGlitch;
-    this.coreUniforms.uAmplitude.value = b.audio.rawAmp * 1.6 + b.impulses.energyFlash * 0.7;
+    this.coreUniforms.uAmplitude.value = b.audio.rawAmp * 2.0 + b.audio.mid * 0.75 + b.impulses.energyFlash * 0.7;
 
     const coreAtt = b.attention.core;
-    const audioScale = 1.0 + (b.audio.rawAmp * 0.22);
+    const audioScale = 1.0 + (b.audio.bass * 0.22 + b.audio.rawAmp * 0.15);
     this.coreGroup.scale.setScalar(b.breathing * (0.85 + coreAtt * 0.2) * audioScale);
-    this.coreMesh.rotation.y += (0.25 + b.energy * 0.45) * delta;
+    this.coreMesh.rotation.y += (0.25 + b.energy * 0.45 + b.audio.mid * 0.6) * delta;
     this.coreMesh.rotation.x = Math.sin(this.time * 0.25) * (0.15 + b.energy * 0.15);
 
     if (this.innerLattice) {
-      this.innerLattice.material.opacity = b.attention.innerLattice * 0.75;
-      this.innerLattice.rotation.x -= (0.5 + b.energy * 0.8) * delta;
-      this.innerLattice.rotation.y += (0.7 + b.energy * 1.0) * delta;
+      this.innerLattice.material.opacity = b.attention.innerLattice * 0.75 + b.audio.mid * 0.25;
+      const latSpeed = (0.5 + b.energy * 0.8 + b.audio.mid * 1.6) * delta;
+      this.innerLattice.rotation.x -= latSpeed;
+      this.innerLattice.rotation.y += latSpeed * 1.3;
     }
 
     if (this.singParticles && this.singularityMesh) {
       this.singularityMesh.material.opacity = b.attention.innerLattice * 0.95;
       const sPos = this.singularityMesh.geometry.attributes.position.array;
-      const sSpeedMult = 0.8 + b.energy * 2.2;
+      const sSpeedMult = 0.8 + b.energy * 2.2 + b.audio.mid * 2.8;
       for (let s = 0; s < this.singParticles.length; s++) {
         const sp = this.singParticles[s];
         sp.th += sp.speedTh * delta * sSpeedMult;
@@ -1256,8 +1257,8 @@ export class PresenceEngine {
     posAttr.needsUpdate = true;
     this.nodePoints.material.opacity = b.attention.topology * 0.9;
 
-    // Dynamic edge distance threshold modulated by energy budget
-    const maxDist = 1.5 + b.energy * 1.1;
+    // Dynamic edge distance threshold modulated by energy budget & voice formants
+    const maxDist = 1.5 + b.energy * 1.1 + b.audio.mid * 0.7;
     let lineIdx = 0;
     const maxLines = (this.topologyNodeCount * (this.topologyNodeCount - 1)) / 2;
 
@@ -1389,8 +1390,8 @@ export class PresenceEngine {
 
   setupResize() {
     window.addEventListener("resize", () => {
-      this.width = this.canvas.clientWidth || window.innerWidth;
-      this.height = this.canvas.clientHeight || window.innerHeight;
+      this.width = this.canvas.clientWidth || 356;
+      this.height = this.canvas.clientHeight || 250;
       this.camera.aspect = this.width / this.height;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(this.width, this.height);

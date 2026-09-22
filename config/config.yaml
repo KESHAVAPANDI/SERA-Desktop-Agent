@@ -2,7 +2,7 @@ assistant:
   name: SERA
 
 hotkey:
-  combination: "ctrl+space"
+  combination: "ctrl+alt+space"
   enabled: true
   debounce_ms: 300
 
@@ -51,10 +51,9 @@ telemetry:
   manual_debug_mode: true
 
 stt:
-  provider: nvidia
-  model: nvidia/canary-qwen-2.5b
+  provider: gemini
+  model: gemini-3.5-transcribe
   language: en-US
-  endpoint: https://integrate.api.nvidia.com/v1/audio/transcriptions
   recording_duration_seconds: 5.0
 
 stt_fallback:
@@ -155,7 +154,7 @@ models:
     top_p: 0.7
 
   stt:
-    provider: nvidia
-    model: nvidia/canary-qwen-2.5b
+    provider: gemini
+    model: gemini-3.5-transcribe
     language: en-US
     recording_duration_seconds: 5.0

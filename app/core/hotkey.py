@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 VK_CONTROL = 0x11
 VK_LCONTROL = 0xA2
 VK_RCONTROL = 0xA3
+VK_MENU = 0x12       # Alt
+VK_LMENU = 0xA4      # Left Alt
+VK_RMENU = 0xA5      # Right Alt
 VK_SPACE = 0x20
+VK_SHIFT = 0x10
 
 
 class GlobalHotkeyManager:
@@ -21,7 +25,7 @@ class GlobalHotkeyManager:
 
     def __init__(
         self,
-        hotkey: str = "ctrl+space",
+        hotkey: str = "ctrl+alt+space",
         on_press: Callable[[], None] | None = None,
         on_release: Callable[[], None] | None = None,
         on_trigger: Callable[[], None] | None = None,  # Backward compatibility
@@ -30,6 +34,9 @@ class GlobalHotkeyManager:
         debounce_ms: int = 300,
     ):
         self.hotkey_str = hotkey.lower()
+        self.has_alt = "alt" in self.hotkey_str
+        self.has_ctrl = "ctrl" in self.hotkey_str or "control" in self.hotkey_str
+        self.has_space = "space" in self.hotkey_str
         self.on_press = on_press or on_trigger
         self.on_release = on_release
         self.loop = loop
@@ -118,27 +125,53 @@ class GlobalHotkeyManager:
 
     def _run_poll_loop(self) -> None:
         user32 = ctypes.windll.user32
+
+        # Ensure listener thread is attached to the active interactive input desktop
+        try:
+            h_desk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if h_desk:
+                user32.SetThreadDesktop(h_desk)
+        except Exception as e:
+            logger.debug(f"[GlobalHotkeyManager] Desktop attach note: {e}")
+
         get_async_key_state = user32.GetAsyncKeyState
 
         # Flush initial key state to clear any stale pressed bits before starting detection
         get_async_key_state(VK_CONTROL)
         get_async_key_state(VK_LCONTROL)
         get_async_key_state(VK_RCONTROL)
+        get_async_key_state(VK_MENU)
+        get_async_key_state(VK_LMENU)
+        get_async_key_state(VK_RMENU)
         get_async_key_state(VK_SPACE)
+
+        combo_label = self.hotkey_str.upper()
 
         while self._running:
             try:
                 # 0x8000 indicates key is currently pressed down
-                ctrl_down = bool(get_async_key_state(VK_CONTROL) & 0x8000 or get_async_key_state(VK_LCONTROL) & 0x8000 or get_async_key_state(VK_RCONTROL) & 0x8000)
+                ctrl_down = bool(
+                    get_async_key_state(VK_CONTROL) & 0x8000
+                    or get_async_key_state(VK_LCONTROL) & 0x8000
+                    or get_async_key_state(VK_RCONTROL) & 0x8000
+                )
+                alt_down = bool(
+                    get_async_key_state(VK_MENU) & 0x8000
+                    or get_async_key_state(VK_LMENU) & 0x8000
+                    or get_async_key_state(VK_RMENU) & 0x8000
+                )
                 space_down = bool(get_async_key_state(VK_SPACE) & 0x8000)
 
-                is_combo_down = ctrl_down and space_down
+                if self.has_alt:
+                    is_combo_down = ctrl_down and alt_down and space_down
+                else:
+                    is_combo_down = ctrl_down and space_down
 
                 if is_combo_down and not self._is_held:
                     # Key Down Event
                     with self._lock:
                         self._is_held = True
-                    logger.info("[GlobalHotkeyManager] Hotkey Ctrl+Space PRESSED (Hold-To-Talk).")
+                    logger.info(f"[GlobalHotkeyManager] Hotkey {combo_label} PRESSED (Hold-To-Talk).")
                     self._audio_cues.play_listening_cue()
                     self._dispatch(self.on_press)
 
@@ -146,7 +179,7 @@ class GlobalHotkeyManager:
                     # Key Up Event
                     with self._lock:
                         self._is_held = False
-                    logger.info("[GlobalHotkeyManager] Hotkey Ctrl+Space RELEASED (Stop recording).")
+                    logger.info(f"[GlobalHotkeyManager] Hotkey {combo_label} RELEASED (Stop recording).")
                     self._audio_cues.play_thinking_cue()
                     self._dispatch(self.on_release)
 
