@@ -20,6 +20,7 @@ This living document outlines development priorities organized into three horizo
 * **[x] Native Transparent Desktop Shell (Phase 2B):** Packaging `presence.html` into a lightweight, borderless, click-through desktop overlay window using `pywebview` on Windows (`app/ui/desktop_presence.py`).
 * **[x] Primary SERA Presence Rebuild (Phase 2):** Dedicated native Windows desktop overlay (`presence_desktop/`) using Electron 33 + Three.js WebGL 2.0 with true DWM alpha transparency, global shortcut (`Ctrl+Space`), 8-layer computational consciousness engine, and 8 distinct task-specific structural visualizations.
 * **[x] Primary Presence Behavior Engine (Phase 2B):** Continuous non-deterministic simulation engine (`PresenceBehaviorEngine.js`) driven by dynamic energy budget, visual attention model, organic pacing, visual memory, multi-band audio, micro-event reactions, and 7-phase computational cellular regeneration.
+* **[x] Stateful Graph Runtime Foundation (Phase 3A):** Canonical asynchronous directed execution graph engine (`app/core/graph/`) with strongly-typed `GraphState`, explicit node contracts, conditional branching, bounded loops/retries, real-time `asyncio.Event` cancellation, first-class `EvidenceVerificationFabric` completion gates, and event correlation across the runtime.
 * **[ ] Command Center Reorganization (Phase C):** Rebuilding `http://127.0.0.1:8765` into the 10 organized operational sections (`LIVE`, `TASKS`, `WORKFLOWS`, `AGENTS`, `MEMORY`, `KNOWLEDGE`, `INTEGRATIONS`, `MODELS`, `HISTORY`, `SYSTEM`).
 
 ---

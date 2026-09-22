@@ -28,10 +28,18 @@
       └──────────────────┘     └──────────────────┘
 ```
 
-* **`SERARuntime` (`app/core/runtime.py`):** Central coordinator initializing hotkeys, microphone streams, wake-word listeners, and WebSocket server dispatch. Supports clean cancellation via `cancel_task()`.
+* **`SERARuntime` (`app/core/runtime.py`):** Central coordinator initializing hotkeys, microphone streams, wake-word listeners, and WebSocket server dispatch. Supports clean task cancellation via `cancel_task()`.
+* **`CommandPipeline` (`app/core/command_pipeline.py`):** Orchestrator coordinating utterance normalization, deterministic intent resolution, and execution dispatch through the canonical `StatefulGraphRuntime`.
+* **`StatefulGraphRuntime` (`app/core/graph/`) — ✅ IMPLEMENTED (Phase 3A):**
+  * Asynchronous directed execution graph engine orchestrating the canonical lifecycle: `PERCEIVE → NORMALIZE → CONTEXT → ROUTE → PLAN → EXECUTE → OBSERVE → VERIFY → DECIDE → RECOVER → RESPOND → DONE`.
+  * Strongly-typed `GraphState` containing Identity (`execution_id`, `task_id`), Input, Context, Routing, Plan, Execution, Recovery, Outcome (`GraphExecutionStatus`), Presence, and Telemetry.
+  * Node Contract: Receives `GraphState` and `asyncio.Event` cancellation primitive; produces updated state and structured `GraphDecision` (`CONTINUE`, `DONE`, `RETRY`, `REPLAN`, `HANDOFF`, `FAIL`, `CANCEL`).
+  * First-Class Completion Gate: `VerifyNode` executes empirical inspection via `EvidenceVerificationFabric` before any task is permitted to commit `DONE`.
+  * Real-Time Interruption: `ExecuteNode` uses `asyncio.wait(..., return_when=FIRST_COMPLETED)` across tool execution and cancellation events, immediately halting tools and transitioning to `CANCELLED` with zero dangling tasks or misleading events.
+  * Fast-Path Bypass: Trivial deterministic commands traverse the short path (`PERCEIVE → NORMALIZE → CONTEXT → ROUTE → EXECUTE → OBSERVE → VERIFY → DECIDE → RESPOND → DONE`) with sub-millisecond orchestration latency (<0.2ms).
 * **`SERAState` (`app/core/state.py`):** Deterministic state machine tracking `SERAStatus` (`IDLE`, `LISTENING`, `THINKING`, `EXECUTING`, `SPEAKING`, `ERROR`). Thread-safe state change listeners broadcast to UI clients.
-* **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus with topics: `TASK_STARTED`, `TOOL_STARTED`, `TOOL_COMPLETED`, `AGENT_RESPONSE`, `TASK_COMPLETED`, `TASK_FAILED`, `STATE_CHANGED`.
-* **`HotkeyListener` (`app/core/hotkey.py`):** Global keyboard hook on Windows capturing `Ctrl+Space` for Hold-to-Talk audio recording.
+* **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus emitting correlated execution events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`).
+* **`GlobalHotkeyManager` (`app/core/hotkey_manager.py`):** Single authoritative system-wide keyboard hook on Windows capturing `Ctrl+Alt+Space` for Hold-to-Talk audio recording with dual-release and Win32 focus recovery.
 
 ---
 

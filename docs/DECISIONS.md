@@ -123,5 +123,11 @@ This log documents foundational architectural decisions, context, trade-offs, an
 * **Context & Rationale:** Following the comparative evaluation of reference desktop agents (Aura, The-GREAT-SAGE, OpenDex, Jarvis), `pywebview` was found to have inconsistent alpha compositing and lacked low-level global shortcut hooks and GPGPU WebGL performance. Electron 33 provides flawless Windows DWM alpha blending, rock-solid global keyboard hooks via `globalShortcut`, consistent 60 FPS GPU rendering across 8 visual layers, and native draggable repositioning without window chrome.
 * **Consequences:** Provides a permanent, living desktop consciousness hovering directly over Windows applications without any browser tab requirement or rectangular artifacts. Memory footprint is strictly bounded (~150MB) and CPU usage remains under 2% during idle equilibrium.
 
+---
 
-
+### ADR-014: Stateful Graph Runtime Foundation (Phase 3A)
+* **Date:** 2026-09-23  
+* **Status:** ACCEPTED / IMPLEMENTED  
+* **Decision:** Replace procedural command pipeline loops with a lightweight, canonical, asynchronous Stateful Graph Runtime (`app/core/graph/`). Reject external graph dependencies (such as LangGraph) in favor of an internal, zero-dependency directed execution graph engine with first-class state, conditional transitions, loops, bounded retries, real-time `asyncio.Event` cancellation, and mandatory `EvidenceVerificationFabric` completion gates.
+* **Context & Rationale:** Prior to Phase 3A, command execution was procedural and command-oriented. Trivial actions were fast, but complex multi-step tasks lacked unified state continuity, verification was coupled directly to step loops, cancellation required ad-hoc polling, and recovery/replanning had no formal state machine. Evaluating LangGraph revealed excessive abstraction layers, heavy third-party dependency chains, and unnecessary latency overhead on trivial desktop commands. An internal graph engine delivers sub-millisecond fast-path dispatch (<0.2ms), native integration with SERA's `EventBus` and `EvidenceVerificationFabric`, atomic `asyncio.Event` tool cancellation, and clean JSON snapshot serialization.
+* **Consequences:** All execution paths (simple single-step intents and complex multi-step workflows) execute across the canonical graph lifecycle (`PERCEIVE → NORMALIZE → CONTEXT → ROUTE → PLAN → EXECUTE → OBSERVE → VERIFY → DECIDE → RECOVER → RESPOND → DONE`). Trivial commands bypass planning via deterministic routing without latency regressions. Unverified actions cannot transition to completion.

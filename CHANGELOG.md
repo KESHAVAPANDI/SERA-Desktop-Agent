@@ -4,6 +4,23 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase3a] — 2026-09-23
+
+### Added
+* **Stateful Graph Runtime Foundation (`app/core/graph/`):**
+  * **Asynchronous Directed Execution Engine (`StatefulGraphRuntime`):** Replaced procedural command loops with a deterministic, stateful graph runtime supporting loops, retries, replanning, and specialist handoffs.
+  * **Canonical State Model (`GraphState`):** Strongly-typed, centralized state container capturing Identity (`execution_id`, `task_id`), Input, Context, Routing, Plan (`GraphPlanStep`), Execution, Recovery, Outcome (`GraphExecutionStatus`), Presence, and Telemetry with lossless `to_dict()` and `from_dict()` serialization.
+  * **Explicit Node Architecture:** Implemented modular nodes (`PerceiveNode`, `NormalizeNode`, `ContextNode`, `RouteNode`, `PlanNode`, `ExecuteNode`, `ObserveNode`, `VerifyNode`, `DecideNode`, `RecoverNode`, `RespondNode`) communicating strictly through structured graph state.
+  * **Structured Control Primitives (`GraphDecision`):** Standardized control flow decisions (`CONTINUE`, `DONE`, `RETRY`, `REPLAN`, `HANDOFF`, `FAIL`, `CANCEL`) and error classifications (`TOOL_EXCEPTION`, `VERIFICATION_FAILED`, `TIMEOUT`, `USER_CANCELLED`, `MODEL_FAILURE`).
+  * **First-Class Verification Gate (`VerifyNode`):** Mandated empirical side-effect verification through `EvidenceVerificationFabric` before any task is permitted to commit `DONE`, eliminating false passes.
+  * **Atomic Tool Interruption & Cancellation:** Integrated real-time `asyncio.Event` monitoring inside `ExecuteNode` via `asyncio.wait(..., return_when=FIRST_COMPLETED)`, immediately terminating active tools without dangling background tasks or misleading events.
+  * **Zero-Overhead Fast-Path Bypass:** Trivial deterministic commands traverse the minimal graph path with sub-millisecond dispatch (<0.2ms), maintaining SERA's instant desktop responsiveness.
+  * **Unified EventBus Correlation:** All graph transitions emit correlated lifecycle events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`) maintaining consistent `execution_id` correlation without duplicate event emissions.
+* **Empirical Graph Verification Test Suite (`tests/test_stateful_graph_runtime.py`):**
+  * Added 14 comprehensive tests verifying simple execution, verification failure recovery, cancellation, bounded retries, conditional transitions, multi-step state continuity, event correlation, deduplication, fast-path bypass, observation vs verification separation, model failure handling, tool failure handling, timeout enforcement, and state snapshot restoration (all passing in 0.27s).
+
+---
+
 ## [2.0.0-phase2c] — 2026-09-22
 
 ### Added

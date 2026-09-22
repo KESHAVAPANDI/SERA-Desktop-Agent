@@ -37,11 +37,12 @@
 | **Presence Behavior Engine** | ✅ IMPLEMENTED | Adaptive simulation engine (`PresenceBehaviorEngine.js`): Energy budget, attention model, organic pacing, visual memory, multi-band audio, and 7-phase cellular regeneration | Automated desktop frame captures (`desktop_behavior_idle_variation.png`, `desktop_behavior_thinking_branches.png`, `desktop_behavior_execution_progress.png`, `desktop_behavior_regeneration.png`) | None | Add emotional valence modulation |
 | **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
 | **Native Desktop Shell** | ✅ IMPLEMENTED | Electron 33 borderless overlay (`presence_desktop/main.js`) with 100% DWM alpha transparency & global shortcut | Empirical process check (HWND 0x0c070d0000000000) & native desktop capturePage | None | Add multi-monitor display selector in Command Center |
+| **Stateful Graph Runtime** | ✅ IMPLEMENTED | `app/core/graph/` asynchronous directed execution graph with typed `GraphState`, `VerifyNode` gate, and real-time cancellation | 14 empirical test cases in `tests/test_stateful_graph_runtime.py` | None | Expand specialist delegation agents in Phase 3B |
 
 ---
 
 ### Status Summary
-* **✅ IMPLEMENTED:** 19 capabilities fully operational and verified.
+* **✅ IMPLEMENTED:** 20 capabilities fully operational and verified.
 * **⚠️ PARTIAL:** 5 capabilities working but undergoing active rework or enhancement.
 * **📋 PLANNED:** 3 capabilities architecturally specified for upcoming phases.
 * **❌ BROKEN:** 0 active regressions.

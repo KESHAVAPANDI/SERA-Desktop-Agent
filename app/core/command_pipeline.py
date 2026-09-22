@@ -15,6 +15,12 @@ from typing import Any
 
 from app.core.command import CommandCategory, CommandComplexity, CommandObject, CommandParser, PlanStepItem
 from app.core.events import EventBus
+from app.core.graph import (
+    GraphExecutionStatus,
+    GraphPlanStep,
+    GraphState,
+    create_default_graph_runtime,
+)
 from app.core.router import ModelRouter
 from app.core.state import SERAState, SERAStatus
 from app.core.verification import EvidenceVerificationFabric, EvidenceRecord, EvidenceType
@@ -52,6 +58,15 @@ class CommandPipeline:
 
         # Execution Deduplication Cache
         self._executed_signatures: set[str] = set()
+
+        # Canonical Phase 3A Stateful Graph Runtime Foundation
+        self.graph_runtime = create_default_graph_runtime(
+            tools=self.tools,
+            router=self.router,
+            event_bus=self.event_bus,
+            fabric=self.evidence_fabric,
+            context_provider=self.context_state,
+        )
 
     async def execute_text(
         self,
@@ -120,6 +135,8 @@ class CommandPipeline:
             self._emit_event("TASK_CANCELLED", {"task_id": task_id, "reason": "Cancelled by user command"})
             return self._finalize_result(task_id, True, "Task cancelled.", t_start)
 
+        self._current_source = source
+
         # 6. Total Task Timeout Budget
         if cmd.complexity == CommandComplexity.SIMPLE:
             task_timeout = 10.0
@@ -147,31 +164,70 @@ class CommandPipeline:
         task_id: str,
         t_start: float,
         metrics: Any = None,
+        cancellation_event: asyncio.Event | None = None,
     ) -> dict[str, Any]:
-        """Executes the execution plan or routes to LLM fallback when ambiguous."""
+        """Executes the execution plan using the canonical StatefulGraphRuntime."""
 
         # -------------------------------------------------------------
-        # BRANCH A: Deterministic Execution Plan (Layer 1 / Layer 2)
+        # BRANCH A: Deterministic Execution Plan (Stateful Graph Runtime)
         # -------------------------------------------------------------
         if cmd.execution_plan:
             self.state.transition_to(SERAStatus.TASK_EXECUTING)
-            step_results = []
-            final_spoken_response = ""
 
-            total_steps = len(cmd.execution_plan)
+            graph_state = GraphState(
+                raw_user_input=cmd.source_text,
+                task_id=task_id,
+                input_source=getattr(self, "_current_source", "TEXT"),
+                context_state=dict(self.context_state),
+                steps=[
+                    GraphPlanStep(
+                        step_id=s.step_id,
+                        goal=s.goal,
+                        action=s.action,
+                        arguments=dict(s.arguments),
+                        timeout_seconds=s.timeout_seconds,
+                        verification_type=s.verification_type,
+                    )
+                    for s in cmd.execution_plan
+                ],
+            )
 
+            res_state = await self.graph_runtime.execute(
+                graph_state,
+                cancellation_event=cancellation_event,
+            )
+
+            # Sync context state from GraphState
+            self.context_state.update(res_state.context_state)
+            if res_state.active_application:
+                self.last_application = res_state.active_application
+            if res_state.last_verified_action:
+                self.last_verified_action = res_state.last_verified_action
+
+            step_results = [
+                {
+                    "success": s.completed,
+                    "tool": s.action,
+                    "result": res_state.observation.observed_state if (res_state.observation and res_state.current_action == s.action) else {},
+                    "latency_ms": s.latency_ms,
+                    "error": s.error,
+                }
+                for s in res_state.steps
+            ]
+
+            if res_state.status == GraphExecutionStatus.CANCELLED:
+                self.state.transition_to(SERAStatus.IDLE)
+                return self._finalize_result(task_id, False, "Task cancelled.", t_start, error="Cancelled by user", step_results=step_results)
+
+            if res_state.status != GraphExecutionStatus.SUCCESS:
+                err = res_state.last_error or f"Step failed."
+                self.state.transition_to(SERAStatus.BROKEN)
+                self._emit_event("TASK_FAILED", {"task_id": task_id, "error": err, "status": "BROKEN"})
+                spoken_err = self._synthesize_conversational_error(cmd.intent, err, cmd.parameters)
+                return self._finalize_result(task_id, False, spoken_err, t_start, error=err, step_results=step_results)
+
+            # Capture entity context from steps
             for step in cmd.execution_plan:
-                step_res = await self._execute_single_step(step, task_id, step.step_id, total_steps)
-                step_results.append(step_res)
-
-                if not step_res.get("success", False):
-                    err = step_res.get("error") or f"Step {step.step_id} ({step.action}) failed."
-                    self.state.transition_to(SERAStatus.BROKEN)
-                    self._emit_event("TASK_FAILED", {"task_id": task_id, "error": err, "status": "BROKEN"})
-                    spoken_err = self._synthesize_conversational_error(cmd.intent, err, cmd.parameters)
-                    return self._finalize_result(task_id, False, spoken_err, t_start, error=err)
-
-                # Capture entity context
                 if step.action == "open_application" and step.arguments.get("application"):
                     self.last_application = step.arguments.get("application").lower()
                 elif step.action == "open_folder" and step.arguments.get("folder_name"):
@@ -188,7 +244,7 @@ class CommandPipeline:
                     self.context_state["last_volume"] = step.arguments.get("volume")
 
             # Synthesize Clean Single Response
-            final_spoken_response = self._synthesize_plan_response(cmd, step_results)
+            final_spoken_response = self._synthesize_plan_response(cmd, step_results) or res_state.final_response
 
             # Record in context memory on success
             self.last_successful_command = cmd

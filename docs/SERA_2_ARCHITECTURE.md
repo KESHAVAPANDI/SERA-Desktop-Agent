@@ -244,3 +244,112 @@ Planned Agent Specializations:
 - **Coding Agent:** File edits, testing execution, git diff generation.
 - **Knowledge Agent:** RAG vector search, document indexing, memory retrieval.
 - **Automation Agent:** Scheduled triggers, background monitoring cron jobs.
+
+---
+
+## 8. Stateful Graph Runtime Architecture (Phase 3A Foundation)
+
+SERA 2.0 establishes an asynchronous, directed, stateful execution graph runtime (`app/core/graph/`) beneath the `CommandPipeline`. Rather than treating execution as procedural command dispatching, SERA operates as a persistent computational system governed by formal state transitions, empirical verification completion gates, and resilient recovery loops.
+
+```
+                  ┌──────────────┐
+                  │   PERCEIVE   │ (Speech / Text / API Ingestion)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │  NORMALIZE   │ (Conversational normalization & vocative stripping)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │   CONTEXT    │ (Active app, window, entities, recent actions)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │    ROUTE     │ (Deterministic Fast-Path vs. Multi-Step vs. Reasoning)
+                  └──────┬───────┘
+                         │
+         ┌───────────────┴───────────────┐
+         ▼ (Deterministic Fast-Path)     ▼ (Complex / Multi-Step)
+         │                         ┌───────────┐
+         │                         │   PLAN    │ (Step decomposition & Model Fabric)
+         │                         └─────┬─────┘
+         │                               ▼
+         │                         ┌───────────┐
+         │                         │SPECIALIST │ (Desktop / Browser / Vision Seam)
+         │                         └─────┬─────┘
+         └───────────────┬───────────────┘
+                         ▼
+                  ┌──────────────┐
+                  │   EXECUTE    │ (Tool invocation with real-time cancellation gate)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │   OBSERVE    │ (Structured OS/browser state capture)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │    VERIFY    │ (EvidenceVerificationFabric empirical gate)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │ UPDATE STATE │ (GraphState synchronization & telemetry)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │    DECIDE    │
+                  └──┬───┬───┬───┘
+          ┌──────────┘   │   └──────────┐
+          ▼              ▼              ▼
+       [ DONE ]     [ CONTINUE ]    [ RECOVER ]
+          │              │          (Retry / Replan / Handoff)
+          ▼              └──────────────┘
+    ┌───────────┐
+    │  RESPOND  │ (Shielded conversational response synthesis)
+    └───────────┘
+```
+
+### 8.1 Why the Graph Runtime Exists
+1. **Looping & Multi-Step Continuity:** Previous procedural loops held intermediate execution in fragile local variables. The graph runtime maintains execution state across arbitrary step sequences.
+2. **First-Class Verification Gate:** A node cannot simply declare success because an API returned HTTP 200 or an exit code was 0. `VerifyNode` evaluates an empirical `EvidenceRecord` (processes, window handles, non-empty structured data) before permitting the task to advance or complete.
+3. **Structured Interruption & Cancellation:** Long-running tools and loops race against an atomic `asyncio.Event` cancellation primitive via `asyncio.wait(..., return_when=FIRST_COMPLETED)`. Cancellation stops downstream tool calls, TTS playback, and misleading task-completion events instantly.
+4. **Resilient Recovery Model:** System exceptions are caught and classified into structured categories (`TOOL_EXCEPTION`, `VERIFICATION_FAILED`, `TIMEOUT`, `USER_CANCELLED`, `MODEL_FAILURE`). The graph evaluates bounded retries with exponential backoff before failing or replanning.
+
+### 8.2 Canonical Graph State Model (`GraphState`)
+All nodes communicate strictly through the typed `GraphState` structure (`app/core/graph/state.py`) rather than loose prose:
+- **Identity:** `execution_id`, `task_id`, `turn_id`, `created_at`, `updated_at`.
+- **Input:** `raw_user_input`, `normalized_user_input`, `input_source`, `speech_metadata`.
+- **Context:** `active_application`, `active_window`, `active_browser`, `active_tab`, `current_url`, `last_verified_action`, `context_state`.
+- **Routing:** `selected_route`, `selected_specialist`, `selected_model_role`, `routing_reason`.
+- **Plan:** `plan_id`, `steps` (`GraphPlanStep`), `current_step_index`, `retry_count`.
+- **Execution:** `current_node`, `current_action`, `action_arguments`, `action_result`, `observation` (`GraphObservation`), `verification` (`EvidenceRecord`).
+- **Recovery:** `last_error`, `error_category`, `is_recoverable`, `replan_count`.
+- **Outcome:** `status` (`PENDING`, `RUNNING`, `SUCCESS`, `FAILED`, `CANCELLED`, `BROKEN`), `final_response`, `completion_reason`.
+- **Presence:** `presence_state`, `active_objective`, `task_progress`.
+- **Telemetry:** `node_timings`, `model_timings`, `tool_timings`, `total_duration_ms`.
+
+### 8.3 Node Contract & Control Semantics
+Every node implements the `GraphNode` abstract base class:
+```python
+async def execute(self, state: GraphState, cancellation_event: asyncio.Event | None = None) -> GraphDecision:
+```
+The node mutates `state` directly and returns a typed `GraphDecision`:
+- `CONTINUE`: Advance to the next scheduled step or node.
+- `DONE`: Transition to completion (`RESPOND` → end).
+- `RETRY`: Re-execute the current step within bounded retry limits.
+- `REPLAN`: Invoke reasoning to compute an alternate execution plan.
+- `HANDOFF`: Delegate execution to an external specialist.
+- `FAIL`: Controlled failure with structured diagnostic evidence.
+- `CANCEL`: Immediate clean abort requested by the user.
+
+### 8.4 Relationship to Core Subsystems
+- **Model Fabric Integration:** The graph requests capabilities by semantic role (`REASONING`, `FAST`, `VISION`, `CODING`) through `ModelRouter`. It never hardcodes providers, preserving SERA's provider-agnostic resiliency.
+- **EventBus Integration:** All transitions emit unified lifecycle events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`) carrying identical `execution_id`, `task_id`, and `turn_id` correlation parameters.
+- **Primary Presence Integration:** The Presence remains a decoupled renderer of runtime truth. Presence states (`LISTENING`, `THINKING`, `EXECUTING`, `COMPLETED`, `BROKEN`, `CANCELLED`) are driven by graph state transitions without embedding execution logic inside Electron.
+- **Specialist Handoff Boundary:** Establishes the seam for future autonomous agents (Desktop, Browser, Vision, Coding). The supervisor graph hands execution off to a specialist via shared state, awaiting a structured result before resuming graph progression.
+
+### 8.5 What Phase 3A Intentionally Does NOT Implement
+- **Autonomous Multi-Agent Swarms:** Swarm coordination and free-agent negotiations are deferred to Phase 3B/Phase G.
+- **Lock-in Mode UI & Continuous Loop:** The architectural support for repeated session executions is enabled, but the Lock-in UI surface is scheduled for Phase 3B.
+- **6-Domain Persistent Memory & Vector RAG:** Checkpoint hooks and serialization are implemented, but persistent LanceDB vector storage belongs to Phase F.
+- **3D Visual Engine Redesign:** The Three.js WebGL 2.0 Presence engine and glass panel are preserved without regression.
+
