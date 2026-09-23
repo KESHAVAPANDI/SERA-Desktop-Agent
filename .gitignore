@@ -50,3 +50,6 @@ Thumbs.db
 # Node / Web artifacts (if any)
 node_modules/
 .cache/
+
+# Benchmark Result Dumps
+tests/semantic_interpreter/benchmark_results.json

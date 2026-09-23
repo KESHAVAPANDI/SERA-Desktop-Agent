@@ -22,6 +22,7 @@ from app.core.graph import (
     create_default_graph_runtime,
 )
 from app.core.router import ModelRouter
+from app.core.semantic import CanonicalIntent, SemanticInterpreter
 from app.core.state import SERAState, SERAStatus
 from app.core.verification import EvidenceVerificationFabric, EvidenceRecord, EvidenceType
 from app.tools import ToolRegistry
@@ -59,6 +60,12 @@ class CommandPipeline:
         # Execution Deduplication Cache
         self._executed_signatures: set[str] = set()
         self.active_cancellation_event: asyncio.Event = asyncio.Event()
+
+        # Semantic Interpreter (Phase 3A-D Shadow Integration)
+        self.semantic_interpreter = SemanticInterpreter()
+        self.last_semantic_shadow: dict[str, Any] | None = None
+        self.last_canonical_intent: dict[str, Any] | None = None
+        self.shadow_records: list[dict[str, Any]] = []
 
         # Canonical Phase 3A Stateful Graph Runtime Foundation
         self.graph_runtime = create_default_graph_runtime(
@@ -104,9 +111,12 @@ class CommandPipeline:
             "last_command": self.last_successful_command,
         }
 
-        # 2. Parse into Normalized Command Object
+        # 2. Parse into Normalized Command Object (Legacy parser remains authoritative)
         cmd = self.parser.parse(text, task_id=task_id, context=ctx)
         logger.info(f"[CommandPipeline] Classified intent='{cmd.intent}' category='{cmd.category.value}' complexity='{cmd.complexity.value}'")
+
+        # 2b. Phase 3A-D: Concurrently run SemanticInterpreter in SHADOW MODE
+        asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
 
         # 3. Handle Special Case: Repeat Last Task
         if cmd.intent == "repeat_last_task":
@@ -187,6 +197,8 @@ class CommandPipeline:
                 task_id=task_id,
                 input_source=getattr(self, "_current_source", "TEXT"),
                 context_state=dict(self.context_state),
+                canonical_intent=getattr(self, "last_canonical_intent", None),
+                semantic_shadow=getattr(self, "last_semantic_shadow", None),
                 steps=[
                     GraphPlanStep(
                         step_id=s.step_id,
@@ -658,4 +670,71 @@ class CommandPipeline:
                 self.event_bus.emit(event_name, payload)
             except Exception as e:
                 logger.debug(f"[CommandPipeline] EventBus emit error: {e}")
+
+    async def _record_semantic_shadow(
+        self, text: str, ctx: dict[str, Any], legacy_cmd: CommandObject
+    ) -> dict[str, Any]:
+        """Evaluates utterance with SemanticInterpreter in shadow mode and logs comparison."""
+        try:
+            compact_ctx = self.semantic_interpreter.extract_compact_context(extra_context=ctx)
+            qwen_intent = await self.semantic_interpreter.interpret_async(text, compact_ctx)
+
+            legacy_target = (
+                legacy_cmd.entities.get("application")
+                or legacy_cmd.entities.get("target")
+                or legacy_cmd.parameters.get("query")
+                or legacy_cmd.parameters.get("setting")
+                or ""
+            )
+            qwen_target = qwen_intent.target.value if qwen_intent.target else ""
+
+            # Check intent agreement
+            intent_match = (
+                legacy_cmd.intent == qwen_intent.intent
+                or (legacy_cmd.intent == "assistant_wake" and qwen_intent.intent in ("assistant_wake", "greeting"))
+                or (legacy_cmd.intent == "repeat_last_task" and (qwen_intent.intent == "repeat_last_task" or qwen_intent.modifiers.repeat))
+                or (legacy_cmd.intent.startswith("open_") and qwen_intent.intent.startswith("open_"))
+                or (legacy_cmd.intent.startswith("close_") and qwen_intent.intent.startswith("close_"))
+                or (legacy_cmd.intent.startswith("set_") and qwen_intent.intent.startswith("set_"))
+            )
+
+            # Check target agreement
+            target_match = True
+            if legacy_target and qwen_target:
+                target_match = (
+                    legacy_target.lower() in qwen_target.lower()
+                    or qwen_target.lower() in legacy_target.lower()
+                )
+            elif bool(legacy_target) != bool(qwen_target):
+                target_match = False
+
+            agreement = intent_match and target_match
+
+            comparison = {
+                "transcript": text,
+                "legacy": {
+                    "intent": legacy_cmd.intent,
+                    "category": legacy_cmd.category.value,
+                    "target": legacy_target,
+                },
+                "qwen": qwen_intent.to_dict(),
+                "agreement": agreement,
+                "intent_match": intent_match,
+                "target_match": target_match,
+                "timestamp": time.time(),
+            }
+            self.last_semantic_shadow = comparison
+            self.last_canonical_intent = qwen_intent.to_dict()
+            self.shadow_records.append(comparison)
+
+            logger.info(
+                f"SEMANTIC_SHADOW: transcript=\"{text}\" "
+                f"legacy=intent={legacy_cmd.intent},target={legacy_target} "
+                f"qwen=intent={qwen_intent.intent},target={qwen_target},modifier_repeat={qwen_intent.modifiers.repeat} "
+                f"agreement={agreement}"
+            )
+            return comparison
+        except Exception as e:
+            logger.debug(f"[CommandPipeline] Semantic shadow evaluation skipped/failed: {e}")
+            return {}
 

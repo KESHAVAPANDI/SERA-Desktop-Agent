@@ -43,6 +43,13 @@
   * Fast-Path Bypass: Trivial deterministic commands traverse the short path (`PERCEIVE → NORMALIZE → CONTEXT → ROUTE → EXECUTE → OBSERVE → VERIFY → DECIDE → RESPOND → DONE`) with sub-millisecond orchestration latency (<0.2ms).
 * **`SERAState` (`app/core/state.py`):** Deterministic state machine tracking `SERAStatus` (`IDLE`, `LISTENING`, `THINKING`, `EXECUTING`, `SPEAKING`, `ERROR`). Thread-safe state change listeners broadcast to UI clients.
 * **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus emitting correlated execution events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`). Presence deduplication ensures task structures and model selections are materialized exactly once per transition.
+* **Unified Local Semantic Interpreter Subsystem (`app/core/semantic/`) — 🔄 IN EVALUATION / SHADOW (Phase 3A-D):**
+  * Local SLM (`qwen3.5:4b` via Ollama on localhost:11434) translating natural language & compact context into strongly typed `CanonicalIntent` Pydantic models.
+  * Architectural Isolation: Interprets language only. Never executes actions, never controls Windows, never touches tools, never hallucinates URLs, never declares task completion.
+  * Compact Context Strategy: Feeds only language-essential context (`active_application`, `active_browser`, `last_verified_action`, `relevant_entities`, `available_intents`); never feeds complete GraphState or system secrets.
+  * Strict Schema Validation: `SemanticValidator` enforces valid intent names, normalizes action families, rejects hallucinated tools, and gracefully converts malformed responses into structured clarification requests.
+  * Standalone Evaluation Harness (`tests/semantic_interpreter/`): 108 curated cases evaluating APPLICATION, SYSTEM, CONTEXTUAL, POLITENESS, NATURAL_SPEECH, COMPOUND, REFERENCE, REPETITION, and AMBIGUITY_NEGATIVE families, measuring p50/p95 latency and peak VRAM.
+  * Shadow Mode Integration: Concurrently runs in `CommandPipeline` during real turns, logging `SEMANTIC_SHADOW` comparison telemetry alongside legacy deterministic parsing.
 * **`GlobalHotkeyManager` (`app/core/hotkey_manager.py`):** Single authoritative system-wide keyboard hook on Windows capturing `Ctrl+Alt+Space` for Hold-to-Talk audio recording with dual-release and Win32 focus recovery.
 
 ---

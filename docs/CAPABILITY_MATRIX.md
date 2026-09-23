@@ -39,6 +39,7 @@
 | **Evidence Verification Fabric** | ✅ IMPLEMENTED | `app/core/verification.py` empirical side-effect gate engine | `tests/vertical_slices/verification/test_evidence_fabric.py` (12 tests) | None (zero false passes enforced) | Expand to audio output buffer verification |
 | **Native Desktop Shell** | ✅ IMPLEMENTED | Electron 33 borderless overlay (`presence_desktop/main.js`) with 100% DWM alpha transparency & global shortcut | Empirical process check (HWND 0x0c070d0000000000) & native desktop capturePage | None | Add multi-monitor display selector in Command Center |
 | **Stateful Graph Runtime** | ✅ IMPLEMENTED | `app/core/graph/` asynchronous directed execution graph with typed `GraphState`, `VerifyNode` gate, and real-time cancellation | 14 empirical test cases in `tests/test_stateful_graph_runtime.py` and 22 in `tests/test_phase3a_c_semantic_integrity.py` | None | Expand specialist delegation agents in Phase 3B |
+| **Local Semantic Interpreter** | 🔄 IN EVALUATION / SHADOW | `app/core/semantic/` local SLM (`qwen3.5:4b` via Ollama) translating natural language & compact context into typed `CanonicalIntent` schema | 108 test cases in `tests/semantic_interpreter/`, 9 unit tests in `tests/test_semantic_schema.py`, shadow telemetry in `CommandPipeline` | Live execution remains on legacy parser during shadow evaluation | Graduate to primary route after benchmark validation |
 
 ---
 

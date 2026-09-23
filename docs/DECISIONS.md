@@ -146,3 +146,18 @@ This log documents foundational architectural decisions, context, trade-offs, an
   6. Implement deterministic real cancellation via `asyncio.Event` across `SERARuntime`, `CommandPipeline`, and `StatefulGraphRuntime`, terminating active execution instantly with zero subsequent node traversal.
 * **Context & Rationale:** Manual operator acceptance testing revealed that while the core graph engine worked, upstream perception and normalization flaws led to Hindi transcription of English speech, conversational courtesy phrases polluting entity names, generic application matching intercepting ordinal references, and `BROKEN` states erroneously followed by `TASK_COMPLETED`. Fixing the shared semantic normalization, context resolution, and terminal state layers at the root guarantees systemic integrity.
 * **Consequences:** Eliminates conversational entity corruption, provides fluid multi-turn context continuation across search and browser tasks, enforces mathematical truth in task outcome reporting, and guarantees immediate cancellation.
+
+---
+
+### ADR-016: Unified Local Semantic Interpreter with Qwen3.5-4B (Phase 3A-D)
+* **Date:** 2026-09-24  
+* **Status:** ACCEPTED / IMPLEMENTED (SHADOW MODE)  
+* **Decision:**
+  1. Introduce a unified local semantic interpretation boundary using `Qwen3.5-4B` running locally via Ollama on the operator's RTX 4050 laptop GPU (6GB VRAM, 16GB RAM) at `127.0.0.1:11434`.
+  2. Define a strongly typed `CanonicalIntent` Pydantic contract (`app/core/semantic/schema.py`) encapsulating `intent`, `action_family`, `target`, `reference`, `modifiers`, `parameters`, `context_resolution`, `confidence`, and `needs_clarification`.
+  3. Strictly separate semantic interpretation from execution: the local model translates language + compact context into JSON only. It never executes tools, controls Windows, browses, or verifies success.
+  4. Enforce compact context payloads: only pass language-essential state (`active_application`, `active_browser`, `last_verified_action`, `relevant_entities`, `available_intents`); never feed full GraphState, conversation history, secrets, or logs.
+  5. Build a comprehensive 108-case standalone benchmark evaluation harness (`tests/semantic_interpreter/`) before integrating into live execution paths.
+  6. Deploy initially in **Shadow Mode** within `CommandPipeline`: legacy `CommandParser` remains 100% authoritative for execution while Qwen runs concurrently and records `SEMANTIC_SHADOW` comparison telemetry.
+* **Context & Rationale:** Continually adding handcrafted regexes to `CommandParser` for every natural-language variation ("Open Chrome again", "Open the first result", "Close it", "Put brightness back where it was", "Hey Sarah please...") does not scale. A local 4B model running on the RTX 4050 GPU provides rich semantic generalization, synonym understanding, and anaphora recognition while maintaining sub-100ms latency, zero cloud API costs, and full offline privacy.
+* **Consequences:** Eliminates phrase-by-phrase regex sprawl. Provides safe, empirical evidence in shadow mode before graduating Qwen to the authoritative execution path. Maintains deterministic fast paths and empirical verification gates unchanged.

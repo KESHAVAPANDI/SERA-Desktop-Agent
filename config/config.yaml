@@ -118,6 +118,12 @@ roles:
       provider: mistral
       model: mistral-embed
 
+  semantic_interpreter:
+    primary:
+      provider: ollama
+      model: qwen3.5:4b
+    fallbacks: []
+
 # ===================================================================
 # BACKWARD-COMPATIBLE MODELS CONFIGURATION
 # ===================================================================
