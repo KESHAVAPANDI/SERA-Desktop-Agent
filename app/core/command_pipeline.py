@@ -22,7 +22,14 @@ from app.core.graph import (
     create_default_graph_runtime,
 )
 from app.core.router import ModelRouter
-from app.core.semantic import CanonicalIntent, SemanticInterpreter
+from app.core.semantic import (
+    CanonicalIntent,
+    SemanticAuthorityDecision,
+    SemanticAuthorityGate,
+    SemanticAuthoritySource,
+    SemanticContextResolver,
+    SemanticInterpreter,
+)
 from app.core.state import SERAState, SERAStatus
 from app.core.verification import EvidenceVerificationFabric, EvidenceRecord, EvidenceType
 from app.tools import ToolRegistry
@@ -61,8 +68,11 @@ class CommandPipeline:
         self._executed_signatures: set[str] = set()
         self.active_cancellation_event: asyncio.Event = asyncio.Event()
 
-        # Semantic Interpreter (Phase 3A-D Shadow Integration)
+        # Semantic Interpreter & Authority Gate (Phase 3A-E Pilot)
         self.semantic_interpreter = SemanticInterpreter()
+        self.authority_gate = SemanticAuthorityGate(pilot_enabled=True)
+        self.context_resolver = SemanticContextResolver()
+        self.last_semantic_decision: dict[str, Any] | None = None
         self.last_semantic_shadow: dict[str, Any] | None = None
         self.last_canonical_intent: dict[str, Any] | None = None
         self.shadow_records: list[dict[str, Any]] = []
@@ -112,18 +122,88 @@ class CommandPipeline:
             "last_command": self.last_successful_command,
         }
 
-        # 2. Parse into Normalized Command Object (Legacy parser remains authoritative)
-        cmd = self.parser.parse(text, task_id=task_id, context=ctx)
-        logger.info(f"[CommandPipeline] Classified intent='{cmd.intent}' category='{cmd.category.value}' complexity='{cmd.complexity.value}'")
+        # -------------------------------------------------------------
+        # 2. SEMANTIC AUTHORITY EVALUATION (Phase 3A-E Pilot)
+        # -------------------------------------------------------------
+        is_fast_path = self.authority_gate.is_deterministic_fast_path(text)
 
-        # 2b. Phase 3A-D.1: Concurrently run SemanticInterpreter in SHADOW MODE with single-task guard
-        if self._active_shadow_task and not self._active_shadow_task.done():
-            logger.debug("[CommandPipeline] Cancelling previous in-flight shadow task to avoid queue accumulation")
-            self._active_shadow_task.cancel()
-        self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+        if is_fast_path:
+            # Deterministic Fast Path: bypass Qwen directly for exact scalar/system commands
+            cmd = self.parser.parse(text, task_id=task_id, context=ctx)
+            fast_decision = SemanticAuthorityDecision(
+                source=SemanticAuthoritySource.DETERMINISTIC,
+                accepted=True,
+                category="SYSTEM",
+                confidence=1.0,
+                fallback_reason=None,
+            )
+            self.last_semantic_decision = fast_decision.to_dict()
+            logger.info(
+                f"SEMANTIC_DECISION: transcript=\"{text}\" qwen=none "
+                f"authority=DETERMINISTIC fallback=none accepted=true latency=0.0ms "
+                f"category=SYSTEM"
+            )
+            # Concurrently run shadow interpreter for telemetry tracking
+            if self._active_shadow_task and not self._active_shadow_task.done():
+                self._active_shadow_task.cancel()
+            self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+        else:
+            # Candidate for Qwen Semantic Interpretation
+            compact_ctx = self.semantic_interpreter.extract_compact_context(extra_context=ctx)
+            t_sem_start = time.perf_counter()
+            sem_error = None
+            try:
+                qwen_intent = await self.semantic_interpreter.interpret_async(text, compact_ctx)
+            except asyncio.TimeoutError:
+                qwen_intent = None
+                sem_error = "Semantic model timed out"
+            except Exception as e:
+                qwen_intent = None
+                sem_error = str(e)
+            sem_latency_ms = (time.perf_counter() - t_sem_start) * 1000.0
 
-        # 3. Handle Special Case: Repeat Last Task
-        if cmd.intent == "repeat_last_task":
+            # Evaluate decision through Authority Gate
+            decision = self.authority_gate.decide(
+                canonical_intent=qwen_intent,
+                transcript=text,
+                context=ctx,
+                model_error=sem_error,
+                latency_ms=sem_latency_ms,
+            )
+            self.last_semantic_decision = decision.to_dict()
+            self.last_canonical_intent = qwen_intent.to_dict() if qwen_intent else None
+
+            qwen_desc = f"intent={qwen_intent.intent}" if qwen_intent else "none"
+            fb_desc = decision.fallback_reason or "none"
+            logger.info(
+                f"SEMANTIC_DECISION: transcript=\"{text}\" qwen={qwen_desc} "
+                f"authority={decision.source.value} fallback={fb_desc} "
+                f"accepted={decision.accepted} latency={sem_latency_ms:.1f}ms "
+                f"category={decision.category}"
+            )
+
+            if decision.source == SemanticAuthoritySource.QWEN:
+                # Qwen Primary Authority: Resolve context to CommandObject
+                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id)
+                logger.info(f"[CommandPipeline] Qwen Primary accepted: intent='{cmd.intent}' category='{cmd.category.value}' tools={cmd.required_tools}")
+
+            elif decision.source == SemanticAuthoritySource.CLARIFICATION:
+                # Clarification Authority: Conversational CommandObject (0 tools)
+                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id)
+                logger.info(f"[CommandPipeline] Clarification required: '{cmd.raw_response}'")
+
+            else:
+                # Legacy Fallback / Deterministic: Parse with legacy parser
+                cmd = self.parser.parse(text, task_id=task_id, context=ctx)
+                logger.info(f"[CommandPipeline] Legacy fallback: intent='{cmd.intent}' category='{cmd.category.value}'")
+
+            # Maintain single active shadow task for telemetry / background tracking
+            if self._active_shadow_task and not self._active_shadow_task.done():
+                self._active_shadow_task.cancel()
+            self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+
+        # 3. Handle Special Case: Repeat Last Task (Legacy fallback recovery)
+        if cmd.intent == "repeat_last_task" and not cmd.execution_plan:
             if not self.last_successful_command or not self.last_successful_command.execution_plan:
                 resp_text = "There is no previous task available to repeat."
                 return self._finalize_result(task_id, False, resp_text, t_start, error="No previous task to repeat")
@@ -145,7 +225,7 @@ class CommandPipeline:
             cmd.complexity = self.last_successful_command.complexity
             cmd.intent = f"repeat_{self.last_successful_command.intent}"
 
-        # 4. Handle Direct Conversational Fast-Path (0 Tools)
+        # 4. Handle Direct Conversational Fast-Path (0 Tools or Clarification)
         if cmd.raw_response is not None:
             return self._finalize_result(task_id, True, cmd.raw_response, t_start)
 
@@ -203,6 +283,7 @@ class CommandPipeline:
                 context_state=dict(self.context_state),
                 canonical_intent=getattr(self, "last_canonical_intent", None),
                 semantic_shadow=getattr(self, "last_semantic_shadow", None),
+                semantic_decision=getattr(self, "last_semantic_decision", None),
                 steps=[
                     GraphPlanStep(
                         step_id=s.step_id,
@@ -512,6 +593,20 @@ class CommandPipeline:
         if intent == "close_application":
             app = cmd.parameters.get("application", "")
             return f"I've closed {app.capitalize()}."
+
+        # Switch Application
+        if intent == "switch_application":
+            app = cmd.parameters.get("application", "")
+            return f"I've switched focus to {app.capitalize()}."
+
+        # Open Search Result / Reference
+        if intent in ("open_search_result", "open_reference"):
+            title = cmd.parameters.get("title") or "the selected result"
+            return f"I've opened {title} for you."
+
+        # Repeat Previous Action
+        if intent.startswith("repeat_"):
+            return "I've repeated the previous action for you."
 
         # Open Folder
         if intent in ("open_folder", "open_folder_and_find"):

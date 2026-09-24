@@ -163,6 +163,7 @@ class GraphState:
     # 4. ROUTING & SEMANTICS
     canonical_intent: Optional[Dict[str, Any]] = None
     semantic_shadow: Optional[Dict[str, Any]] = None
+    semantic_decision: Optional[Dict[str, Any]] = None
     selected_route: str = "FAST_PATH"  # "FAST_PATH", "MULTI_STEP", "REASONING", "CONVERSATIONAL"
     selected_specialist: Optional[str] = None  # "desktop", "browser", "vision", etc.
     selected_model_role: Optional[str] = None  # "fast", "reasoning", etc.
@@ -276,6 +277,7 @@ class GraphState:
             "context_state": dict(self.context_state),
             "canonical_intent": self.canonical_intent,
             "semantic_shadow": self.semantic_shadow,
+            "semantic_decision": self.semantic_decision,
             "selected_route": self.selected_route,
             "selected_specialist": self.selected_specialist,
             "selected_model_role": self.selected_model_role,
@@ -357,6 +359,7 @@ class GraphState:
             context_state=data.get("context_state", {}),
             canonical_intent=data.get("canonical_intent"),
             semantic_shadow=data.get("semantic_shadow"),
+            semantic_decision=data.get("semantic_decision"),
             selected_route=data.get("selected_route", "FAST_PATH"),
             selected_specialist=data.get("selected_specialist"),
             selected_model_role=data.get("selected_model_role"),

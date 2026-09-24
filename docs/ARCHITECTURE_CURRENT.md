@@ -43,13 +43,16 @@
   * Fast-Path Bypass: Trivial deterministic commands traverse the short path (`PERCEIVE → NORMALIZE → CONTEXT → ROUTE → EXECUTE → OBSERVE → VERIFY → DECIDE → RESPOND → DONE`) with sub-millisecond orchestration latency (<0.2ms).
 * **`SERAState` (`app/core/state.py`):** Deterministic state machine tracking `SERAStatus` (`IDLE`, `LISTENING`, `THINKING`, `EXECUTING`, `SPEAKING`, `ERROR`). Thread-safe state change listeners broadcast to UI clients.
 * **`EventBus` (`app/core/events.py`):** Async publish-subscribe bus emitting correlated execution events (`GRAPH_STARTED`, `GRAPH_NODE_ENTERED`, `GRAPH_NODE_COMPLETED`, `GRAPH_TRANSITION`, `GRAPH_COMPLETED`, `GRAPH_CANCELLED`, `GRAPH_FAILED`, `TASK_STARTED`, `TOOL_STARTED`, `TASK_COMPLETED`). Presence deduplication ensures task structures and model selections are materialized exactly once per transition.
-* **Unified Local Semantic Interpreter Subsystem (`app/core/semantic/`) — 🔄 IN EVALUATION / SHADOW (Phase 3A-D):**
-  * Local SLM (`qwen3.5:4b` via Ollama on localhost:11434) translating natural language & compact context into strongly typed `CanonicalIntent` Pydantic models.
-  * Architectural Isolation: Interprets language only. Never executes actions, never controls Windows, never touches tools, never hallucinates URLs, never declares task completion.
-  * Compact Context Strategy: Feeds only language-essential context (`active_application`, `active_browser`, `last_verified_action`, `relevant_entities`, `available_intents`); never feeds complete GraphState or system secrets.
-  * Strict Schema Validation: `SemanticValidator` enforces valid intent names, normalizes action families, rejects hallucinated tools, and gracefully converts malformed responses into structured clarification requests.
-  * Standalone Evaluation Harness (`tests/semantic_interpreter/`): 108 curated cases evaluating APPLICATION, SYSTEM, CONTEXTUAL, POLITENESS, NATURAL_SPEECH, COMPOUND, REFERENCE, REPETITION, and AMBIGUITY_NEGATIVE families, measuring p50/p95 latency and peak VRAM.
-  * Shadow Mode Integration: Concurrently runs in `CommandPipeline` during real turns, logging `SEMANTIC_SHADOW` comparison telemetry alongside legacy deterministic parsing.
+* **Unified Local Semantic Interpreter & Authority Gate Subsystem (`app/core/semantic/`) — ✅ IMPLEMENTED (Phase 3A-E Controlled Pilot):**
+  * Local SLM (`qwen3.5:4b` via Ollama on localhost:11434 with native `"think": false` and `"keep_alive": "10m"`) translating natural language & compact context into strongly typed `CanonicalIntent` Pydantic models.
+  * **Semantic Authority Gate (`app/core/semantic/authority.py`):** Explicit architectural decision boundary evaluating CanonicalIntent against 10 acceptance rules across 4 operational routes:
+    * `QWEN`: Primary semantic compiler for authorized pilot categories (Application Semantics: `open_application`, `close_application`, `switch_application`; Reference Semantics: `open_reference`; Repetition Semantics: `repeat_last_task`; Contextual Entities: "close it", "close that window", "open that" with verified context; Conversational Wrappers: polite spoken phrasing).
+    * `DETERMINISTIC`: Fast-path bypass for exact numeric/scalar commands (`set_brightness`, `set_volume`, `mute`, system telemetry, native self-close) executing in sub-millisecond time without model latency.
+    * `LEGACY_FALLBACK`: Safe fallback on Qwen timeout, invalid JSON, or shadow-only categories. The legacy parser is never allowed to veto valid Qwen interpretations.
+    * `CLARIFICATION`: Conversational response for underspecified requests or missing mandatory context without tool execution.
+  * **Context Resolver (`app/core/semantic/resolver.py`):** Translates semantic references, ordinals, and target pronouns into concrete `CommandObject` execution plans with verified targets (e.g. ordinal 1 -> actual URL from verified search results; "it" -> active application from context; "browser" -> default browser).
+  * **Architectural Isolation:** Qwen compiler produces JSON only. Never directly executes tools, never controls Windows, never touches OS handles, and never fabricates URLs or tool names.
+  * **Stateful Graph Runtime as Sole Execution Authority:** All accepted plans execute through the canonical graph lifecycle; `GraphState` retains `semantic_decision` for full telemetry and auditability.
 * **`GlobalHotkeyManager` (`app/core/hotkey_manager.py`):** Single authoritative system-wide keyboard hook on Windows capturing `Ctrl+Alt+Space` for Hold-to-Talk audio recording with dual-release and Win32 focus recovery.
 
 ---

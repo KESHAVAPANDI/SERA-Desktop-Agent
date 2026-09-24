@@ -1,6 +1,12 @@
 """SERA 2.0 Semantic Interpretation Subsystem."""
 
+from app.core.semantic.authority import (
+    SemanticAuthorityDecision,
+    SemanticAuthorityGate,
+    SemanticAuthoritySource,
+)
 from app.core.semantic.interpreter import SemanticInterpreter
+from app.core.semantic.resolver import SemanticContextResolver
 from app.core.semantic.schema import (
     ActionFamily,
     CanonicalIntent,
@@ -22,4 +28,8 @@ __all__ = [
     "SemanticTarget",
     "SemanticValidator",
     "SemanticInterpreter",
+    "SemanticAuthorityDecision",
+    "SemanticAuthorityGate",
+    "SemanticAuthoritySource",
+    "SemanticContextResolver",
 ]

@@ -4,6 +4,36 @@ All notable changes to the SERA project are documented in this file. The format 
 
 ---
 
+## [2.0.0-phase3a-e] — 2026-09-24
+
+### Added & Promoted
+* **Controlled Qwen Semantic Authority Pilot:**
+  * Promoted local `qwen3.5:4b` from shadow mode to the **Primary Semantic Interpretation Source** for authorized natural language categories:
+    * **Application Semantics:** `open_application`, `close_application`, `switch_application` (*"Bring Chrome up."*, *"Could you get my browser running?"*).
+    * **Reference Semantics:** `open_reference` (*"Take me to the first video you just found."*).
+    * **Repetition / Continuation:** `repeat_last_task` (*"Repeat whatever you just did."*, *"Do it again."*).
+    * **Contextual Entity Language:** *"Close that window."*, *"Open that."* (strictly requiring verified context; requests clarification when context is absent).
+    * **Conversational Wrappers:** Polite requests, natural spoken phrasing, vocatives (*"Hey Sarah, could you fire up the browser for me?"*).
+* **Semantic Authority Gate (`app/core/semantic/authority.py`):**
+  * Implemented dedicated architectural decision boundary (`SemanticAuthorityGate`) evaluating CanonicalIntent against 10 rigorous acceptance rules.
+  * Defines 4 operational sources: `QWEN`, `DETERMINISTIC`, `LEGACY_FALLBACK`, `CLARIFICATION`.
+  * Preserves Deterministic Fast Path for exact numeric/scalar commands (`set_brightness`, `set_volume`, `mute`, system diagnostics, self-close), executing with 0.0ms model latency.
+  * Guarantees legacy parser disagreement is never a veto for Qwen-eligible categories (e.g. *"Bring Chrome up."* succeeds via Qwen even if legacy parser classified it as `general_reasoning`).
+  * Enforces shadow-only status for `compound_workflow`, coding, and general reasoning.
+* **Semantic Context Resolver (`app/core/semantic/resolver.py`):**
+  * Translates semantic entities and references into concrete runtime `CommandObject` execution plans without direct model execution or URL hallucination.
+  * Resolves ordinal references to concrete URLs from verified `search_results`.
+  * Clones previous plans for repetition intents.
+  * Emits immediate conversational clarification (0 tools) for underspecified requests like *"Launch"*.
+* **GraphState Telemetry:**
+  * Extended `GraphState` with `semantic_decision` storing source, confidence, category, and fallback reasons for full observability and future Command Center visualization.
+* **Empirical Verification:**
+  * 24 automated unit tests in `tests/test_semantic_authority_gate.py` covering all 18 specified failure and edge cases.
+  * 63 total passing tests across the entire semantic and graph integrity suite.
+  * 15/15 successful live turns on local RTX 4050 GPU via `scratch/test_live_pilot.py`.
+
+---
+
 ## [2.0.0-phase3a-c] — 2026-09-23
 
 ### Fixed & Enhanced

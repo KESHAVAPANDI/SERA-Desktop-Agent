@@ -161,3 +161,26 @@ This log documents foundational architectural decisions, context, trade-offs, an
   6. Deploy initially in **Shadow Mode** within `CommandPipeline`: legacy `CommandParser` remains 100% authoritative for execution while Qwen runs concurrently and records `SEMANTIC_SHADOW` comparison telemetry.
 * **Context & Rationale:** Continually adding handcrafted regexes to `CommandParser` for every natural-language variation ("Open Chrome again", "Open the first result", "Close it", "Put brightness back where it was", "Hey Sarah please...") does not scale. A local 4B model running on the RTX 4050 GPU provides rich semantic generalization, synonym understanding, and anaphora recognition while maintaining sub-100ms latency, zero cloud API costs, and full offline privacy.
 * **Consequences:** Eliminates phrase-by-phrase regex sprawl. Provides safe, empirical evidence in shadow mode before graduating Qwen to the authoritative execution path. Maintains deterministic fast paths and empirical verification gates unchanged.
+
+---
+
+### ADR-017: Controlled Qwen Semantic Authority Pilot (Phase 3A-E)
+* **Date:** 2026-09-24  
+* **Status:** ACCEPTED / IMPLEMENTED  
+* **Decision:**
+  1. Promote the local `qwen3.5:4b` Semantic Interpreter from **SHADOW MODE** to the **PRIMARY SEMANTIC INTERPRETATION SOURCE** for a bounded set of language-oriented command classes:
+     - **Application Semantics:** `open_application`, `close_application`, `switch_application` (*"Bring Chrome up."*, *"Could you get my browser running?"*).
+     - **Reference Semantics:** `open_reference`, `open_search_result` (*"Open the first result."*, *"Take me to the second video."*).
+     - **Repetition / Continuation Semantics:** `repeat_last_task`, `repeat_previous_action` (*"Do it again."*, *"Repeat that."*).
+     - **Contextual Entity Language:** *"Close it."*, *"Close that window."*, *"Open that."* (strictly when verified context exists).
+     - **Conversational Wrappers:** Polite requests, natural spoken phrasing, vocatives (*"Hey Sarah, could you bring Chrome back up for me?"*).
+  2. Implement an explicit architectural decision boundary via `SemanticAuthorityGate` (`app/core/semantic/authority.py`) with 4 source routes: `QWEN`, `DETERMINISTIC`, `LEGACY_FALLBACK`, `CLARIFICATION`.
+  3. Enforce the **10 Acceptance Rules** in `SemanticAuthorityGate` before accepting Qwen output: valid schema, valid intent, enabled category, supported instruction, no hallucinated URL, no hallucinated entity, resolved references, `needs_clarification == false` for actions, verified context actually present, and internal consistency.
+  4. Ensure the legacy parser is **never** used to veto valid Qwen interpretations: disagreement from legacy parser is the precise reason the semantic layer exists (e.g. legacy classifying *"Bring Chrome up."* as `general_reasoning` does not veto Qwen's `open_application`).
+  5. Route exact machine commands (*"Set brightness to 80%"*, volume, mute, system diagnostics, self-close) through the **Deterministic Fast Path** without incurring model latency.
+  6. Keep compound workflows (`compound_workflow`), coding, and general reasoning **Shadow-Only**.
+  7. Implement `SemanticContextResolver` (`app/core/semantic/resolver.py`) to translate semantic symbols into concrete `CommandObject` execution plans with verified targets, while the **Stateful Graph Runtime** remains the sole execution authority and the **Evidence Verification Fabric** remains the sole completion authority.
+  8. Store `semantic_decision` in `GraphState` for complete execution auditability.
+* **Context & Rationale:** Live testing in Phase 3A-D/D.1 proved that Qwen3.5-4B successfully resolves natural conversational variations that break regex matching, but routing all unrecognized sentences to cloud LLMs incurs high latency and cost. Granting primary authority to Qwen for bounded categories while gating acceptance against verified context provides robust natural-language intelligence without sacrificing system determinism or safety.
+* **Consequences:** Dramatically reduces unnecessary cloud LLM reasoning calls for desktop commands, handles complex conversational and polite spoken language, executes contextual references safely without hallucination, and preserves sub-millisecond execution for machine controls.
+

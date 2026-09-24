@@ -66,6 +66,29 @@ class SemanticInterpreter:
             entities = ctx.get("relevant_entities", [])
             recent = ctx.get("recent_verified_actions", [])
 
+        # Map search results into relevant entities for the semantic interpreter
+        entities_list = list(entities)
+        search_res = ctx.get("search_results") or []
+        if search_res:
+            for idx, res_item in enumerate(search_res[:5]):
+                entities_list.append({
+                    "entity_type": "search_result",
+                    "ordinal": idx + 1,
+                    "title": res_item.get("title", f"Result {idx+1}"),
+                    "url": res_item.get("url", ""),
+                })
+
+        # Resolve last action from successful command or intent if not explicitly set
+        if not last_action:
+            last_cmd = ctx.get("last_successful_command") or ctx.get("last_command")
+            if last_cmd:
+                last_action = getattr(last_cmd, "intent", None) or str(last_cmd)
+            elif ctx.get("last_intent"):
+                last_action = ctx.get("last_intent")
+
+        if not active_browser and active_app and active_app.lower() in ("chrome", "google chrome", "edge", "firefox", "brave"):
+            active_browser = "chrome" if "chrome" in active_app.lower() else active_app.lower()
+
         return CompactSemanticContext(
             utterance=raw_input,
             active_application=active_app,
@@ -73,7 +96,7 @@ class SemanticInterpreter:
             active_tab=active_tab,
             current_url=current_url,
             last_verified_action=last_action,
-            relevant_entities=entities,
+            relevant_entities=entities_list,
             recent_verified_actions=recent,
         )
 
