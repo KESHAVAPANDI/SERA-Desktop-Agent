@@ -33,7 +33,7 @@ def enforce_strictly_offline(monkeypatch):
 @pytest.mark.asyncio
 async def test_offline_semantic_interpretation_open_app():
     """Verify standard application launch intent works with external internet blocked."""
-    interpreter = SemanticInterpreter()
+    interpreter = SemanticInterpreter(timeout=20.0)
     intent = await interpreter.interpret_async("Launch Google Chrome please.")
     
     assert intent is not None
@@ -46,7 +46,7 @@ async def test_offline_semantic_interpretation_open_app():
 @pytest.mark.asyncio
 async def test_offline_semantic_interpretation_contextual_reference():
     """Verify contextual reference resolution works with external internet blocked."""
-    interpreter = SemanticInterpreter()
+    interpreter = SemanticInterpreter(timeout=20.0)
     ctx = CompactSemanticContext(
         utterance="Open the first result.",
         active_browser="chrome",

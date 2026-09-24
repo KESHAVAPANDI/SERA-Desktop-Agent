@@ -29,12 +29,15 @@ class OllamaProvider(LLMProvider):
         base_url: Optional[str] = None,
         model: str = "qwen3.5:4b",
         timeout: float = 30.0,
+        keep_alive: str = "10m",
     ):
         self.base_url = (base_url or os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")).rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.keep_alive = keep_alive
         self.health = ProviderHealth()
         self._client: Optional[httpx.AsyncClient] = None
+        self.last_metadata: Dict[str, Any] = {}
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -78,8 +81,9 @@ class OllamaProvider(LLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 256,
         model: Optional[str] = None,
+        think: bool = False,
     ) -> str:
-        """Generates a structured JSON response from Ollama."""
+        """Generates a structured JSON response from Ollama with native thinking control."""
         target_model = model or self.model
         client = self._get_client()
         payload = {
@@ -87,6 +91,8 @@ class OllamaProvider(LLMProvider):
             "messages": messages,
             "stream": False,
             "format": "json",
+            "think": think,
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -102,6 +108,26 @@ class OllamaProvider(LLMProvider):
 
             data = resp.json()
             content = data.get("message", {}).get("content", "")
+            
+            # Extract and store Ollama native duration telemetry
+            self.last_metadata = {
+                "total_duration_ms": data.get("total_duration", 0) / 1e6,
+                "load_duration_ms": data.get("load_duration", 0) / 1e6,
+                "prompt_eval_duration_ms": data.get("prompt_eval_duration", 0) / 1e6,
+                "eval_duration_ms": data.get("eval_duration", 0) / 1e6,
+                "prompt_eval_count": data.get("prompt_eval_count", 0),
+                "eval_count": data.get("eval_count", 0),
+                "model": data.get("model", target_model),
+                "wall_latency_ms": latency_ms,
+            }
+            logger.debug(
+                f"[Ollama] {target_model} finished in {latency_ms:.1f}ms "
+                f"(load={self.last_metadata['load_duration_ms']:.1f}ms, "
+                f"prompt_eval={self.last_metadata['prompt_eval_duration_ms']:.1f}ms, "
+                f"eval={self.last_metadata['eval_duration_ms']:.1f}ms, "
+                f"tokens={self.last_metadata['eval_count']})"
+            )
+
             self.health.record_success(latency_ms)
             return content
 
@@ -124,6 +150,8 @@ class OllamaProvider(LLMProvider):
             "model": target_model,
             "messages": messages,
             "stream": False,
+            "think": kwargs.get("think", False),
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": kwargs.get("temperature", 0.0),
                 "num_predict": kwargs.get("max_tokens", 512),

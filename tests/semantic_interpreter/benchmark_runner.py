@@ -95,6 +95,8 @@ class SemanticBenchmarkRunner:
             "messages": messages,
             "stream": False,
             "format": "json",
+            "think": False,
+            "keep_alive": "10m",
             "options": {
                 "temperature": 0.0,
                 "num_predict": 256,
@@ -114,7 +116,7 @@ class SemanticBenchmarkRunner:
 
         return content, latency_ms, prompt_tokens, eval_tokens
 
-    def run_benchmark(self, cases_path: Path) -> Dict[str, Any]:
+    def run_benchmark(self, cases_path: Path, output_report_path: Optional[Path | str] = None) -> Dict[str, Any]:
         """Runs the entire benchmark and generates structured metrics."""
         with open(cases_path, "r", encoding="utf-8") as f:
             cases = json.load(f)
@@ -312,7 +314,7 @@ class SemanticBenchmarkRunner:
         print("="*70 + "\n")
 
         # Save machine-readable JSON report
-        out_report_path = cases_path.parent / "benchmark_results.json"
+        out_report_path = Path(output_report_path) if output_report_path else (cases_path.parent / f"benchmark_results_{self.model.replace(':', '_')}.json")
         with open(out_report_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2)
         logger.info(f"Detailed machine-readable report written to {out_report_path}")
@@ -321,6 +323,14 @@ class SemanticBenchmarkRunner:
 
 
 if __name__ == "__main__":
-    cases_file = Path(__file__).parent / "benchmark_cases.json"
-    runner = SemanticBenchmarkRunner()
-    runner.run_benchmark(cases_file)
+    import argparse
+    parser = argparse.ArgumentParser(description="SERA Semantic Benchmark Runner")
+    parser.add_argument("--model", type=str, default=MODEL_NAME, help="Model to benchmark (e.g. qwen3.5:2b, qwen3.5:4b)")
+    parser.add_argument("--cases", type=str, default=str(Path(__file__).parent / "benchmark_cases.json"), help="Cases JSON path")
+    parser.add_argument("--output", type=str, default="", help="Output report JSON path")
+    args = parser.parse_args()
+
+    cases_file = Path(args.cases)
+    out_file = Path(args.output) if args.output else None
+    runner = SemanticBenchmarkRunner(model=args.model)
+    runner.run_benchmark(cases_file, output_report_path=out_file)

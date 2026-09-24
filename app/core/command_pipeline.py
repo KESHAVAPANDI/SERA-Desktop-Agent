@@ -66,6 +66,7 @@ class CommandPipeline:
         self.last_semantic_shadow: dict[str, Any] | None = None
         self.last_canonical_intent: dict[str, Any] | None = None
         self.shadow_records: list[dict[str, Any]] = []
+        self._active_shadow_task: asyncio.Task[Any] | None = None
 
         # Canonical Phase 3A Stateful Graph Runtime Foundation
         self.graph_runtime = create_default_graph_runtime(
@@ -115,8 +116,11 @@ class CommandPipeline:
         cmd = self.parser.parse(text, task_id=task_id, context=ctx)
         logger.info(f"[CommandPipeline] Classified intent='{cmd.intent}' category='{cmd.category.value}' complexity='{cmd.complexity.value}'")
 
-        # 2b. Phase 3A-D: Concurrently run SemanticInterpreter in SHADOW MODE
-        asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+        # 2b. Phase 3A-D.1: Concurrently run SemanticInterpreter in SHADOW MODE with single-task guard
+        if self._active_shadow_task and not self._active_shadow_task.done():
+            logger.debug("[CommandPipeline] Cancelling previous in-flight shadow task to avoid queue accumulation")
+            self._active_shadow_task.cancel()
+        self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
 
         # 3. Handle Special Case: Repeat Last Task
         if cmd.intent == "repeat_last_task":
@@ -734,6 +738,9 @@ class CommandPipeline:
                 f"agreement={agreement}"
             )
             return comparison
+        except asyncio.CancelledError:
+            logger.debug(f"[CommandPipeline] Semantic shadow evaluation cancelled for: '{text}'")
+            return {}
         except Exception as e:
             logger.debug(f"[CommandPipeline] Semantic shadow evaluation skipped/failed: {e}")
             return {}

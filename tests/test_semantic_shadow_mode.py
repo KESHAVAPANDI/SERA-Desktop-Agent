@@ -93,3 +93,99 @@ def test_graph_state_serializes_semantic_fields():
     reconstituted = GraphState.from_dict(d)
     assert reconstituted.canonical_intent == canonical_data
     assert reconstituted.semantic_shadow == shadow_data
+
+
+@pytest.mark.asyncio
+async def test_single_active_shadow_task_cancels_previous():
+    """Verify launching a new turn cancels the previous in-flight shadow task to prevent queue accumulation."""
+    from app.core.state import SERAState
+    from app.core.events import EventBus
+
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+
+    # Create a simulated hanging shadow task for turn 1
+    async def hanging_shadow(*args, **kwargs):
+        await asyncio.sleep(10.0)
+        return {}
+
+    pipeline._record_semantic_shadow = hanging_shadow
+
+    # Turn 1
+    await pipeline.execute_text("Open Chrome")
+    task_1 = pipeline._active_shadow_task
+    assert task_1 is not None
+    assert not task_1.done()
+
+    # Turn 2: should cancel task_1 immediately
+    await pipeline.execute_text("Launch Notepad")
+    task_2 = pipeline._active_shadow_task
+    assert task_2 is not None
+    assert (hasattr(task_1, "cancelling") and task_1.cancelling() > 0) or task_1.cancelled() or task_1.done()
+    assert task_2 != task_1
+
+    # Clean up
+    if task_2 and not task_2.done():
+        task_2.cancel()
+
+
+@pytest.mark.asyncio
+async def test_shadow_timeout_does_not_break_live_execution():
+    """Verify that a semantic interpreter timeout in shadow mode never fails the main live task."""
+    from app.core.state import SERAState
+    from app.core.events import EventBus
+
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+
+    # Simulate timeout in shadow interpreter
+    pipeline.semantic_interpreter.interpret_async = AsyncMock(side_effect=asyncio.TimeoutError("Simulated timeout"))
+
+    # Execute text: should execute legacy path successfully without raising
+    result = await pipeline.execute_text("Open Chrome")
+    assert result is not None
+    assert result.get("success") is True or "chrome" in result.get("response", "").lower()
+    # Ensure error from shadow mode didn't propagate as a task failure
+    assert result.get("error") != "Simulated timeout"
+
+
+@pytest.mark.asyncio
+async def test_ollama_provider_passes_native_think_and_keep_alive():
+    """Verify OllamaProvider explicitly passes think: false and keep_alive in chat payload."""
+    from app.models.llm.ollama import OllamaProvider
+    from unittest.mock import patch, MagicMock
+
+    provider = OllamaProvider(model="qwen3.5:4b", keep_alive="10m")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "message": {"content": '{"intent": "open_application"}'},
+        "total_duration": 1500000000,
+        "load_duration": 5000000,
+        "prompt_eval_duration": 200000000,
+        "eval_duration": 1200000000,
+        "prompt_eval_count": 500,
+        "eval_count": 50,
+    }
+
+    with patch.object(provider, "_get_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_resp
+        mock_get_client.return_value = mock_client
+
+        content = await provider.generate_structured(
+            messages=[{"role": "user", "content": "Open Chrome"}],
+            think=False
+        )
+
+        assert content == '{"intent": "open_application"}'
+        # Verify call arguments
+        call_kwargs = mock_client.post.call_args.kwargs
+        payload = call_kwargs["json"]
+        assert payload["think"] is False
+        assert payload["keep_alive"] == "10m"
+        assert payload["format"] == "json"
+
+        # Verify metadata extraction
+        assert provider.last_metadata["total_duration_ms"] == 1500.0
+        assert provider.last_metadata["load_duration_ms"] == 5.0
+        assert provider.last_metadata["eval_count"] == 50

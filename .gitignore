@@ -52,4 +52,5 @@ node_modules/
 .cache/
 
 # Benchmark Result Dumps
-tests/semantic_interpreter/benchmark_results.json
+tests/semantic_interpreter/benchmark_results*.json
+tests/semantic_interpreter/profile_*.json

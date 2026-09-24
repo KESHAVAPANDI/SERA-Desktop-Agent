@@ -34,11 +34,11 @@ class SemanticInterpreter:
         self,
         provider: Optional[OllamaProvider] = None,
         model: str = "qwen3.5:4b",
-        timeout: float = 5.0,
+        timeout: float = 10.0,
     ):
         self.model = os.environ.get("SEMANTIC_MODEL", model)
-        self.provider = provider or OllamaProvider(model=self.model, timeout=timeout)
-        self.timeout = timeout
+        self.timeout = float(os.environ.get("SEMANTIC_TIMEOUT", str(timeout)))
+        self.provider = provider or OllamaProvider(model=self.model, timeout=self.timeout + 5.0)
 
     @staticmethod
     def extract_compact_context(
