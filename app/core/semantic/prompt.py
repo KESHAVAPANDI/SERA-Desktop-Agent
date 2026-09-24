@@ -18,7 +18,8 @@ CRITICAL OPERATIONAL RULES:
 3. NEVER INVENT FACTS: Never invent application names, URLs, file paths, or search results. If a URL or specific result is referenced by description (e.g., "first result", "that video"), output a structured reference, NOT a hallucinated URL or title.
 4. LITERAL TARGET VS. CONTEXTUAL REFERENCE:
    - If the user specifies an explicit target by name (e.g., "Chrome", "Notepad", "Spotify", "brightness"), populate "target" with type and value.
-   - If the user refers to an anaphoric or contextual item (e.g., "it", "that", "the first result", "the second one", "the video we found"), populate "reference" with type, scope, and ordinal (1-indexed: 1 for first, 2 for second, -1 for last), leaving "target" null.
+   - If the user specifies an explicit ordinal (e.g., "first result", "the second one", "result 2", "third video"), populate "reference" with type="search_result", scope="previous_search_results", and ordinal (1-indexed: 1 for first, 2 for second, etc.).
+   - If the user refers to an anaphoric pronoun or contextual reference WITHOUT an explicit ordinal (e.g., "it", "that", "that one", "that again", "open that", "that video"), populate "reference" with type="pronoun", scope="session", value="that", and ordinal=null. NEVER invent or guess an ordinal when the user did not specify one! Leave ordinal null.
 5. CONVERSATIONAL POLITENESS: Strip or ignore greeting phrases, honorifics, and polite courtesy wrappers (e.g. "Hey Sera", "Sarah please", "Could you kindly", "for me", "if you don't mind") when determining the core intent and target.
 6. MODIFIERS:
    - Identify repeat markers ("again", "one more time", "once more") and set modifiers.repeat = true.
@@ -29,11 +30,14 @@ CRITICAL OPERATIONAL RULES:
 8. INTENT TAXONOMY:
    - APPLICATION: "open_application", "close_application", "switch_application"
    - SYSTEM: "set_brightness", "adjust_brightness", "set_volume", "adjust_volume", "system_status", "battery_status"
-   - BROWSER: "web_search", "youtube_search", "open_url", "open_reference"
+   - BROWSER: "web_search", "youtube_search", "open_url", "open_reference", "close_browser_tab", "focus_browser_tab", "open_new_tab"
    - SCREEN: "take_screenshot", "analyze_screen"
    - WORKFLOW: "compound_workflow" (for requests joining multiple actions like opening an app AND searching)
    - CONTEXT: "repeat_last_task", "cancel_task", "open_reference"
    - CONVERSATION: "greeting", "gratitude", "farewell", "capabilities", "assistant_wake"
+9. TAB CLOSURE VS APPLICATION CLOSURE:
+   - Requests to close, kill, or dismiss a browser tab (e.g. "close this tab", "close current tab", "close YouTube tab") must map to intent "close_browser_tab" (action_family "BROWSER"), NOT "close_application".
+   - Requests to close the entire application (e.g. "close Chrome", "exit browser") map to "close_application".
 
 SCHEMA SPECIFICATION:
 {
@@ -85,6 +89,7 @@ def build_semantic_prompt(utterance: str, context: Optional[Dict[str, Any]] = No
             "open_application", "close_application", "switch_application",
             "set_brightness", "adjust_brightness", "set_volume", "adjust_volume",
             "web_search", "youtube_search", "open_url", "open_reference",
+            "close_browser_tab", "focus_browser_tab", "open_new_tab",
             "take_screenshot", "analyze_screen", "compound_workflow",
             "repeat_last_task", "cancel_task", "system_status", "battery_status",
             "greeting", "gratitude", "farewell", "capabilities"

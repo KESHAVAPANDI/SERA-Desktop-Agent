@@ -50,7 +50,13 @@ from app.tools.filesystem.files import (
     CreateFileTool,
 )
 from app.tools.browser.web_search import WebSearchTool
-from app.tools.browser.browser import BrowserTool, ReadWebPageTool
+from app.tools.browser.browser import (
+    BrowserTool,
+    CloseBrowserTabTool,
+    FocusBrowserTabTool,
+    OpenNewTabTool,
+    ReadWebPageTool,
+)
 from app.tools.browser.youtube import YouTubeSearchTool
 from app.tools.screen.capture import ScreenCaptureTool
 from app.tools.screen.vision import AnalyzeScreenTool, InspectScreenTool
@@ -72,6 +78,9 @@ def create_tool_registry():
     # Web & Browser
     registry.register(WebSearchTool())
     registry.register(BrowserTool())
+    registry.register(OpenNewTabTool())
+    registry.register(CloseBrowserTabTool())
+    registry.register(FocusBrowserTabTool())
     registry.register(ReadWebPageTool())
     registry.register(YouTubeSearchTool())
 

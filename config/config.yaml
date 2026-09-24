@@ -29,8 +29,8 @@ streaming:
 
 vision:
   primary:
-    provider: groq
-    model: qwen/qwen3.6-27b
+    provider: gemini
+    model: gemini-2.5-flash
   secondary:
     provider: gemini
     model: gemini-3-flash-preview
@@ -100,8 +100,8 @@ roles:
 
   vision:
     primary:
-      provider: groq
-      model: qwen/qwen3.6-27b
+      provider: gemini
+      model: gemini-2.5-flash
     fallbacks:
       - provider: gemini
         model: gemini-3-flash-preview
@@ -132,17 +132,13 @@ models:
     provider: groq
     model: openai/gpt-oss-120b
 
-  vision_qwen:
-    provider: groq
-    model: qwen/qwen3.6-27b
-
   vision_gemini:
     provider: gemini
     model: gemini-3-flash-preview
 
   vision:
-    provider: groq
-    model: qwen/qwen3.6-27b
+    provider: gemini
+    model: gemini-2.5-flash
 
   fast:
     provider: mistral

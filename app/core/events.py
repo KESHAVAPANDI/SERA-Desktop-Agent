@@ -38,11 +38,53 @@ class AgentTurn:
     tool_results: list[ToolResultEvent] = field(default_factory=list)
 
 
+TERMINAL_EVENTS = frozenset({"TASK_COMPLETED", "TASK_FAILED", "TASK_CANCELLED"})
+
+
+class TerminalStateGovernor:
+    """Enforces monotonic terminal state across task lifecycle (Section 27).
+
+    Once a task reaches FAILED, CANCELLED, or COMPLETED, it cannot later emit
+    a contradictory or duplicate terminal event for the same task_id.
+    """
+
+    def __init__(self, max_history: int = 1000):
+        self._terminal_tasks: dict[str, str] = {}
+        self._max_history = max_history
+
+    def check_terminal_event(self, event_name: str, task_id: str | None) -> bool:
+        """Returns True if event should be emitted, False if it violates monotonicity."""
+        if not task_id or event_name not in TERMINAL_EVENTS:
+            return True
+
+        if task_id in self._terminal_tasks:
+            prev_event = self._terminal_tasks[task_id]
+            logger.warning(
+                f"[TerminalStateGovernor] Monotonicity violation: task '{task_id}' "
+                f"already terminated with '{prev_event}'. Dropping contradictory '{event_name}'."
+            )
+            return False
+
+        if len(self._terminal_tasks) >= self._max_history:
+            keys_to_remove = list(self._terminal_tasks.keys())[:200]
+            for k in keys_to_remove:
+                del self._terminal_tasks[k]
+
+        self._terminal_tasks[task_id] = event_name
+        return True
+
+
 class EventBus:
     """Pub-Sub Event Bus for internal assistant event communication supporting both positional payloads and kwargs."""
 
     def __init__(self):
         self._listeners: Dict[str, List[Callable]] = {}
+        self._governor = TerminalStateGovernor()
+
+    def _extract_task_id(self, payload: Any, kwargs: dict) -> str | None:
+        if isinstance(payload, dict):
+            return payload.get("task_id")
+        return kwargs.get("task_id")
 
     def subscribe(self, event_name: str, callback: Callable):
         """Subscribes callback to event."""
@@ -56,6 +98,10 @@ class EventBus:
 
     async def emit_async(self, event_name: str, payload: Any = None, **kwargs):
         """Publishes event to all registered subscriber callbacks (handling both async and sync)."""
+        task_id = self._extract_task_id(payload, kwargs)
+        if not self._governor.check_terminal_event(event_name, task_id):
+            return
+
         if event_name in self._listeners:
             for callback in self._listeners[event_name]:
                 try:
@@ -78,6 +124,10 @@ class EventBus:
 
     def emit(self, event_name: str, payload: Any = None, **kwargs):
         """Synchronously publishes event to registered sync subscriber callbacks."""
+        task_id = self._extract_task_id(payload, kwargs)
+        if not self._governor.check_terminal_event(event_name, task_id):
+            return
+
         if event_name in self._listeners:
             for callback in self._listeners[event_name]:
                 try:

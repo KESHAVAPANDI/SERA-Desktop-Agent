@@ -29,7 +29,6 @@ from app.speech.audio_manager import AudioManager
 from app.speech.recorder import AudioRecorder
 from app.speech.transcript_gate import TranscriptQualityGate
 from app.speech.wakeword import LocalCustomWakeWordProvider, OpenWakeWordDetector, WakeWordRegistry, WakeWordStatus
-from app.tools import create_tool_registry
 from app.tools.desktop.perception_router import DesktopPerceptionRouter
 from app.tools.desktop.ui_inspector import WindowsUIInspector
 from app.core.command_pipeline import CommandPipeline
@@ -153,7 +152,11 @@ class SERARuntime:
         self.intent_router = LocalIntentRouter()
 
         # Tools Registry (Windows tools + Semantic Desktop tools)
-        self.tools = tools_registry or create_tool_registry()
+        if tools_registry is not None:
+            self.tools = tools_registry
+        else:
+            from app.tools import create_tool_registry
+            self.tools = create_tool_registry()
 
         # Audio Manager (TTS playback & device controls)
         self.audio = audio_manager or AudioManager(
@@ -918,11 +921,12 @@ class SERARuntime:
                 })
                 self._transition_state(SERAStatus.IDLE)
             else:
-                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
-                    self.active_task_info["status"] = "COMPLETED"
-                    self.active_task_info["completed_at"] = time.time()
-                    self.active_task_info["result"] = final_resp
-
+                # Synchronous & Explicit Lifecycle (Section 24):
+                # TASK_VERIFIED -> RESPONSE_READY -> TTS_SYNTHESIS_STARTED -> AUDIO_PLAYBACK_STARTED -> SPEAKING -> AUDIO_PLAYBACK_FINISHED -> TASK_COMPLETED -> IDLE
+                self._emit_event("RESPONSE_READY", {
+                    "task_id": task_id,
+                    "content": str(final_resp),
+                })
                 self._emit_event("AGENT_RESPONSE", {
                     "task_id": task_id,
                     "turn_id": task_id,
@@ -931,6 +935,30 @@ class SERARuntime:
                     "content": str(final_resp),
                     "status": "COMPLETED",
                 })
+
+                # Playback with strict SPEAKING state synchronization
+                if hasattr(self, "audio") and self.audio and hasattr(self.audio, "speak"):
+                    self._emit_event("TTS_SYNTHESIS_STARTED", {"task_id": task_id})
+
+                    def on_playback_start():
+                        if self._loop and self._loop.is_running():
+                            self._loop.call_soon_threadsafe(self._emit_event, "AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._loop.call_soon_threadsafe(self._transition_state, SERAStatus.SPEAKING)
+                        else:
+                            self._emit_event("AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._transition_state(SERAStatus.SPEAKING)
+
+                    try:
+                        await asyncio.to_thread(self.audio.speak, str(final_resp), on_playback_start)
+                        self._emit_event("AUDIO_PLAYBACK_FINISHED", {"task_id": task_id})
+                    except Exception as audio_err:
+                        logger.warning(f"[Runtime] Audio playback failed: {audio_err}")
+
+                if self.active_task_info and self.active_task_info.get("task_id") == task_id:
+                    self.active_task_info["status"] = "COMPLETED"
+                    self.active_task_info["completed_at"] = time.time()
+                    self.active_task_info["result"] = final_resp
+
                 self._emit_event("TASK_COMPLETED", {
                     "task_id": task_id,
                     "result": final_resp,
@@ -971,13 +999,6 @@ class SERARuntime:
         if not text:
             return ""
 
-        if hasattr(self, "vision") and self.vision and hasattr(self.vision, "is_vision_query") and self.vision.is_vision_query(text):
-            ctx, summary = await self.vision.analyze_screen(text)
-            self.state.last_response = summary
-            if hasattr(self.audio, "speak"):
-                self.audio.speak(summary)
-            return summary
-
         turn_id = turn_id or f"turn-{self.turn_count}"
 
         result = await self.command_pipeline.execute_text(
@@ -1009,17 +1030,24 @@ class SERARuntime:
             tokens_stream = text_or_tokens
 
         try:
-            self._transition_state(SERAStatus.SPEAKING)
+            def on_playback_start():
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(self._transition_state, SERAStatus.SPEAKING)
+                    self._loop.call_soon_threadsafe(self._emit_event, "AUDIO_PLAYBACK_STARTED", {})
+                else:
+                    self._transition_state(SERAStatus.SPEAKING)
+                    self._emit_event("AUDIO_PLAYBACK_STARTED", {})
+
             sentence_gen = stream_sentences(
                 tokens_stream,
                 min_words=self.config.data.get("streaming", {}).get("min_words", 4),
             )
 
             if hasattr(self.audio, "speak_stream"):
-                await self.audio.speak_stream(sentence_gen, metrics=metrics)
+                await self.audio.speak_stream(sentence_gen, metrics=metrics, on_playback_start=on_playback_start)
             elif hasattr(self.audio, "speak"):
                 async for sentence in sentence_gen:
-                    self.audio.speak(sentence)
+                    await asyncio.to_thread(self.audio.speak, sentence, on_playback_start)
 
         except asyncio.CancelledError:
             self.audio.stop_speaking()

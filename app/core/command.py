@@ -353,7 +353,18 @@ class CommandParser:
                 )
 
         if cleaned in ("close it", "close that", "kill it", "exit it", "dismiss it", "close this", "close the window", "close that window", "shut it down") or re.match(r"^(?:close|exit|kill|dismiss|shut\s+down)\s+(?:it|that|this)(?:\s+down|\s+window)?$", cleaned):
-            last_app = context.get("last_application") or context.get("last_opened_target") or "chrome"
+            last_app = context.get("last_application") or context.get("last_opened_target")
+            if not last_app:
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="clarification_needed",
+                    category=CommandCategory.CONVERSATION,
+                    complexity=CommandComplexity.AMBIGUOUS,
+                    source_text=raw_text,
+                    parameters={"clarification_prompt": "What application or window would you like me to close?"},
+                    raw_response="What application or window would you like me to close?",
+                )
             return CommandObject(
                 command_id=cmd_id,
                 task_id=t_id,
@@ -416,6 +427,35 @@ class CommandParser:
                     required_tools=["set_volume"],
                     execution_plan=[
                         PlanStepItem(step_id=1, goal=f"Set system audio volume to {val}%", action="set_volume", arguments={"volume": val}, timeout_seconds=5.0, verification_type="value_check"),
+                    ],
+                )
+
+        # Contextual setting restoration: "put brightness back where it was", "put the volume back to the previous level", "restore brightness"
+        restore_setting_match = re.search(r"^(?:put|set|turn)\s+(?:the\s+)?(brightness|volume|it)\s+back(?:\s+where\s+it\s+was|\s+to\s+(?:the\s+)?previous\s+level)?$", cleaned) or re.search(r"^restore\s+(?:the\s+)?(brightness|volume)$", cleaned)
+        if restore_setting_match:
+            setting_target = restore_setting_match.group(1).lower()
+            if setting_target == "it":
+                last_intent = context.get("last_intent") or ""
+                if "volume" in last_intent or "volume" in str(context):
+                    setting_target = "volume"
+                else:
+                    setting_target = "brightness"
+
+            prev_val = context.get(f"previous_{setting_target}") or context.get(f"last_{setting_target}")
+            if prev_val is not None:
+                val = int(prev_val)
+                action_name = f"set_{setting_target}"
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent=action_name,
+                    category=CommandCategory.SYSTEM,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={setting_target: val, "is_restore": True},
+                    required_tools=[action_name],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal=f"Restore {setting_target} to previous value {val}%", action=action_name, arguments={setting_target: val}, timeout_seconds=5.0, verification_type="value_check"),
                     ],
                 )
 
@@ -857,6 +897,26 @@ class CommandParser:
                 ],
             )
 
+        # 8b0. Browser Tab Control ("close this tab", "close current tab", "close the tab", "close youtube tab")
+        tab_close_match = re.search(r"^(?:close|exit)\s+(?:the\s+|this\s+|current\s+)?([a-zA-Z0-9_\-\.\s]+?)\s*tab$", cleaned) or (cleaned in ("close this tab", "close the tab", "close current tab", "close tab"))
+        if tab_close_match:
+            tab_target = ""
+            if not isinstance(tab_close_match, bool):
+                tab_target = tab_close_match.group(1).strip()
+            return CommandObject(
+                command_id=cmd_id,
+                task_id=t_id,
+                intent="close_browser_tab",
+                category=CommandCategory.BROWSER,
+                complexity=CommandComplexity.ONE_TOOL,
+                source_text=raw_text,
+                parameters={"tab": tab_target or "current"},
+                required_tools=["close_browser_tab"],
+                execution_plan=[
+                    PlanStepItem(step_id=1, goal=f"Close browser tab '{tab_target or 'current'}'", action="close_browser_tab", arguments={"tab_identifier": tab_target}, timeout_seconds=5.0),
+                ],
+            )
+
         # 8b. Close Application ("Close Chrome", "Exit Notepad", "Kill Spotify")
         close_match = re.search(r"^(?:close|exit|kill|terminate|stop)\s+(?:the\s+)?([a-zA-Z0-9_\-\.\s]+?)(?:\s+application|\s+app)?$", cleaned)
         if close_match and not any(k in cleaned for k in ["file", "folder", "tab", "task"]):
@@ -875,10 +935,15 @@ class CommandParser:
                 ],
             )
 
-        # 8c. Open Application ("Open Chrome", "Launch Notepad", "Start Calculator")
-        open_app_match = re.search(r"^(?:open|launch|start|run)\s+(?:the\s+)?([a-zA-Z0-9_\-\.\s]+?)(?:\s+application|\s+app)?$", cleaned)
+        # 8c. Open / Bring / Focus Application ("Open Chrome", "Bring Chrome up", "Get Chrome back on my screen", "Fire up browser")
+        open_app_match = re.search(
+            r"^(?:open|launch|start|run|bring|get|fire\s+up|put|switch\s+to|focus)\s+(?:the\s+|my\s+)?([a-zA-Z0-9_\-\.\s]+?)(?:\s+application|\s+app)?(?:\s+back)?(?:\s+up|\s+forward|\s+on\s+my\s+screen|\s+on\s+screen|\s+running|\s+in\s+front)?$",
+            cleaned,
+        )
         if open_app_match and not any(k in cleaned for k in ["folder", "file", "directory", "tab", "website", "url", "youtube"]):
             app_to_open = open_app_match.group(1).strip()
+            if app_to_open.lower() in ("browser", "my browser", "the browser", "web browser"):
+                app_to_open = "chrome"
             # Guard against contextual search result phrases being parsed as an application name
             if any(w in app_to_open.lower() for w in ("result", "first", "second", "third", "search result")):
                 return CommandObject(

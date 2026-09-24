@@ -378,11 +378,12 @@ async def test_pipeline_legacy_disagreement_does_not_veto_qwen():
 
     pipeline.graph_runtime.execute = AsyncMock(side_effect=mock_execute)
 
-    # "Could you get my browser running?" classifies as general_reasoning in legacy parser
-    legacy_cmd = pipeline.parser.parse("Could you get my browser running?")
+    # Phrase that classifies as general_reasoning in legacy parser
+    phrase = "Would you mind having Chrome available for me?"
+    legacy_cmd = pipeline.parser.parse(phrase)
     assert legacy_cmd.intent == "general_reasoning"
 
-    result = await pipeline.execute_text("Could you get my browser running?", source="VOICE")
+    result = await pipeline.execute_text(phrase, source="VOICE")
 
     assert result["success"] is True
     # Qwen was granted authority, NOT vetoed by legacy general_reasoning!

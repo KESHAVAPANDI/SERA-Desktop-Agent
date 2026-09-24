@@ -75,6 +75,19 @@ class SemanticAuthorityGate:
         "repeat_previous_action",
     }
 
+    # Category D: Browser Tab Semantics (Authoritative)
+    BROWSER_TAB_INTENTS: Set[str] = {
+        "close_browser_tab",
+        "focus_browser_tab",
+        "open_new_tab",
+    }
+
+    # Category E: Hardware Setting Restoration Semantics (Authoritative)
+    SETTING_INTENTS: Set[str] = {
+        "restore_setting",
+        "restore_previous_value",
+    }
+
     # Categories that MUST REMAIN DETERMINISTIC (Section 5)
     DETERMINISTIC_INTENTS: Set[str] = {
         "set_brightness",
@@ -112,6 +125,9 @@ class SemanticAuthorityGate:
         "the window",
         "that app",
         "the app",
+        "that tab",
+        "this tab",
+        "the tab",
         "the previous one",
         "previous action",
         "the one at the top",
@@ -261,9 +277,11 @@ class SemanticAuthorityGate:
         is_app = intent_name in self.APPLICATION_INTENTS
         is_ref = intent_name in self.REFERENCE_INTENTS
         is_rep = intent_name in self.REPETITION_INTENTS or canonical_intent.modifiers.repeat
+        is_tab = intent_name in self.BROWSER_TAB_INTENTS
+        is_setting = intent_name in self.SETTING_INTENTS
         is_greeting = intent_name in ("greeting", "assistant_wake")
 
-        if not (is_app or is_ref or is_rep or is_greeting):
+        if not (is_app or is_ref or is_rep or is_tab or is_setting or is_greeting):
             return SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.LEGACY_FALLBACK,
                 canonical_intent=canonical_intent,
@@ -300,6 +318,14 @@ class SemanticAuthorityGate:
                 category="SYSTEM",
                 semantic_request_id=req_id,
             )
+
+        # Guard against tab closure being misclassified as OS application termination (Invariant 5)
+        if intent_name == "close_application" and "tab" in clean_tr:
+            canonical_intent.intent = "close_browser_tab"
+            canonical_intent.action_family = "BROWSER"
+            intent_name = "close_browser_tab"
+            is_tab = True
+            is_app = False
 
         ref_val = ""
         ref_type = ""
@@ -414,7 +440,14 @@ class SemanticAuthorityGate:
             context_available = True
 
         # All 10 checks passed! Accept Qwen as Primary Semantic Authority
-        category_label = "APPLICATION" if is_app else ("REFERENCE" if is_ref else ("REPETITION" if is_rep else "CONVERSATION"))
+        category_label = (
+            "APPLICATION" if is_app
+            else ("REFERENCE" if is_ref
+            else ("REPETITION" if is_rep
+            else ("BROWSER" if is_tab
+            else ("SETTING" if is_setting
+            else "CONVERSATION"))))
+        )
 
         return SemanticAuthorityDecision(
             source=SemanticAuthoritySource.QWEN,

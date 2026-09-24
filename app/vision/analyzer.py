@@ -57,26 +57,44 @@ class ScreenPerceptionEngine:
         )
 
     def is_vision_query(self, query: str) -> bool:
-        """Determines if a user prompt is asking to inspect or read the screen."""
+        """Determines if a user prompt is genuinely asking to visually inspect or read the screen.
+
+        Per Phase 3A-F: Spatial mentions like 'on my screen' in application-focus requests
+        (e.g. 'get Chrome back on my screen', 'put browser on screen') MUST NOT be vision queries.
+        """
         lower = query.lower().strip()
-        keywords = [
-            "on my screen",
-            "on screen",
-            "this screen",
-            "my screen",
-            "what error",
-            "what is open",
-            "what app is open",
-            "what application is open",
-            "what window",
+
+        # Guard: Explicit application manipulation commands are never vision queries
+        app_actions = ["open", "get", "bring", "put", "show", "launch", "fire up", "start", "switch to", "focus", "close", "minimize", "maximize"]
+        app_targets = ["chrome", "edge", "browser", "notepad", "calculator", "spotify", "code", "terminal", "window", "tab"]
+
+        for action in app_actions:
+            for target in app_targets:
+                if f"{action} {target}" in lower or f"{action} my {target}" in lower or f"{action} the {target}" in lower:
+                    return False
+
+        # Perceptual inspection intents
+        perceptual_patterns = [
+            "what am i looking at",
+            "what is on my screen",
+            "what's on my screen",
+            "what is visible on my screen",
+            "describe what is on my screen",
+            "describe my screen",
+            "describe the screen",
+            "what error is shown",
+            "what error is on my screen",
+            "what's that error on my screen",
+            "what is that error",
+            "read the error",
             "read my screen",
-            "read the text on",
-            "what webpage",
-            "what website",
-            "look at my screen",
-            "see on my screen",
+            "read the text on my screen",
+            "read the text on screen",
+            "look at my screen and tell me",
+            "analyze my screen",
+            "inspect my screen",
         ]
-        return any(k in lower for k in keywords)
+        return any(p in lower for p in perceptual_patterns)
 
     async def analyze_screen(
         self,

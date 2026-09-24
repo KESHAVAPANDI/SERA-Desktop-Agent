@@ -14,6 +14,7 @@ import uuid
 from typing import Any
 
 from app.core.command import CommandCategory, CommandComplexity, CommandObject, CommandParser, PlanStepItem
+from app.core.context import ContextStore, ReplayableSemanticAction
 from app.core.events import EventBus
 from app.core.graph import (
     GraphExecutionStatus,
@@ -48,6 +49,7 @@ class CommandPipeline:
         state: SERAState | None = None,
         event_bus: EventBus | None = None,
         security_manager: SecurityManager | None = None,
+        context_store: ContextStore | None = None,
     ):
         self.tools = tools
         self.router = router
@@ -57,7 +59,8 @@ class CommandPipeline:
         self.parser = CommandParser()
         self.evidence_fabric = EvidenceVerificationFabric()
 
-        # Context & History Memory
+        # Context & History Memory (Entity-Centric ContextStore)
+        self.context_store = context_store or ContextStore()
         self.last_successful_command: CommandObject | None = None
         self.last_application: str | None = None
         self.last_folder: str | None = None
@@ -71,7 +74,7 @@ class CommandPipeline:
         # Semantic Interpreter & Authority Gate (Phase 3A-E Pilot)
         self.semantic_interpreter = SemanticInterpreter()
         self.authority_gate = SemanticAuthorityGate(pilot_enabled=True)
-        self.context_resolver = SemanticContextResolver()
+        self.context_resolver = SemanticContextResolver(context_store=self.context_store)
         self.last_semantic_decision: dict[str, Any] | None = None
         self.last_semantic_shadow: dict[str, Any] | None = None
         self.last_canonical_intent: dict[str, Any] | None = None
@@ -111,15 +114,18 @@ class CommandPipeline:
         if not is_voice_turn:
             self._emit_event("TASK_STARTED", {"task_id": task_id, "user_input": text, "source": source})
 
-        # Update context map
+        # Update context map (Entity-Centric ContextStore projection + working execution context)
+        store_ctx = self.context_store.to_legacy_dict()
         ctx = {
+            **store_ctx,
             **self.context_state,
-            "last_application": self.last_application,
+            "last_application": self.last_application or store_ctx.get("last_application"),
             "last_folder": self.last_folder,
             "last_file": self.last_file,
             "last_intent": self.context_state.get("last_intent") or (self.last_successful_command.intent if self.last_successful_command else None),
             "last_tool": self.context_state.get("last_tool"),
             "last_command": self.last_successful_command,
+            "context_store": self.context_store,
         }
 
         # -------------------------------------------------------------
@@ -184,12 +190,12 @@ class CommandPipeline:
 
             if decision.source == SemanticAuthoritySource.QWEN:
                 # Qwen Primary Authority: Resolve context to CommandObject
-                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id)
+                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id, context_store=self.context_store)
                 logger.info(f"[CommandPipeline] Qwen Primary accepted: intent='{cmd.intent}' category='{cmd.category.value}' tools={cmd.required_tools}")
 
             elif decision.source == SemanticAuthoritySource.CLARIFICATION:
                 # Clarification Authority: Conversational CommandObject (0 tools)
-                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id)
+                cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id, context_store=self.context_store)
                 logger.info(f"[CommandPipeline] Clarification required: '{cmd.raw_response}'")
 
             else:
@@ -202,28 +208,45 @@ class CommandPipeline:
                 self._active_shadow_task.cancel()
             self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
 
-        # 3. Handle Special Case: Repeat Last Task (Legacy fallback recovery)
-        if cmd.intent == "repeat_last_task" and not cmd.execution_plan:
-            if not self.last_successful_command or not self.last_successful_command.execution_plan:
+        # 3. Handle Special Case: Repeat Last Task (Replay verified semantic action per Section 9)
+        if (cmd.intent in ("repeat_last_task", "repeat_action") or cmd.parameters.get("modifier") == "repeat") and not cmd.execution_plan:
+            replayable = self.context_store.get_replayable_action()
+            if replayable and replayable.execution_plan_steps:
+                logger.info(f"[CommandPipeline] Replaying verified semantic action: intent='{replayable.semantic_intent}', tools={replayable.required_tools}")
+                cmd.execution_plan = [
+                    PlanStepItem(
+                        step_id=s.get("step_id", idx + 1),
+                        goal=s.get("goal", f"Repeat step {idx + 1}"),
+                        action=s.get("action", ""),
+                        arguments=dict(s.get("arguments", {})),
+                        timeout_seconds=s.get("timeout_seconds", 8.0),
+                        verification_type=s.get("verification_type", "state_check"),
+                    )
+                    for idx, s in enumerate(replayable.execution_plan_steps)
+                ]
+                cmd.required_tools = list(replayable.required_tools)
+                cmd.complexity = CommandComplexity.ONE_TOOL if len(cmd.execution_plan) == 1 else CommandComplexity.MULTI_STEP
+                cmd.intent = f"repeat_{replayable.semantic_intent}"
+            elif self.last_successful_command and self.last_successful_command.execution_plan:
+                logger.info(f"[CommandPipeline] Repeating previous plan: {self.last_successful_command.intent}")
+                cloned_plan = [
+                    PlanStepItem(
+                        step_id=idx + 1,
+                        goal=s.goal,
+                        action=s.action,
+                        arguments=dict(s.arguments),
+                        timeout_seconds=s.timeout_seconds,
+                        verification_type=s.verification_type,
+                    )
+                    for idx, s in enumerate(self.last_successful_command.execution_plan)
+                ]
+                cmd.execution_plan = cloned_plan
+                cmd.required_tools = list(self.last_successful_command.required_tools)
+                cmd.complexity = self.last_successful_command.complexity
+                cmd.intent = f"repeat_{self.last_successful_command.intent}"
+            else:
                 resp_text = "There is no previous task available to repeat."
                 return self._finalize_result(task_id, False, resp_text, t_start, error="No previous task to repeat")
-
-            logger.info(f"[CommandPipeline] Repeating previous plan: {self.last_successful_command.intent}")
-            cloned_plan = [
-                PlanStepItem(
-                    step_id=idx + 1,
-                    goal=s.goal,
-                    action=s.action,
-                    arguments=dict(s.arguments),
-                    timeout_seconds=s.timeout_seconds,
-                    verification_type=s.verification_type,
-                )
-                for idx, s in enumerate(self.last_successful_command.execution_plan)
-            ]
-            cmd.execution_plan = cloned_plan
-            cmd.required_tools = list(self.last_successful_command.required_tools)
-            cmd.complexity = self.last_successful_command.complexity
-            cmd.intent = f"repeat_{self.last_successful_command.intent}"
 
         # 4. Handle Direct Conversational Fast-Path (0 Tools or Clarification)
         if cmd.raw_response is not None:
@@ -331,14 +354,21 @@ class CommandPipeline:
                 spoken_err = self._synthesize_conversational_error(cmd.intent, err, cmd.parameters)
                 return self._finalize_result(task_id, False, spoken_err, t_start, error=err, step_results=step_results)
 
-            # Capture entity context from steps
+            # Capture entity context from steps and record verified replayable action
             for step in cmd.execution_plan:
                 if step.action == "open_application" and step.arguments.get("application"):
                     self.last_application = step.arguments.get("application").lower()
+                    self.context_store.record_active_application(self.last_application)
                 elif step.action in ("browser_open", "youtube_search", "web_search"):
                     self.last_application = "chrome"
+                    self.context_store.record_active_application("chrome")
                     if step.arguments.get("query"):
                         self.context_state["last_search_query"] = step.arguments.get("query")
+                    if step.action == "browser_open" and step.arguments.get("url"):
+                        opened_url = step.arguments.get("url")
+                        matched = self.context_store.record_opened_url(opened_url)
+                        if not matched and cmd.parameters.get("index") is not None:
+                            self.context_store.record_opened_result_by_ordinal(cmd.parameters["index"] + 1)
                 elif step.action == "open_folder" and step.arguments.get("folder_name"):
                     self.last_folder = step.arguments.get("folder_name").capitalize()
                 elif step.action == "open_file" and step.arguments.get("file_path"):
@@ -347,10 +377,47 @@ class CommandPipeline:
                     self.context_state["last_intent"] = "set_brightness"
                     self.context_state["last_tool"] = "set_brightness"
                     self.context_state["last_brightness"] = step.arguments.get("brightness")
+                    if step.arguments.get("brightness") is not None:
+                        self.context_store.record_setting_change("brightness", step.arguments.get("brightness"))
                 elif step.action == "set_volume":
                     self.context_state["last_intent"] = "set_volume"
                     self.context_state["last_tool"] = "set_volume"
                     self.context_state["last_volume"] = step.arguments.get("volume")
+                    if step.arguments.get("volume") is not None:
+                        self.context_store.record_setting_change("volume", step.arguments.get("volume"))
+                elif step.action == "close_browser_tab":
+                    tab_id = step.arguments.get("tab_identifier") or "current"
+                    self.context_store.remove_tab(tab_id)
+
+            # Record verified replayable semantic action (Section 9)
+            if cmd.execution_plan:
+                first_step = cmd.execution_plan[0]
+                resolved_ent = cmd.entities.get("resolved_entity") or cmd.entities.get("target")
+                entity_id = getattr(resolved_ent, "entity_id", None) if resolved_ent else None
+                entity_type = getattr(resolved_ent, "entity_type", None) if resolved_ent else None
+                replayable = ReplayableSemanticAction(
+                    action_id=f"act_{uuid.uuid4().hex[:8]}",
+                    task_id=task_id,
+                    semantic_intent=cmd.intent,
+                    resolved_entity_id=entity_id,
+                    canonical_arguments=dict(first_step.arguments),
+                    execution_plan_steps=[
+                        {
+                            "step_id": s.step_id,
+                            "goal": s.goal,
+                            "action": s.action,
+                            "arguments": dict(s.arguments),
+                            "timeout_seconds": s.timeout_seconds,
+                            "verification_type": s.verification_type,
+                        }
+                        for s in cmd.execution_plan
+                    ],
+                    required_tools=list(cmd.required_tools),
+                    verification_type=first_step.verification_type,
+                    is_idempotent=True,
+                    verified_outcome={"status": "SUCCESS"},
+                )
+                self.context_store.record_action(replayable)
 
             # Synthesize Clean Single Response
             final_spoken_response = self._synthesize_plan_response(cmd, step_results) or res_state.final_response
@@ -393,7 +460,9 @@ class CommandPipeline:
             return self._finalize_result(task_id, True, resp_str, t_start)
         except Exception as e:
             err_msg = f"LLM generation failed: {str(e)}"
-            return self._finalize_result(task_id, False, err_msg, t_start, error=err_msg)
+            logger.error(f"[CommandPipeline] {err_msg}", exc_info=True)
+            conversational_msg = "I ran into an issue while processing that request. Please try again."
+            return self._finalize_result(task_id, False, conversational_msg, t_start, error=err_msg)
 
     async def _execute_single_step(
         self,
@@ -693,6 +762,29 @@ class CommandPipeline:
         if intent == "assistant_wake":
             return "Yes, I'm here. How can I help you?"
 
+        # Close Browser Tab (Section 12)
+        if intent == "close_browser_tab":
+            tab_name = cmd.parameters.get("tab") or cmd.parameters.get("tab_identifier") or ""
+            if tab_name and tab_name != "current":
+                return f"I've closed the {tab_name} tab for you."
+            return "I've closed the current browser tab for you."
+
+        # Focus Browser Tab
+        if intent == "focus_browser_tab":
+            tab_name = cmd.parameters.get("tab") or ""
+            if tab_name:
+                return f"I've brought the {tab_name} tab to the front."
+            return "I've switched to that browser tab."
+
+        # Setting restoration (Section 18)
+        if (intent in ("set_brightness", "restore_setting") or "brightness" in intent) and cmd.parameters.get("is_restore"):
+            val = cmd.parameters.get("brightness")
+            return f"I've restored the brightness back to {val} percent."
+
+        if (intent in ("set_volume", "restore_setting") or "volume" in intent) and cmd.parameters.get("is_restore"):
+            val = cmd.parameters.get("volume")
+            return f"I've restored the volume back to {val} percent."
+
         # General
         if isinstance(last_step_res, dict) and last_step_res.get("message"):
             return str(last_step_res.get("message"))
@@ -709,6 +801,12 @@ class CommandPipeline:
     ) -> dict[str, Any]:
         """Ensures terminal state, updates state machine, and broadcasts single response event."""
         duration = round(time.time() - t_start, 2)
+
+        # Ensure raw technical exceptions never leak into spoken/user-facing response (Section 28)
+        lower_resp = (response_text or "").lower()
+        if any(marker in lower_resp for marker in ("traceback", "exception:", "error:", "'nonetype'", "object has no attribute", "timed out after", "connectionrefused")):
+            response_text = "I ran into an issue while processing that request. Please try again."
+
         self.state.last_response = response_text
         is_voice = getattr(self, "_current_is_voice_turn", False)
 

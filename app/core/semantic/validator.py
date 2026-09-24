@@ -22,6 +22,7 @@ KNOWN_INTENTS = {
     "open_application", "close_application", "switch_application",
     "set_brightness", "adjust_brightness", "set_volume", "adjust_volume",
     "web_search", "youtube_search", "open_url", "open_reference",
+    "close_browser_tab", "focus_browser_tab", "open_new_tab",
     "take_screenshot", "analyze_screen", "compound_workflow",
     "repeat_last_task", "cancel_task", "system_status", "battery_status",
     "greeting", "gratitude", "farewell", "capabilities", "assistant_wake",
