@@ -81,15 +81,23 @@ class CommandPipeline:
         self.shadow_records: list[dict[str, Any]] = []
         self._active_shadow_task: asyncio.Task[Any] | None = None
 
-        # Hermes Agent Harness Spike Integration (Phase 4A)
+        # Hermes Agent Harness Spike Integration (Phase 4A / 4B)
         self.hermes_mode: str = os.environ.get("SERA_HERMES_MODE", "current").lower()
         self.hermes_bridge = None
+        self.hermes_coordinator = None
         if self.hermes_mode in ("hermes_shadow", "hermes_exp"):
             try:
-                from app.adapters.hermes import SeraHermesBridge, HermesMode
+                from app.adapters.hermes import SeraHermesBridge, HermesMode, HermesExecutionCoordinator
                 self.hermes_bridge = SeraHermesBridge(mode=HermesMode(self.hermes_mode))
+                if self.hermes_mode == "hermes_exp":
+                    self.hermes_coordinator = HermesExecutionCoordinator(
+                        bridge=self.hermes_bridge,
+                        context_store=self.context_store,
+                        tool_registry=self.tools,
+                        evidence_fabric=self.evidence_fabric,
+                    )
             except Exception as e:
-                logger.warning(f"Failed to initialize SeraHermesBridge: {e}")
+                logger.warning(f"Failed to initialize SeraHermesBridge/Coordinator: {e}")
         self.last_hermes_shadow: dict[str, Any] | None = None
         self.hermes_shadow_records: list[dict[str, Any]] = []
 
@@ -220,17 +228,31 @@ class CommandPipeline:
                 self._active_shadow_task.cancel()
             self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
 
-        # Hermes Shadow / Experimental Mode Interception (Phase 4A)
+        # Hermes Shadow / Experimental Mode Interception (Phase 4A / 4B)
         if self.hermes_mode == "hermes_shadow" and self.hermes_bridge:
             asyncio.create_task(self._record_hermes_shadow(text, ctx, task_id, cmd))
-        elif self.hermes_mode == "hermes_exp" and self.hermes_bridge:
-            try:
-                hermes_plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=task_id)
-                cmd = self.hermes_bridge.convert_to_command_object(hermes_plan, ctx)
-                logger.info(f"[CommandPipeline] Executing via Hermes Experimental Plan: intent='{cmd.intent}', tools={cmd.required_tools}")
-            except Exception as e:
-                logger.error(f"[CommandPipeline] Hermes Experimental plan failed: {e}. Preserving safety-preserving fallback.")
-                cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+        elif self.hermes_mode == "hermes_exp":
+            if not is_fast_path and self.hermes_coordinator:
+                try:
+                    return await self.hermes_coordinator.execute_task_for_pipeline(
+                        text=text,
+                        task_id=task_id,
+                        context=ctx,
+                        t_start=t_start,
+                        source=source,
+                        cancellation_event=self.active_cancellation_event,
+                    )
+                except Exception as e:
+                    logger.error(f"[CommandPipeline] Hermes Execution Coordinator failed: {e}. Preserving safety fallback.")
+                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+            elif self.hermes_bridge:
+                try:
+                    hermes_plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=task_id)
+                    cmd = self.hermes_bridge.convert_to_command_object(hermes_plan, ctx)
+                    logger.info(f"[CommandPipeline] Executing via Hermes Experimental Plan: intent='{cmd.intent}', tools={cmd.required_tools}")
+                except Exception as e:
+                    logger.error(f"[CommandPipeline] Hermes Experimental plan failed: {e}. Preserving safety-preserving fallback.")
+                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
 
         # 3. Handle Special Case: Repeat Last Task (Replay verified semantic action per Section 9)
         if (cmd.intent in ("repeat_last_task", "repeat_action") or cmd.parameters.get("modifier") == "repeat") and not cmd.execution_plan:

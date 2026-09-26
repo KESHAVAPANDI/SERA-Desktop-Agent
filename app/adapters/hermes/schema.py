@@ -52,17 +52,59 @@ class PermissionRequirement(BaseModel):
     created_at: float = Field(default_factory=lambda: 0.0)
 
 
+class TargetType(str, Enum):
+    """Canonical SERA target entity classes."""
+    APPLICATION = "APPLICATION"
+    WINDOW = "WINDOW"
+    BROWSER = "BROWSER"
+    TAB = "TAB"
+    WEBPAGE = "WEBPAGE"
+    SEARCH_RESULT = "SEARCH_RESULT"
+    SETTING = "SETTING"
+
+
+class ExecutionHandoffStatus(str, Enum):
+    """Terminal and progression states of the execution handoff."""
+    INITIALIZED = "INITIALIZED"
+    IN_PROGRESS = "IN_PROGRESS"
+    PAUSED_APPROVAL = "PAUSED_APPROVAL"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ApprovalDecision(str, Enum):
+    """User or channel approval decision on a pending permission request."""
+    APPROVE = "approve"
+    DENY = "deny"
+    CANCEL = "cancel"
+    EXPIRE = "expire"
+
+
+class StepValidationResult(BaseModel):
+    """Result of SERA's authoritative validation of a proposed Hermes step."""
+    is_valid: bool
+    rejection_code: Optional[str] = None  # e.g., INVALID_SCHEMA, UNSUPPORTED_CAPABILITY, UNRESOLVED_ENTITY, AMBIGUOUS_TARGET
+    reason: Optional[str] = None
+    resolved_target: Optional[Any] = None
+
+
 class AgentStep(BaseModel):
     """Atomic execution step planned by Hermes."""
     step_id: int
-    action: str  # Tool name (e.g., 'open_application', 'set_brightness', 'close_browser_tab')
+    action: str  # Tool name (e.g., 'open_application', 'youtube_search', 'browser_open')
+    target_type: Optional[TargetType] = None
+    target_reference: Optional[str] = None  # E.g. 'chrome', '1', 'https://...'
     arguments: Dict[str, Any] = Field(default_factory=dict)
     rationale: Optional[str] = None
     target_entity_id: Optional[str] = None
     expected_evidence: str = "VALUE_CHECK"  # WINDOW_HANDLE, PROCESS_ID, VALUE_CHECK
-    timeout_seconds: float = 5.0
+    timeout_seconds: float = 8.0
     requires_confirmation: bool = False
+    requires_clarification: bool = False
     permission: Optional[PermissionRequirement] = None
+    status: str = "PENDING"  # PENDING, VALIDATED, EXECUTING, VERIFIED, FAILED, SKIPPED
+    verified_evidence: Optional[Dict[str, Any]] = None
 
 
 class AgentPlan(BaseModel):
@@ -73,12 +115,35 @@ class AgentPlan(BaseModel):
     steps: List[AgentStep] = Field(default_factory=list)
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     confidence: float = 1.0
+    is_complete: bool = False
     needs_clarification: bool = False
     clarification_prompt: Optional[str] = None
     raw_thought: Optional[str] = None
     finish_reason: str = "stop"  # stop, length, tool_calls, error, cancelled
     latency_ms: float = 0.0
     model: str = "hermes"
+
+
+class HermesExecutionTelemetry(BaseModel):
+    """Comprehensive telemetry for live Hermes execution runs (Phase 4B Section 18)."""
+    task_id: str
+    session_id: str = "none"
+    hermes_version: str = "v0.21.5"
+    model: str = "meta-llama/llama-3.3-70b-instruct"
+    provider: str = "openrouter"
+    turns: int = 1
+    reasoning_latency_ms: float = 0.0
+    execution_latency_ms: float = 0.0
+    verification_latency_ms: float = 0.0
+    total_latency_ms: float = 0.0
+    total_tokens: int = 0
+    estimated_cost_usd: float = 0.0
+    steps_planned: int = 0
+    steps_executed: int = 0
+    approval_interruptions: int = 0
+    verification_results: List[Dict[str, Any]] = Field(default_factory=list)
+    replans: int = 0
+    terminal_state: ExecutionHandoffStatus = ExecutionHandoffStatus.COMPLETED
 
 
 class HermesTraceItem(BaseModel):

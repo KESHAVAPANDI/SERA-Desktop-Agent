@@ -140,3 +140,86 @@ Both the Primary Presence (`/presence`) and the Command Center (`/`) connect to 
 * Body 2 displays the final verified outcome and saves the task to History.
 
 Neither interface maintains private task logic; the central runtime is the single source of truth.
+
+---
+
+## 4. Phase 4B — Live Hermes Agent Harness & Authoritative Control Loop
+
+Phase 4B establishes the official integration between Nous Research Hermes Agent and SERA's execution substrate.
+
+### 4.1 Invariant Authority Boundary
+
+> **"Hermes decides what should happen. SERA decides whether it is allowed, makes it happen, determines what actually happened, and tells Hermes the verified result."**
+
+* **Hermes Ownership:** Natural-language reasoning, sequential planning, tool/skill selection, multi-step decomposition, context reflection, continuation, and replanning.
+* **SERA Ownership:** Identity, entity truth, verified context, security/permissions, execution substrate, observation, verification, evidence fabric, and desktop/browser lifecycle.
+
+### 4.2 End-to-End Control Loop
+
+```text
+            ┌──────────────────────────────────────────────┐
+            │                 USER REQUEST                 │
+            │ "Search YouTube for Python tutorials and..." │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │          SERA AUTHORITY & ROUTING            │
+            │  Fast Path? (<1ms) -> Deterministic execute  │
+            │  Complex/Agentic?  -> Dispatch to Hermes     │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │          REAL OFFICIAL HERMES HARNESS        │
+            │  Reasons over compact verified SERA snapshot │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                               proposal
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │            SERA AUTHORITATIVE VALIDATION     │
+            │  Schema, Capability, Entity Grounding, Safety│
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ├── Valid? No ──► REJECT / FAIL
+                                   ▼ (Yes)
+            ┌──────────────────────────────────────────────┐
+            │           PERMISSION BOUNDARY CHECK          │
+            │  Destructive? -> PAUSED_APPROVAL (Request ID)│
+            │  Approved?    -> Proceed with execution      │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │            SERA SUBSTRATE EXECUTION          │
+            │  Dispatches to ToolRegistry / Graph Runtime  │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │          EMPIRICAL EVIDENCE VERIFICATION     │
+            │  Tool success != World success               │
+            │  Verifies process, window, tab, and entities │
+            └──────────────────────┬───────────────────────┘
+                                   │
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │               CONTEXT STORE UPDATE           │
+            │  Registered ONLY AFTER empirical verification│
+            └──────────────────────┬───────────────────────┘
+                                   │
+                             verified state
+                                   ▼
+            ┌──────────────────────────────────────────────┐
+            │         HERMES CONTINUATION / REPLANNING     │
+            │  Receives verified history & entity snapshot │
+            │  Plans next step OR signals completion       │
+            └──────────────────────────────────────────────┘
+```
+
+### 4.3 Multi-Turn Execution Contract
+1. **Authoritative Entity Grounding:** Proposed references (e.g. `ordinal=1`, `first search result`) are deterministically ground against active `ContextStore.SearchSession` items into verified canonical URLs (`https://www.youtube.com/watch?...`). Hallucinated or ambiguous references are strictly rejected before execution.
+2. **Permission Boundary States:** Destructive actions (`close_application`, `kill_process`) are tagged `PENDING_APPROVAL` with a stable `perm_...` request ID, supporting `APPROVE`, `DENY`, `CANCEL`, and `EXPIRE`.
+3. **Deterministic Fast Path:** Voice cancellation (`"Stop"`) and direct scalar adjustments (`"Set brightness to 50"`) bypass the multi-second LLM reasoning loop, executing through SERA's deterministic path in `<1ms`.
+
