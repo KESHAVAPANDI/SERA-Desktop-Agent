@@ -224,17 +224,32 @@ class ContextStore:
     # -------------------------------------------------------------
     def register_browser_tab(
         self,
-        title: str,
-        canonical_url: str,
+        title: Optional[Union[BrowserTabEntity, str]] = None,
+        canonical_url: Optional[str] = None,
         browser_name: str = "chrome",
         hwnd: Optional[int] = None,
         is_active: bool = True,
+        tab: Optional[BrowserTabEntity] = None,
+        **kwargs: Any,
     ) -> BrowserTabEntity:
+        """Registers a canonical BrowserTabEntity without duplicate ID generation."""
         with self._lock:
+            # Handle tab passed as either 'tab' kwarg or 'title' positional/kwarg
+            target_tab = tab if isinstance(tab, BrowserTabEntity) else (title if isinstance(title, BrowserTabEntity) else None)
+            if target_tab is not None:
+                self._browser_tabs[target_tab.entity_id] = target_tab
+                self.register_entity(target_tab)
+                if target_tab.is_active:
+                    self._active_browser_tab_id = target_tab.entity_id
+                logger.info(f"[ContextStore] Registered canonical BrowserTabEntity id='{target_tab.entity_id}' title='{target_tab.title}' url='{target_tab.canonical_url}'")
+                return target_tab
+
+            title_str = str(title or kwargs.get("title_str") or "Browser Tab")
+            url_str = canonical_url or ""
             # Check if tab with this canonical URL is already registered
-            existing = self.find_browser_tab_by_url(canonical_url)
+            existing = self.find_browser_tab_by_url(url_str)
             if existing:
-                existing.title = title
+                existing.title = title_str
                 existing.is_active = is_active
                 existing.observed_at = time.time()
                 if hwnd:
@@ -243,20 +258,25 @@ class ContextStore:
                     self._active_browser_tab_id = existing.entity_id
                 return existing
 
-            tab = BrowserTabEntity(
+            new_tab = BrowserTabEntity(
                 browser_name=browser_name,
-                title=title,
-                canonical_url=canonical_url,
+                title=title_str,
+                canonical_url=url_str,
                 is_active=is_active,
                 hwnd=hwnd,
                 tab_ordinal=len(self._browser_tabs) + 1,
             )
-            self._browser_tabs[tab.entity_id] = tab
-            self.register_entity(tab)
+            self._browser_tabs[new_tab.entity_id] = new_tab
+            self.register_entity(new_tab)
             if is_active:
-                self._active_browser_tab_id = tab.entity_id
-            logger.info(f"[ContextStore] Registered BrowserTabEntity id='{tab.entity_id}' title='{title}' url='{canonical_url}'")
-            return tab
+                self._active_browser_tab_id = new_tab.entity_id
+            logger.info(f"[ContextStore] Registered BrowserTabEntity id='{new_tab.entity_id}' title='{title_str}' url='{url_str}'")
+            return new_tab
+
+    def get_browser_tab(self, tab_id: str) -> Optional[BrowserTabEntity]:
+        """Retrieves a registered BrowserTabEntity by its canonical ID."""
+        with self._lock:
+            return self._browser_tabs.get(tab_id)
 
     def find_browser_tab_by_url(self, url: str) -> Optional[BrowserTabEntity]:
         with self._lock:
@@ -277,15 +297,24 @@ class ContextStore:
             return None
 
     def remove_browser_tab(self, tab_id: str) -> bool:
-        """Removes tab from registry when verified closed (process remains alive!)."""
+        """Removes tab from registry and entity store when verified closed (Section 3)."""
         with self._lock:
+            removed = False
             if tab_id in self._browser_tabs:
                 del self._browser_tabs[tab_id]
-                if self._active_browser_tab_id == tab_id:
-                    self._active_browser_tab_id = next(iter(self._browser_tabs.keys())) if self._browser_tabs else None
-                logger.info(f"[ContextStore] Closed BrowserTabEntity id='{tab_id}'")
-                return True
-            return False
+                removed = True
+            if tab_id in self._entities:
+                del self._entities[tab_id]
+                removed = True
+
+            if self._active_browser_tab_id == tab_id:
+                self._active_browser_tab_id = next(iter(self._browser_tabs.keys())) if self._browser_tabs else None
+            if self._last_resolved_entity_id == tab_id:
+                self._last_resolved_entity_id = None
+
+            if removed:
+                logger.info(f"[ContextStore] Closed and removed BrowserTabEntity id='{tab_id}'")
+            return removed
 
     # -------------------------------------------------------------
     # 4. APPLICATION & WINDOW STATE (Section 5)

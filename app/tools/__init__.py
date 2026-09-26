@@ -5,6 +5,7 @@ from app.tools.windows.apps import (
     OpenFolderTool,
     OpenFileTool,
     CloseApplicationTool,
+    CloseWindowTool,
     ListRunningApplicationsTool,
 )
 
@@ -70,6 +71,7 @@ def create_tool_registry():
     registry.register(OpenFolderTool())
     registry.register(OpenFileTool())
     registry.register(CloseApplicationTool())
+    registry.register(CloseWindowTool())
     registry.register(ListRunningApplicationsTool())
     registry.register(FindFilesTool())
     registry.register(CreateFolderTool())

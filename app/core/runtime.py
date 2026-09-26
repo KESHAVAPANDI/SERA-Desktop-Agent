@@ -620,13 +620,23 @@ class SERARuntime:
                     "content": str(final_resp),
                     "status": "FAILED",
                 })
+                self._emit_event("RESPONSE_READY", {"task_id": task_id, "text": str(final_resp), "status": "FAILED"})
 
-                # 2. Stay strictly in SPEAKING while real TTS audio plays
-                if final_resp and hasattr(self.audio, "speak"):
-                    self._transition_state(SERAStatus.SPEAKING)
-                    self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
+                # 2. Strict audio playback lifecycle: synthesis -> playback_start -> SPEAKING -> playback_finished
+                if final_resp and hasattr(self, "audio") and self.audio and hasattr(self.audio, "speak"):
+                    self._emit_event("TTS_SYNTHESIS_STARTED", {"task_id": task_id})
+
+                    def on_voice_playback_start():
+                        if getattr(self, "_loop", None) and self._loop.is_running():
+                            self._loop.call_soon_threadsafe(self._emit_event, "AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._loop.call_soon_threadsafe(self._transition_state, SERAStatus.SPEAKING)
+                        else:
+                            self._emit_event("AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._transition_state(SERAStatus.SPEAKING)
+
                     try:
-                        await asyncio.to_thread(self.audio.speak, str(final_resp))
+                        await asyncio.to_thread(self.audio.speak, str(final_resp), on_voice_playback_start)
+                        self._emit_event("AUDIO_PLAYBACK_FINISHED", {"task_id": task_id})
                     except Exception as e:
                         logger.debug(f"[SERARuntime] TTS playback error: {e}")
                     finally:
@@ -655,13 +665,23 @@ class SERARuntime:
                     "content": str(final_resp),
                     "status": "COMPLETED",
                 })
+                self._emit_event("RESPONSE_READY", {"task_id": task_id, "text": str(final_resp), "status": "COMPLETED"})
 
-                # 2. Stay strictly in SPEAKING while real TTS audio plays
-                if final_resp and hasattr(self.audio, "speak"):
-                    self._transition_state(SERAStatus.SPEAKING)
-                    self._emit_event("TTS_STARTED", {"task_id": task_id, "text": str(final_resp)})
+                # 2. Strict audio playback lifecycle: synthesis -> playback_start -> SPEAKING -> playback_finished
+                if final_resp and hasattr(self, "audio") and self.audio and hasattr(self.audio, "speak"):
+                    self._emit_event("TTS_SYNTHESIS_STARTED", {"task_id": task_id})
+
+                    def on_voice_playback_start():
+                        if getattr(self, "_loop", None) and self._loop.is_running():
+                            self._loop.call_soon_threadsafe(self._emit_event, "AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._loop.call_soon_threadsafe(self._transition_state, SERAStatus.SPEAKING)
+                        else:
+                            self._emit_event("AUDIO_PLAYBACK_STARTED", {"task_id": task_id})
+                            self._transition_state(SERAStatus.SPEAKING)
+
                     try:
-                        await asyncio.to_thread(self.audio.speak, str(final_resp))
+                        await asyncio.to_thread(self.audio.speak, str(final_resp), on_voice_playback_start)
+                        self._emit_event("AUDIO_PLAYBACK_FINISHED", {"task_id": task_id})
                     except Exception as e:
                         logger.debug(f"[SERARuntime] TTS playback error: {e}")
                     finally:

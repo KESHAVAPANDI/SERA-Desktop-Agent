@@ -5,6 +5,10 @@ import subprocess
 import time
 import winreg
 import psutil
+import win32con
+import win32gui
+import win32process
+from typing import Optional
 from app.tools.base import Tool
 
 KNOWN_WEBSITES = {
@@ -478,6 +482,118 @@ class CloseApplicationTool(Tool):
             "application": application,
             "processes_closed": closed_count,
             "message": f"Closed {closed_count} process(es) matching '{application}'.",
+        }
+
+
+class CloseWindowTool(Tool):
+    """Closes a specific window by HWND or title without terminating the underlying application process (Section 6)."""
+
+    @property
+    def name(self) -> str:
+        return "close_window"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Close a specific application window or active foreground window using Win32 WM_CLOSE "
+            "without terminating the underlying application process. Use this when the user asks to "
+            "close a window (e.g. 'close this window', 'close that window', 'close the Notepad window')."
+        )
+
+    @property
+    def parameters(self):
+        return {
+            "type": "object",
+            "properties": {
+                "window_title": {
+                    "type": "string",
+                    "description": "Optional title or partial title of the window to close. If omitted, closes the active foreground window.",
+                },
+                "hwnd": {
+                    "type": "integer",
+                    "description": "Optional explicit HWND handle of the window to close.",
+                },
+            },
+        }
+
+    async def execute(self, window_title: Optional[str] = None, hwnd: Optional[int] = None, **kwargs):
+        try:
+            import win32service
+            win32service.OpenDesktop("default", 0, False, win32con.GENERIC_ALL).SetThreadDesktop()
+        except Exception:
+            pass
+
+        target_hwnd = hwnd or kwargs.get("handle")
+        title_query = (window_title or kwargs.get("title") or kwargs.get("target") or "").strip()
+
+        # 1. Resolve target HWND
+        if not target_hwnd and title_query:
+            matched_hwnds = []
+            def enum_cb(h, _):
+                if win32gui.IsWindowVisible(h):
+                    txt = win32gui.GetWindowText(h)
+                    if txt and title_query.lower() in txt.lower():
+                        matched_hwnds.append((h, txt))
+            try:
+                win32gui.EnumWindows(enum_cb, None)
+            except Exception:
+                pass
+            if matched_hwnds:
+                target_hwnd = matched_hwnds[0][0]
+
+        # Fallback to active foreground window
+        if not target_hwnd:
+            target_hwnd = win32gui.GetForegroundWindow()
+
+        if not target_hwnd or not win32gui.IsWindow(target_hwnd):
+            return {
+                "success": False,
+                "verified": False,
+                "error": f"No active window found to close (query='{title_query}').",
+            }
+
+        w_title = win32gui.GetWindowText(target_hwnd)
+        owning_pid = None
+        try:
+            _, owning_pid = win32process.GetWindowThreadProcessId(target_hwnd)
+        except Exception:
+            pass
+
+        # 2. Dispatch WM_CLOSE to target window handle
+        try:
+            win32gui.PostMessage(target_hwnd, win32con.WM_CLOSE, 0, 0)
+        except Exception as e:
+            return {
+                "success": False,
+                "verified": False,
+                "error": f"Failed to post WM_CLOSE to window HWND {target_hwnd}: {e}",
+            }
+
+        # 3. Empirically verify that the window is closed
+        closed = False
+        for _ in range(15):
+            await asyncio.sleep(0.1)
+            if not win32gui.IsWindow(target_hwnd) or not win32gui.IsWindowVisible(target_hwnd):
+                closed = True
+                break
+
+        # Check process survival (Window close must NOT kill process indiscriminately)
+        process_alive = False
+        if owning_pid:
+            try:
+                proc = psutil.Process(owning_pid)
+                process_alive = proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                process_alive = False
+
+        return {
+            "success": True,
+            "verified": closed,
+            "hwnd": target_hwnd,
+            "title": w_title,
+            "pid": owning_pid,
+            "process_alive": process_alive,
+            "message": f"Closed window '{w_title or target_hwnd}' (process alive={process_alive}).",
         }
 
 

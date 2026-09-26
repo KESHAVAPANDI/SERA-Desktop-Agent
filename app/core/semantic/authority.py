@@ -22,7 +22,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 from pydantic import BaseModel, Field
 
-from app.core.semantic.schema import ActionFamily, CanonicalIntent
+from app.core.semantic.schema import ActionFamily, CanonicalIntent, TargetType
 
 logger = logging.getLogger("sera.semantic.authority")
 
@@ -63,6 +63,13 @@ class SemanticAuthorityGate:
         "switch_application",
     }
 
+    # Category A2: Window Semantics (Authoritative)
+    WINDOW_INTENTS: Set[str] = {
+        "close_window",
+        "focus_window",
+        "switch_window",
+    }
+
     # Category B: Reference Semantics (Authoritative when context present)
     REFERENCE_INTENTS: Set[str] = {
         "open_reference",
@@ -82,18 +89,18 @@ class SemanticAuthorityGate:
         "open_new_tab",
     }
 
-    # Category E: Hardware Setting Restoration Semantics (Authoritative)
+    # Category E: Hardware Setting Semantics (Authoritative for natural language interpretation, deterministic for execution)
     SETTING_INTENTS: Set[str] = {
+        "adjust_brightness",
+        "adjust_volume",
         "restore_setting",
         "restore_previous_value",
     }
 
-    # Categories that MUST REMAIN DETERMINISTIC (Section 5)
+    # Categories that MUST REMAIN DETERMINISTIC (Scalar diagnostics and direct safety actions)
     DETERMINISTIC_INTENTS: Set[str] = {
         "set_brightness",
-        "adjust_brightness",
         "set_volume",
-        "adjust_volume",
         "mute",
         "unmute",
         "get_current_time",
@@ -196,13 +203,57 @@ class SemanticAuthorityGate:
                 semantic_request_id=req_id,
             )
 
-        # Rule 1: Valid schema
+        clean_tr = transcript.strip().rstrip(".!?").lower()
+
+        # Rule 1: Valid schema / Safe Fallback Boundary (Section 8)
         if canonical_intent is None or not isinstance(canonical_intent, CanonicalIntent):
             fallback_reason = "INVALID_SCHEMA"
             if model_error and "timed out" in model_error.lower():
                 fallback_reason = "QWEN_TIMEOUT"
             elif model_error:
                 fallback_reason = f"QWEN_ERROR: {model_error}"
+
+            # Safety Boundary: When primary intelligence is unavailable,
+            # NEVER guess destructive actions (Invariant: reduced intelligence != dangerous guessing)
+            # 1. Conversational cancellation requests
+            if any(p in clean_tr for p in ("stop what you", "stop doing", "stop whatever", "stop execution", "cancel current", "cancel task", "abort")):
+                return SemanticAuthorityDecision(
+                    source=SemanticAuthoritySource.DETERMINISTIC,
+                    canonical_intent=None,
+                    accepted=True,
+                    fallback_reason="SAFE_DETERMINISTIC_CANCELLATION",
+                    category="SYSTEM",
+                    semantic_request_id=req_id,
+                )
+
+            # 2. Contextual pronouns without verified context demand clarification
+            pronoun_triggers = ("open that", "open it", "close that", "close it", "close that window", "that one", "do that again")
+            if any(clean_tr == p or clean_tr.startswith(f"{p} ") for p in pronoun_triggers) or clean_tr in self.CONTEXTUAL_PRONOUNS:
+                resolved = context.get("last_application") or context.get("last_opened_target") or context.get("last_resolved_entity_id")
+                if not resolved:
+                    return SemanticAuthorityDecision(
+                        source=SemanticAuthoritySource.CLARIFICATION,
+                        canonical_intent=None,
+                        accepted=False,
+                        fallback_reason="MISSING_CONTEXT_REFERENT",
+                        category="CONVERSATION",
+                        context_required=True,
+                        context_available=False,
+                        semantic_request_id=req_id,
+                    )
+
+            # 3. Bare action verbs
+            if clean_tr in ("launch", "open", "start", "run", "close", "kill", "exit"):
+                return SemanticAuthorityDecision(
+                    source=SemanticAuthoritySource.CLARIFICATION,
+                    canonical_intent=None,
+                    accepted=False,
+                    fallback_reason="MISSING_APPLICATION_TARGET",
+                    category="APPLICATION",
+                    context_required=False,
+                    context_available=False,
+                    semantic_request_id=req_id,
+                )
 
             return SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.LEGACY_FALLBACK,
@@ -214,7 +265,6 @@ class SemanticAuthorityGate:
             )
 
         # Section 17 & 31: Single bare action verb without a target demands clarification
-        clean_tr = transcript.strip().rstrip(".!?").lower()
         if clean_tr in ("launch", "open", "start", "run"):
             return SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.CLARIFICATION,
@@ -252,7 +302,14 @@ class SemanticAuthorityGate:
             )
 
         # Check Deterministic Categories (Section 5)
-        if intent_name in self.DETERMINISTIC_INTENTS:
+        is_relative_setting = False
+        if canonical_intent and canonical_intent.modifiers:
+            is_relative_setting = bool(
+                canonical_intent.modifiers.relative
+                or canonical_intent.modifiers.direction in ("restore", "down", "up")
+            )
+
+        if intent_name in self.DETERMINISTIC_INTENTS and not is_relative_setting:
             return SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.DETERMINISTIC,
                 canonical_intent=canonical_intent,
@@ -275,13 +332,14 @@ class SemanticAuthorityGate:
 
         # Rule 3: Intent belongs to enabled Qwen-authoritative category
         is_app = intent_name in self.APPLICATION_INTENTS
+        is_win = intent_name in self.WINDOW_INTENTS
         is_ref = intent_name in self.REFERENCE_INTENTS
-        is_rep = intent_name in self.REPETITION_INTENTS or canonical_intent.modifiers.repeat
+        is_rep = intent_name in self.REPETITION_INTENTS or (canonical_intent.modifiers and canonical_intent.modifiers.repeat)
         is_tab = intent_name in self.BROWSER_TAB_INTENTS
-        is_setting = intent_name in self.SETTING_INTENTS
+        is_setting = intent_name in self.SETTING_INTENTS or (intent_name in ("set_brightness", "set_volume") and is_relative_setting)
         is_greeting = intent_name in ("greeting", "assistant_wake")
 
-        if not (is_app or is_ref or is_rep or is_tab or is_setting or is_greeting):
+        if not (is_app or is_win or is_ref or is_rep or is_tab or is_setting or is_greeting):
             return SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.LEGACY_FALLBACK,
                 canonical_intent=canonical_intent,
@@ -305,8 +363,12 @@ class SemanticAuthorityGate:
         # Rule 10: Internal Consistency & Target Check
         # Edge Case: "Launch" without a target must require clarification, not guess
         target_val = ""
-        if canonical_intent.target and canonical_intent.target.value:
-            target_val = str(canonical_intent.target.value).strip().lower()
+        target_type = None
+        if canonical_intent.target:
+            if canonical_intent.target.value:
+                target_val = str(canonical_intent.target.value).strip().lower()
+            if canonical_intent.target.type:
+                target_type = str(canonical_intent.target.type).strip().lower()
 
         # Guard against self-close being captured as a normal OS application close
         if intent_name == "close_application" and target_val in ("yourself", "sera", "sarah", "sara", "presence", "the presence"):
@@ -319,13 +381,26 @@ class SemanticAuthorityGate:
                 semantic_request_id=req_id,
             )
 
-        # Guard against tab closure being misclassified as OS application termination (Invariant 5)
-        if intent_name == "close_application" and "tab" in clean_tr:
-            canonical_intent.intent = "close_browser_tab"
-            canonical_intent.action_family = "BROWSER"
-            intent_name = "close_browser_tab"
-            is_tab = True
-            is_app = False
+        # Architectural Target Specificity Mapping (Sections 4 & 6)
+        if target_type in ("tab", TargetType.TAB.value):
+            if intent_name in ("close_application", "close_window"):
+                canonical_intent.intent = "close_browser_tab"
+                canonical_intent.action_family = ActionFamily.BROWSER
+                intent_name = "close_browser_tab"
+                is_tab = True
+                is_app = False
+            elif intent_name in ("open_application", "switch_application", "focus_window"):
+                canonical_intent.intent = "focus_browser_tab"
+                canonical_intent.action_family = ActionFamily.BROWSER
+                intent_name = "focus_browser_tab"
+                is_tab = True
+                is_app = False
+        elif target_type in ("window", TargetType.WINDOW.value):
+            if intent_name == "close_application":
+                canonical_intent.intent = "close_window"
+                intent_name = "close_window"
+                is_win = True
+                is_app = False
 
         ref_val = ""
         ref_type = ""
@@ -389,8 +464,8 @@ class SemanticAuthorityGate:
 
         if is_contextual_target:
             context_required = True
-            if intent_name == "close_application":
-                active_app = context.get("active_application") or context.get("last_application") or context.get("last_opened_target")
+            if intent_name in ("close_application", "close_window"):
+                active_app = context.get("active_application") or context.get("last_application") or context.get("last_opened_target") or context.get("last_window")
                 if not active_app:
                     logger.info("[SemanticAuthorityGate] Contextual close requested, but active application context is empty")
                     return SemanticAuthorityDecision(
@@ -398,15 +473,15 @@ class SemanticAuthorityGate:
                         canonical_intent=canonical_intent,
                         accepted=False,
                         fallback_reason="ACTIVE_APPLICATION_MISSING",
-                        category="APPLICATION",
+                        category="WINDOW" if is_win else "APPLICATION",
                         context_required=True,
                         context_available=False,
                         semantic_request_id=req_id,
                     )
                 context_available = True
 
-            elif intent_name == "open_application":
-                last_target = context.get("last_application") or context.get("last_opened_target")
+            elif intent_name in ("open_application", "focus_window"):
+                last_target = context.get("last_application") or context.get("last_opened_target") or context.get("last_window")
                 if not last_target:
                     logger.info("[SemanticAuthorityGate] 'Open that' requested, but no target entity in context")
                     return SemanticAuthorityDecision(
@@ -414,7 +489,7 @@ class SemanticAuthorityGate:
                         canonical_intent=canonical_intent,
                         accepted=False,
                         fallback_reason="TARGET_ENTITY_MISSING",
-                        category="APPLICATION",
+                        category="WINDOW" if is_win else "APPLICATION",
                         context_required=True,
                         context_available=False,
                         semantic_request_id=req_id,
@@ -442,11 +517,12 @@ class SemanticAuthorityGate:
         # All 10 checks passed! Accept Qwen as Primary Semantic Authority
         category_label = (
             "APPLICATION" if is_app
+            else ("WINDOW" if is_win
             else ("REFERENCE" if is_ref
             else ("REPETITION" if is_rep
             else ("BROWSER" if is_tab
             else ("SETTING" if is_setting
-            else "CONVERSATION"))))
+            else "CONVERSATION")))))
         )
 
         return SemanticAuthorityDecision(

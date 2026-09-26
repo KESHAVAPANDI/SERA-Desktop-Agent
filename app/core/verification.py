@@ -213,6 +213,36 @@ class EvidenceVerificationFabric:
             if isinstance(tool_result, dict) and tool_result.get("file_path"):
                 return self.verify_file_system(tool_result["file_path"])
 
+        elif tool_name == "close_window":
+            is_closed = isinstance(tool_result, dict) and bool(tool_result.get("verified"))
+            return self.record_evidence(EvidenceRecord(
+                evidence_type=EvidenceType.WINDOW_HANDLE,
+                verified=is_closed,
+                source="close_window",
+                details=tool_result if isinstance(tool_result, dict) else {},
+                failure_reason=None if is_closed else (tool_result.get("error") if isinstance(tool_result, dict) else "Window close verification failed."),
+            ))
+
+        elif tool_name == "focus_browser_tab":
+            is_focused = isinstance(tool_result, dict) and bool(tool_result.get("verified"))
+            return self.record_evidence(EvidenceRecord(
+                evidence_type=EvidenceType.WINDOW_HANDLE,
+                verified=is_focused,
+                source="focus_browser_tab",
+                details=tool_result if isinstance(tool_result, dict) else {},
+                failure_reason=None if is_focused else (tool_result.get("error") if isinstance(tool_result, dict) else "Browser tab focus verification failed."),
+            ))
+
+        elif tool_name == "close_browser_tab":
+            is_tab_closed = isinstance(tool_result, dict) and bool(tool_result.get("verified"))
+            return self.record_evidence(EvidenceRecord(
+                evidence_type=EvidenceType.WINDOW_HANDLE,
+                verified=is_tab_closed,
+                source="close_browser_tab",
+                details=tool_result if isinstance(tool_result, dict) else {},
+                failure_reason=None if is_tab_closed else (tool_result.get("error") if isinstance(tool_result, dict) else "Browser tab close verification failed."),
+            ))
+
         # 3. Generic tool fallback
         is_success = isinstance(tool_result, dict) and tool_result.get("success", False)
         if not isinstance(tool_result, dict):

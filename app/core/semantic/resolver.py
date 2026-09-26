@@ -87,15 +87,21 @@ class SemanticContextResolver:
 
         intent_name = (canonical.intent or "").strip().lower()
 
-        # 2. Handle Application Semantics
+        # 2. Handle Application & Window Semantics (Sections 4 & 6)
         if intent_name == "open_application":
             return self._resolve_open_application(canonical, transcript, context, t_id, cmd_id, store)
 
         if intent_name == "close_application":
             return self._resolve_close_application(canonical, transcript, context, t_id, cmd_id, store)
 
+        if intent_name in ("close_window", "close_active_window"):
+            return self._resolve_close_window(canonical, transcript, context, t_id, cmd_id, store)
+
         if intent_name == "switch_application":
             return self._resolve_switch_application(canonical, transcript, context, t_id, cmd_id, store)
+
+        if intent_name in ("focus_window", "switch_window"):
+            return self._resolve_focus_window(canonical, transcript, context, t_id, cmd_id, store)
 
         # 3. Handle Browser Tab Semantics (Sections 10 & 12)
         if intent_name in ("close_browser_tab", "close_tab"):
@@ -107,7 +113,13 @@ class SemanticContextResolver:
         if intent_name == "open_new_tab":
             return self._resolve_open_new_tab(canonical, transcript, context, t_id, cmd_id, store)
 
-        # 4. Handle Hardware Setting Restoration (Section 18)
+        # 4. Handle Hardware Setting Semantics (Section 7 & 18)
+        if intent_name in ("set_brightness", "adjust_brightness"):
+            return self._resolve_brightness(canonical, transcript, context, t_id, cmd_id, store)
+
+        if intent_name in ("set_volume", "adjust_volume"):
+            return self._resolve_volume(canonical, transcript, context, t_id, cmd_id, store)
+
         if intent_name in ("restore_setting", "restore_previous_value"):
             return self._resolve_restore_setting(canonical, transcript, context, t_id, cmd_id, store)
 
@@ -320,6 +332,84 @@ class SemanticContextResolver:
             ],
         )
 
+    def _resolve_close_window(
+        self,
+        canonical: Any,
+        transcript: str,
+        context: Dict[str, Any],
+        task_id: str,
+        cmd_id: str,
+        store: Optional[ContextStore] = None,
+    ) -> CommandObject:
+        """Resolves target for close_window without terminating the entire application process (Section 6)."""
+        raw_target = ""
+        if canonical.target and canonical.target.value:
+            raw_target = str(canonical.target.value).strip()
+
+        target_title = None if raw_target.lower() in ("it", "that", "this", "that window", "this window", "the window", "window", "") else raw_target
+
+        return CommandObject(
+            command_id=cmd_id,
+            task_id=task_id,
+            intent="close_window",
+            category=CommandCategory.APPLICATIONS,
+            complexity=CommandComplexity.ONE_TOOL,
+            source_text=transcript,
+            parameters={"window_title": target_title},
+            entities={"target": target_title or "active_window"},
+            required_tools=["close_window"],
+            execution_plan=[
+                PlanStepItem(
+                    step_id=1,
+                    goal=f"Close window '{target_title or 'active window'}'",
+                    action="close_window",
+                    arguments={"window_title": target_title},
+                    timeout_seconds=5.0,
+                    verification_type="window_check",
+                )
+            ],
+        )
+
+    def _resolve_focus_window(
+        self,
+        canonical: Any,
+        transcript: str,
+        context: Dict[str, Any],
+        task_id: str,
+        cmd_id: str,
+        store: Optional[ContextStore] = None,
+    ) -> CommandObject:
+        """Resolves target for focus_window."""
+        raw_target = ""
+        if canonical.target and canonical.target.value:
+            raw_target = str(canonical.target.value).strip()
+
+        if raw_target.lower() in BROWSER_SYNONYMS:
+            target_win = context.get("active_browser") or DEFAULT_BROWSER
+        else:
+            target_win = raw_target
+
+        return CommandObject(
+            command_id=cmd_id,
+            task_id=task_id,
+            intent="focus_window",
+            category=CommandCategory.APPLICATIONS,
+            complexity=CommandComplexity.ONE_TOOL,
+            source_text=transcript,
+            parameters={"window_name": target_win},
+            entities={"target": target_win},
+            required_tools=["focus_desktop_window"],
+            execution_plan=[
+                PlanStepItem(
+                    step_id=1,
+                    goal=f"Switch focus to window '{target_win}'",
+                    action="focus_desktop_window",
+                    arguments={"window_name": target_win},
+                    timeout_seconds=5.0,
+                )
+            ],
+        )
+
     def _resolve_switch_application(
         self,
         canonical: Any,
@@ -512,6 +602,126 @@ class SemanticContextResolver:
                     goal=f"Restore {setting_type} to previous level ({prev_val})",
                     action=tool_action,
                     arguments={setting_type: prev_val},
+                    timeout_seconds=5.0,
+                    verification_type="value_check",
+                )
+            ],
+        )
+
+    def _resolve_brightness(
+        self,
+        canonical: Any,
+        transcript: str,
+        context: Dict[str, Any],
+        task_id: str,
+        cmd_id: str,
+        store: Optional[ContextStore] = None,
+    ) -> CommandObject:
+        """Resolves natural brightness phrasing into deterministic execution (Section 7)."""
+        val = None
+        if canonical.parameters and canonical.parameters.get("brightness") is not None:
+            try:
+                val = int(canonical.parameters["brightness"])
+            except (ValueError, TypeError):
+                pass
+        if val is None and canonical.target and canonical.target.value is not None:
+            try:
+                val = int(canonical.target.value)
+            except (ValueError, TypeError):
+                pass
+        if val is None:
+            m = re.search(r"(\d{1,3})\s*%", transcript)
+            if m:
+                val = int(m.group(1))
+
+        current_val = context.get("last_brightness") or 70
+        if val is None:
+            tr_lower = transcript.lower()
+            if any(w in tr_lower for w in ("dim", "dimmer", "lower", "reduce", "down")):
+                val = max(10, int(current_val) - 20)
+            elif any(w in tr_lower for w in ("bright", "brighter", "increase", "up", "raise")):
+                val = min(100, int(current_val) + 20)
+            else:
+                val = int(current_val)
+
+        val = max(0, min(100, val))
+
+        return CommandObject(
+            command_id=cmd_id,
+            task_id=task_id,
+            intent="set_brightness",
+            category=CommandCategory.SYSTEM,
+            complexity=CommandComplexity.ONE_TOOL,
+            source_text=transcript,
+            parameters={"brightness": val},
+            entities={"setting": "brightness", "value": val},
+            required_tools=["set_brightness"],
+            execution_plan=[
+                PlanStepItem(
+                    step_id=1,
+                    goal=f"Set screen brightness to {val}%",
+                    action="set_brightness",
+                    arguments={"brightness": val},
+                    timeout_seconds=5.0,
+                    verification_type="value_check",
+                )
+            ],
+        )
+
+    def _resolve_volume(
+        self,
+        canonical: Any,
+        transcript: str,
+        context: Dict[str, Any],
+        task_id: str,
+        cmd_id: str,
+        store: Optional[ContextStore] = None,
+    ) -> CommandObject:
+        """Resolves natural volume phrasing into deterministic execution (Section 7)."""
+        val = None
+        if canonical.parameters and canonical.parameters.get("volume") is not None:
+            try:
+                val = int(canonical.parameters["volume"])
+            except (ValueError, TypeError):
+                pass
+        if val is None and canonical.target and canonical.target.value is not None:
+            try:
+                val = int(canonical.target.value)
+            except (ValueError, TypeError):
+                pass
+        if val is None:
+            m = re.search(r"(\d{1,3})\s*%", transcript)
+            if m:
+                val = int(m.group(1))
+
+        current_val = context.get("last_volume") or 50
+        if val is None:
+            tr_lower = transcript.lower()
+            if any(w in tr_lower for w in ("lower", "down", "quieter", "reduce", "softer")):
+                val = max(0, int(current_val) - 15)
+            elif any(w in tr_lower for w in ("higher", "up", "louder", "raise", "increase")):
+                val = min(100, int(current_val) + 15)
+            else:
+                val = int(current_val)
+
+        val = max(0, min(100, val))
+
+        return CommandObject(
+            command_id=cmd_id,
+            task_id=task_id,
+            intent="set_volume",
+            category=CommandCategory.SYSTEM,
+            complexity=CommandComplexity.ONE_TOOL,
+            source_text=transcript,
+            parameters={"volume": val},
+            entities={"setting": "volume", "value": val},
+            required_tools=["set_volume"],
+            execution_plan=[
+                PlanStepItem(
+                    step_id=1,
+                    goal=f"Set system volume to {val}%",
+                    action="set_volume",
+                    arguments={"volume": val},
                     timeout_seconds=5.0,
                     verification_type="value_check",
                 )

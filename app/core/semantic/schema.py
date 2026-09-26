@@ -26,6 +26,11 @@ class ActionFamily(str, Enum):
 
 class TargetType(str, Enum):
     APPLICATION = "application"
+    WINDOW = "window"
+    BROWSER = "browser"
+    TAB = "tab"
+    WEBPAGE = "webpage"
+    SEARCH_RESULT = "search_result"
     SETTING = "setting"
     FILE = "file"
     URL = "url"

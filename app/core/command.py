@@ -149,9 +149,10 @@ class CommandParser:
     ]
 
     CANCEL_PATTERNS = [
-        r"^cancel(?:\s+task|\s+current\s+task|\s+execution)?$",
-        r"^stop(?:\s+task|\s+execution|\s+it)?$",
-        r"^abort(?:\s+task|\s+it)?$",
+        r"^cancel(?:\s+task|\s+current\s+task|\s+execution|\s+everything)?$",
+        r"^stop(?:\s+task|\s+execution|\s+it|\s+what\s+you(?:\'re|\s+are)\s+(?:currently\s+)?doing|\s+whatever\s+you(?:\'re|\s+are)\s+doing|\s+doing\s+that|\s+everything)?$",
+        r"^abort(?:\s+task|\s+it|\s+everything)?$",
+        r"^halt(?:\s+execution|\s+everything)?$",
     ]
 
     def parse(
@@ -379,9 +380,49 @@ class CommandParser:
                 ],
             )
 
-        if cleaned in ("open it", "reopen it", "open it again"):
-            last_target = context.get("last_application") or context.get("last_opened_target")
-            if last_target:
+        if cleaned in (
+            "open that", "open that again", "open that one", "open that one again",
+            "open it", "reopen it", "open it again", "open this",
+        ):
+            # Check ContextStore for active search result entity first (Section 7 & 8)
+            store = context.get("context_store")
+            if store and hasattr(store, "resolve_search_result"):
+                res = store.resolve_search_result(ordinal=None)
+                if res and res.canonical_url:
+                    return CommandObject(
+                        command_id=cmd_id,
+                        task_id=t_id,
+                        intent="open_search_result",
+                        category=CommandCategory.BROWSER,
+                        complexity=CommandComplexity.ONE_TOOL,
+                        source_text=raw_text,
+                        parameters={
+                            "url": res.canonical_url,
+                            "title": res.title,
+                            "index": res.ordinal - 1 if res.ordinal else 0,
+                            "reference": "that",
+                        },
+                        entities={
+                            "reference": "that",
+                            "ordinal": res.ordinal,
+                            "resolved_target": res.canonical_url,
+                            "resolved_entity": res,
+                        },
+                        required_tools=["browser_open"],
+                        execution_plan=[
+                            PlanStepItem(
+                                step_id=1,
+                                goal=f"Open search result #{res.ordinal}: {res.title}",
+                                action="browser_open",
+                                arguments={"url": res.canonical_url},
+                                timeout_seconds=10.0,
+                                verification_type="url_check",
+                            ),
+                        ],
+                    )
+
+            last_target = context.get("last_opened_target") or context.get("last_application")
+            if last_target and last_target.lower() not in NON_APPLICATION_TOKENS:
                 return CommandObject(
                     command_id=cmd_id,
                     task_id=t_id,
@@ -394,6 +435,17 @@ class CommandParser:
                     execution_plan=[
                         PlanStepItem(step_id=1, goal=f"Open application '{last_target}'", action="open_application", arguments={"application": last_target}, timeout_seconds=5.0, verification_type="window_check"),
                     ],
+                )
+            else:
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="clarification_needed",
+                    category=CommandCategory.CONVERSATION,
+                    complexity=CommandComplexity.AMBIGUOUS,
+                    source_text=raw_text,
+                    parameters={"clarification_prompt": "What would you like me to open?"},
+                    raw_response="What would you like me to open?",
                 )
 
         # Contextual setting continuation: "turn it back to 100%", "set it to 80%", "put it back to 100%", "change it to 50%"
@@ -917,10 +969,73 @@ class CommandParser:
                 ],
             )
 
+        # 8b0. Window Control ("close that window", "close this window", "close the window")
+        if re.search(r"^(?:close|exit)\s+(?:the\s+|this\s+|that\s+)?window$", cleaned):
+            return CommandObject(
+                command_id=cmd_id,
+                task_id=t_id,
+                intent="close_window",
+                category=CommandCategory.APPLICATIONS,
+                complexity=CommandComplexity.ONE_TOOL,
+                source_text=raw_text,
+                parameters={"window_title": None},
+                required_tools=["close_window"],
+                execution_plan=[
+                    PlanStepItem(step_id=1, goal="Close active window", action="close_window", arguments={"window_title": None}, timeout_seconds=5.0, verification_type="window_check"),
+                ],
+            )
+
+        NON_APPLICATION_TOKENS = {
+            "it", "that", "this", "that one", "this one", "those", "them", "the one",
+            "what you are currently doing", "what you're doing", "whatever you are doing",
+            "whatever you're doing", "doing that", "everything", "something", "anything",
+            "window", "that window", "this window", "the window", "a window",
+        }
+
         # 8b. Close Application ("Close Chrome", "Exit Notepad", "Kill Spotify")
         close_match = re.search(r"^(?:close|exit|kill|terminate|stop)\s+(?:the\s+)?([a-zA-Z0-9_\-\.\s]+?)(?:\s+application|\s+app)?$", cleaned)
         if close_match and not any(k in cleaned for k in ["file", "folder", "tab", "task"]):
             app_to_close = close_match.group(1).strip()
+            # Safety Fallback Guard: Do not guess process termination from non-application tokens
+            if any(p in app_to_close.lower() for p in ("what you", "whatever you", "doing that", "everything")):
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="cancel_current_task",
+                    category=CommandCategory.CONTEXT,
+                    complexity=CommandComplexity.SIMPLE,
+                    source_text=raw_text,
+                )
+            if "window" in app_to_close.lower():
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="close_window",
+                    category=CommandCategory.APPLICATIONS,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={"window_title": None},
+                    required_tools=["close_window"],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal="Close active window", action="close_window", arguments={"window_title": None}, timeout_seconds=5.0, verification_type="window_check"),
+                    ],
+                )
+            if app_to_close.lower() in NON_APPLICATION_TOKENS:
+                last_app = context.get("last_application") or context.get("last_opened_target")
+                if last_app:
+                    app_to_close = last_app
+                else:
+                    return CommandObject(
+                        command_id=cmd_id,
+                        task_id=t_id,
+                        intent="clarification_needed",
+                        category=CommandCategory.CONVERSATION,
+                        complexity=CommandComplexity.AMBIGUOUS,
+                        source_text=raw_text,
+                        parameters={"clarification_prompt": "Which application would you like me to close?"},
+                        raw_response="Which application would you like me to close?",
+                    )
+
             return CommandObject(
                 command_id=cmd_id,
                 task_id=t_id,
@@ -942,8 +1057,44 @@ class CommandParser:
         )
         if open_app_match and not any(k in cleaned for k in ["folder", "file", "directory", "tab", "website", "url", "youtube"]):
             app_to_open = open_app_match.group(1).strip()
+            # Distinguish window-level focus from application launch
+            if "window" in app_to_open.lower():
+                win_target = app_to_open.lower().replace("my", "").replace("the", "").replace("window", "").strip()
+                win_target = "chrome" if "browser" in win_target else (win_target or "chrome")
+                return CommandObject(
+                    command_id=cmd_id,
+                    task_id=t_id,
+                    intent="focus_window",
+                    category=CommandCategory.APPLICATIONS,
+                    complexity=CommandComplexity.ONE_TOOL,
+                    source_text=raw_text,
+                    parameters={"window_name": win_target},
+                    required_tools=["focus_desktop_window"],
+                    execution_plan=[
+                        PlanStepItem(step_id=1, goal=f"Switch focus to window '{win_target}'", action="focus_desktop_window", arguments={"window_name": win_target}, timeout_seconds=5.0),
+                    ],
+                )
+
             if app_to_open.lower() in ("browser", "my browser", "the browser", "web browser"):
                 app_to_open = "chrome"
+
+            # Guard against pronouns and non-application tokens
+            if app_to_open.lower() in NON_APPLICATION_TOKENS:
+                last_target = context.get("last_application") or context.get("last_opened_target")
+                if last_target:
+                    app_to_open = last_target
+                else:
+                    return CommandObject(
+                        command_id=cmd_id,
+                        task_id=t_id,
+                        intent="clarification_needed",
+                        category=CommandCategory.CONVERSATION,
+                        complexity=CommandComplexity.AMBIGUOUS,
+                        source_text=raw_text,
+                        parameters={"clarification_prompt": "What application would you like me to open?"},
+                        raw_response="What application would you like me to open?",
+                    )
+
             # Guard against contextual search result phrases being parsed as an application name
             if any(w in app_to_open.lower() for w in ("result", "first", "second", "third", "search result")):
                 return CommandObject(

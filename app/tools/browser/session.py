@@ -49,8 +49,20 @@ class BrowserSessionManager:
         self._browser_process_name = "chrome.exe"
         self._initialized = True
 
+    def get_active_tab(self) -> Optional[BrowserTabEntity]:
+        """Returns the currently active BrowserTabEntity."""
+        if self._active_tab_id:
+            return self._tabs.get(self._active_tab_id)
+        return next(iter(self._tabs.values())) if self._tabs else None
+
     def get_browser_windows(self) -> List[int]:
         """Finds all visible browser window handles."""
+        try:
+            import win32service
+            win32service.OpenDesktop("default", 0, False, win32con.GENERIC_ALL).SetThreadDesktop()
+        except Exception:
+            pass
+
         hwnds = []
         def enum_cb(hwnd, _):
             if win32gui.IsWindowVisible(hwnd):
@@ -150,14 +162,9 @@ class BrowserSessionManager:
         self._active_tab_id = tab.entity_id
 
         if self.context_store:
-            self.context_store.register_browser_tab(
-                title=tab_title,
-                canonical_url=url,
-                hwnd=top_hwnd,
-                is_active=True,
-            )
+            self.context_store.register_browser_tab(tab)
 
-        logger.info(f"[BrowserSessionManager] Opened new tab id='{tab.entity_id}' url='{url}'")
+        logger.info(f"[BrowserSessionManager] Opened canonical tab id='{tab.entity_id}' url='{url}'")
         return {
             "success": True,
             "verified": True,
@@ -165,11 +172,18 @@ class BrowserSessionManager:
             "tab_id": tab.entity_id,
             "url": url,
             "title": tab_title,
+            "tab_entity": tab,
             "message": f"Opened {url} in web browser.",
         }
 
     async def focus_tab(self, tab_id_or_title: str) -> Dict[str, Any]:
-        """Brings the browser window containing target tab to the foreground."""
+        """Activates a specific browser tab and empirically verifies that the requested tab became active (Section 5)."""
+        try:
+            import win32service
+            win32service.OpenDesktop("default", 0, False, win32con.GENERIC_ALL).SetThreadDesktop()
+        except Exception:
+            pass
+
         target_tab = self._tabs.get(tab_id_or_title)
         if not target_tab:
             for tab in self._tabs.values():
@@ -177,31 +191,114 @@ class BrowserSessionManager:
                     target_tab = tab
                     break
 
-        hwnds = self.get_browser_windows()
-        if hwnds:
-            target_hwnd = target_tab.hwnd if (target_tab and target_tab.hwnd in hwnds) else hwnds[0]
-            try:
-                win32gui.ShowWindow(target_hwnd, win32con.SW_RESTORE)
-                win32gui.SetForegroundWindow(target_hwnd)
-                await asyncio.sleep(0.05)
-            except Exception as e:
-                logger.debug(f"[BrowserSessionManager] Window focus notice: {e}")
+        if not target_tab and self.context_store:
+            for tab in getattr(self.context_store, "_browser_tabs", {}).values():
+                if tab_id_or_title == tab.entity_id or tab_id_or_title.lower() in tab.title.lower() or tab_id_or_title.lower() in tab.canonical_url.lower():
+                    target_tab = tab
+                    break
 
+        hwnds = self.get_browser_windows()
+        if not hwnds and not self.is_browser_process_alive():
+            return {
+                "success": False,
+                "verified": False,
+                "error": "No browser windows or processes are currently active.",
+            }
+
+        target_hwnd = target_tab.hwnd if (target_tab and target_tab.hwnd in hwnds) else (hwnds[0] if hwnds else None)
+
+        if not target_hwnd:
+            return {
+                "success": False,
+                "verified": False,
+                "error": f"No browser window handle found to focus tab '{tab_id_or_title}'.",
+            }
+
+        # 1. Bring browser window to foreground
+        try:
+            win32gui.ShowWindow(target_hwnd, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(target_hwnd)
+            await asyncio.sleep(0.08)
+        except Exception as e:
+            logger.debug(f"[BrowserSessionManager] Window focus notice: {e}")
+
+        # 2. Actually activate the requested tab via UIA or Win32 keystrokes
+        tab_switched = False
+        target_name_clean = target_tab.title if target_tab else tab_id_or_title
+
+        # Method A: Try UIA selection
+        if target_tab and target_tab.title:
+            try:
+                import uiautomation as uia
+                chrome_win = uia.WindowControl(searchDepth=1, Handle=target_hwnd)
+                if chrome_win.Exists(maxSearchSeconds=0.5):
+                    for item in chrome_win.GetChildren():
+                        if item.ControlTypeName == "TabItemControl" or "tab" in item.ClassName.lower():
+                            if target_tab.title.lower() in item.Name.lower():
+                                item.Click()
+                                tab_switched = True
+                                break
+            except Exception as uia_err:
+                logger.debug(f"[BrowserSessionManager] UIA tab select notice: {uia_err}")
+
+        # Method B: Try Win32 keybd_event Ctrl+<ordinal> if ordinal known (1-8)
+        if not tab_switched and target_tab and target_tab.tab_ordinal and 1 <= target_tab.tab_ordinal <= 8:
+            try:
+                ord_key = ord(str(target_tab.tab_ordinal))
+                win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
+                win32api.keybd_event(ord_key, 0, 0, 0)
+                win32api.keybd_event(ord_key, 0, win32con.KEYEVENTF_KEYUP, 0)
+                win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)
+                await asyncio.sleep(0.08)
+                tab_switched = True
+            except Exception as k_err:
+                logger.debug(f"[BrowserSessionManager] Keybd_event tab ordinal switch notice: {k_err}")
+
+        # 3. EMPIRICAL VERIFICATION: Check whether active tab changed
+        verified = False
+        observed_title = ""
+        if win32gui.IsWindow(target_hwnd):
+            for _ in range(8):
+                observed_title = win32gui.GetWindowText(target_hwnd)
+                if target_tab:
+                    if target_tab.title.lower() in observed_title.lower():
+                        verified = True
+                        break
+                    clean_domain = target_tab.canonical_url.split("//")[-1].split("/")[0].replace("www.", "")
+                    if clean_domain and clean_domain.lower() in observed_title.lower():
+                        verified = True
+                        break
+                await asyncio.sleep(0.05)
+
+        if not verified:
+            return {
+                "success": False,
+                "verified": False,
+                "error": f"Tab switch to '{target_name_clean}' could not be empirically verified. Window title observed: '{observed_title}'.",
+            }
+
+        # 4. Update state only after successful verification
         if target_tab:
+            for t in self._tabs.values():
+                t.is_active = (t.entity_id == target_tab.entity_id)
             target_tab.is_active = True
             self._active_tab_id = target_tab.entity_id
+            if self.context_store:
+                self.context_store._active_browser_tab_id = target_tab.entity_id
+
             return {
                 "success": True,
                 "verified": True,
                 "tab_id": target_tab.entity_id,
                 "title": target_tab.title,
+                "observed_title": observed_title,
                 "message": f"Switched to tab '{target_tab.title}'.",
             }
 
         return {
             "success": True,
             "verified": True,
-            "message": f"Focused browser window.",
+            "message": "Focused browser window.",
         }
 
     async def close_tab(self, tab_identifier: Optional[str] = None) -> Dict[str, Any]:
