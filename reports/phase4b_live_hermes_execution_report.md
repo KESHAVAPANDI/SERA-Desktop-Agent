@@ -5,6 +5,7 @@
 **Repository:** `KESHAVAPANDI/SERA-Desktop-Agent`  
 **Branch:** `feature/phase4b-live-hermes-execution`  
 **Starting SHA:** `9826a37`  
+**Ending SHA:** `c4b0bb1`  
 **Official Hermes Runtime:** `C:\Users\kesha\AppData\Local\hermes\bin\hermes.exe` (`v0.21.5+2858.gb7d0620`)  
 **LLM Model & Provider:** `openrouter` / `meta-llama/llama-3.3-70b-instruct`  
 **Integration Mode:** `HERMES_EXPERIMENTAL` (`hermes_exp`) (with `CURRENT` and `HERMES_SHADOW` intact)  
