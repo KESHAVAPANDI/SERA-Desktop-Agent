@@ -81,6 +81,18 @@ class CommandPipeline:
         self.shadow_records: list[dict[str, Any]] = []
         self._active_shadow_task: asyncio.Task[Any] | None = None
 
+        # Hermes Agent Harness Spike Integration (Phase 4A)
+        self.hermes_mode: str = os.environ.get("SERA_HERMES_MODE", "current").lower()
+        self.hermes_bridge = None
+        if self.hermes_mode in ("hermes_shadow", "hermes_exp"):
+            try:
+                from app.adapters.hermes import SeraHermesBridge, HermesMode
+                self.hermes_bridge = SeraHermesBridge(mode=HermesMode(self.hermes_mode))
+            except Exception as e:
+                logger.warning(f"Failed to initialize SeraHermesBridge: {e}")
+        self.last_hermes_shadow: dict[str, Any] | None = None
+        self.hermes_shadow_records: list[dict[str, Any]] = []
+
         # Canonical Phase 3A Stateful Graph Runtime Foundation
         self.graph_runtime = create_default_graph_runtime(
             tools=self.tools,
@@ -207,6 +219,18 @@ class CommandPipeline:
             if self._active_shadow_task and not self._active_shadow_task.done():
                 self._active_shadow_task.cancel()
             self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+
+        # Hermes Shadow / Experimental Mode Interception (Phase 4A)
+        if self.hermes_mode == "hermes_shadow" and self.hermes_bridge:
+            asyncio.create_task(self._record_hermes_shadow(text, ctx, task_id, cmd))
+        elif self.hermes_mode == "hermes_exp" and self.hermes_bridge:
+            try:
+                hermes_plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=task_id)
+                cmd = self.hermes_bridge.convert_to_command_object(hermes_plan, ctx)
+                logger.info(f"[CommandPipeline] Executing via Hermes Experimental Plan: intent='{cmd.intent}', tools={cmd.required_tools}")
+            except Exception as e:
+                logger.error(f"[CommandPipeline] Hermes Experimental plan failed: {e}. Preserving safety-preserving fallback.")
+                cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
 
         # 3. Handle Special Case: Repeat Last Task (Replay verified semantic action per Section 9)
         if (cmd.intent in ("repeat_last_task", "repeat_action") or cmd.parameters.get("modifier") == "repeat") and not cmd.execution_plan:
@@ -937,4 +961,41 @@ class CommandPipeline:
         except Exception as e:
             logger.debug(f"[CommandPipeline] Semantic shadow evaluation skipped/failed: {e}")
             return {}
+
+    async def _record_hermes_shadow(
+        self, text: str, ctx: dict[str, Any], task_id: str, cmd: CommandObject
+    ) -> dict[str, Any]:
+        """Evaluates utterance with SeraHermesBridge in shadow mode and records plan comparison."""
+        if not self.hermes_bridge:
+            return {}
+        try:
+            plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=f"shadow_{task_id}")
+            record = {
+                "task_id": task_id,
+                "transcript": text,
+                "current_sera": {
+                    "intent": cmd.intent,
+                    "tools": cmd.required_tools,
+                    "steps": len(cmd.execution_plan),
+                },
+                "hermes": {
+                    "objective": plan.objective,
+                    "confidence": plan.confidence,
+                    "needs_clarification": plan.needs_clarification,
+                    "tools": [s.action for s in plan.steps],
+                    "steps": len(plan.steps),
+                    "latency_ms": plan.latency_ms,
+                },
+                "timestamp": time.time(),
+            }
+            self.last_hermes_shadow = record
+            self.hermes_shadow_records.append(record)
+            logger.info(f"HERMES_SHADOW: transcript='{text}' current_intent='{cmd.intent}' hermes_tools={[s.action for s in plan.steps]}")
+            return record
+        except asyncio.CancelledError:
+            return {}
+        except Exception as e:
+            logger.debug(f"[CommandPipeline] Hermes shadow recording skipped/failed: {e}")
+            return {}
+
 
