@@ -1,9 +1,13 @@
 """
 SERA 2.0 / Phase 4A — Thin Hermes Agent Bridge (SeraHermesBridge).
 
-Provides a clean, non-destructive architectural adapter between SERA and Hermes.
+Provides a clean, non-destructive architectural adapter between SERA and the official
+Nous Research Hermes Agent runtime.
 Translates user utterances + verified compact context into Hermes AgentPlans,
 enforcing cancellation semantics, timeout guards, and safety-preserving fallback.
+
+Architectural Rule:
+"Hermes is an external agent harness that SERA integrates with. SERA does not implement Hermes."
 """
 
 from __future__ import annotations
@@ -11,6 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import re
+import subprocess
+import tempfile
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
@@ -33,7 +41,7 @@ logger = logging.getLogger("sera.hermes.bridge")
 
 
 class HermesClientBackend:
-    """Protocol for Hermes inference backend (Local, API Server, or Mock)."""
+    """Protocol for Hermes inference backend (Official Runtime, API Server, or Mock)."""
 
     async def execute_reasoning_loop(
         self,
@@ -42,13 +50,245 @@ class HermesClientBackend:
         available_tools: List[Dict[str, Any]],
         cancel_event: asyncio.Event,
         trace_collector: List[HermesTraceItem],
-        timeout: float = 10.0,
+        timeout: float = 30.0,
     ) -> Dict[str, Any]:
         raise NotImplementedError
 
 
-class MockHermesClient(HermesClientBackend):
-    """Deterministic mock client for testing failure boundaries, cancellations, and benchmarking."""
+class OfficialHermesClient(HermesClientBackend):
+    """Executes reasoning loops against the REAL official Nous Research Hermes Agent.
+
+    Invokes the official hermes CLI runner (`hermes -z` / oneshot mode) or Python AIAgent
+    with the configured model provider (e.g. OpenRouter).
+    Captures genuine token metrics, session IDs, finish reasons, and timings.
+    """
+
+    def __init__(
+        self,
+        hermes_bin: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ):
+        self.hermes_bin = hermes_bin or os.environ.get(
+            "HERMES_EXECUTABLE_PATH",
+            os.path.expandvars(r"%LOCALAPPDATA%\hermes\bin\hermes.exe"),
+        )
+        self.provider = provider or os.environ.get("HERMES_PROVIDER", "openrouter")
+        self.model = model or os.environ.get("HERMES_MODEL", "meta-llama/llama-3.3-70b-instruct")
+        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+
+    @classmethod
+    def is_available(cls, bin_path: Optional[str] = None) -> bool:
+        path = bin_path or os.environ.get(
+            "HERMES_EXECUTABLE_PATH",
+            os.path.expandvars(r"%LOCALAPPDATA%\hermes\bin\hermes.exe"),
+        )
+        return os.path.isfile(path)
+
+    async def execute_reasoning_loop(
+        self,
+        system_prompt: str,
+        user_message: str,
+        available_tools: List[Dict[str, Any]],
+        cancel_event: asyncio.Event,
+        trace_collector: List[HermesTraceItem],
+        timeout: float = 30.0,
+    ) -> Dict[str, Any]:
+        trace_collector.append(HermesTraceItem(
+            timestamp=time.time(),
+            role="system",
+            content=f"Official Hermes runtime invoked ({self.hermes_bin}) [Provider: {self.provider}, Model: {self.model}]."
+        ))
+        trace_collector.append(HermesTraceItem(
+            timestamp=time.time(),
+            role="user",
+            content=user_message
+        ))
+
+        if cancel_event.is_set():
+            trace_collector.append(HermesTraceItem(
+                timestamp=time.time(),
+                role="thought",
+                content="Cancellation received prior to Hermes execution."
+            ))
+            return {"finish_reason": "cancelled", "objective": user_message, "steps": []}
+
+        # Format full prompt instructing Hermes to output structured AgentPlan JSON
+        tools_desc = "\n".join(f"- {t['name']}: {t.get('description', '')}" for t in available_tools)
+        full_prompt = (
+            f"{system_prompt}\n\n"
+            f"### AVAILABLE SERA CAPABILITIES:\n{tools_desc}\n\n"
+            f"### USER UTTERANCE:\n\"{user_message}\"\n\n"
+            "Respond ONLY with a valid JSON object matching this schema:\n"
+            "{\n"
+            "  \"objective\": \"Brief task summary\",\n"
+            "  \"steps\": [\n"
+            "    {\"step_id\": 1, \"action\": \"tool_name\", \"arguments\": {\"arg\": \"val\"}, \"rationale\": \"why\", \"expected_evidence\": \"WINDOW_HANDLE|PROCESS_ID|VALUE_CHECK\"}\n"
+            "  ],\n"
+            "  \"confidence\": 0.95,\n"
+            "  \"needs_clarification\": false,\n"
+            "  \"clarification_prompt\": null\n"
+            "}\n"
+            "If the user wants to cancel or stop, set steps=[] and objective=\"Cancel task\".\n"
+            "If the request is ambiguous (e.g. referent missing like 'open that'), set needs_clarification=true and steps=[].\n"
+            "Do not output markdown explanations outside the JSON."
+        )
+
+        usage_file = tempfile.mktemp(suffix=".json")
+        env = os.environ.copy()
+        if self.api_key:
+            env["OPENROUTER_API_KEY"] = self.api_key
+
+        cmd = [
+            self.hermes_bin,
+            "-z", full_prompt,
+            "--provider", self.provider,
+            "-m", self.model,
+            "--usage-file", usage_file,
+        ]
+
+        t0 = time.perf_counter()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+        except Exception as exc:
+            trace_collector.append(HermesTraceItem(
+                timestamp=time.time(),
+                role="error",
+                content=f"Failed to spawn official Hermes process: {exc}"
+            ))
+            raise RuntimeError(f"Official Hermes runtime execution failed: {exc}")
+
+        wait_proc = asyncio.create_task(proc.communicate())
+        wait_cancel = asyncio.create_task(cancel_event.wait())
+
+        try:
+            done, pending = await asyncio.wait(
+                [wait_proc, wait_cancel],
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if cancel_event.is_set():
+                try:
+                    proc.terminate()
+                    await asyncio.sleep(0.1)
+                    if proc.returncode is None:
+                        proc.kill()
+                except Exception as e:
+                    logger.warning(f"Error terminating Hermes process on cancellation: {e}")
+
+                trace_collector.append(HermesTraceItem(
+                    timestamp=time.time(),
+                    role="thought",
+                    content="Cancellation signaled during Hermes reasoning. Subprocess terminated."
+                ))
+                return {"finish_reason": "cancelled", "objective": user_message, "steps": []}
+
+            if not done:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                trace_collector.append(HermesTraceItem(
+                    timestamp=time.time(),
+                    role="error",
+                    content=f"Hermes execution timed out after {timeout}s"
+                ))
+                return {
+                    "finish_reason": "timeout",
+                    "objective": user_message,
+                    "steps": [],
+                    "needs_clarification": True,
+                    "clarification_prompt": f"Hermes reasoning timed out after {timeout} seconds.",
+                }
+
+            stdout_bytes, stderr_bytes = await wait_proc
+            stdout_str = stdout_bytes.decode("utf-8", errors="replace").strip()
+            stderr_str = stderr_bytes.decode("utf-8", errors="replace").strip()
+
+        finally:
+            wait_cancel.cancel()
+            if not wait_proc.done():
+                wait_proc.cancel()
+
+        duration = time.perf_counter() - t0
+
+        usage_data = {}
+        if os.path.exists(usage_file):
+            try:
+                with open(usage_file, "r", encoding="utf-8") as f:
+                    usage_data = json.load(f)
+            except Exception:
+                pass
+            try:
+                os.remove(usage_file)
+            except Exception:
+                pass
+
+        total_tokens = usage_data.get("total_tokens", 0)
+        session_id = usage_data.get("session_id", "none")
+        cost = usage_data.get("estimated_cost_usd", 0.0)
+
+        trace_collector.append(HermesTraceItem(
+            timestamp=time.time(),
+            role="assistant",
+            content=f"[Official Hermes Telemetry: latency={duration:.2f}s, tokens={total_tokens}, cost=${cost:.6f}, session={session_id}]\n{stdout_str}"
+        ))
+
+        parsed = self._extract_json(stdout_str)
+        if parsed:
+            return parsed
+
+        trace_collector.append(HermesTraceItem(
+            timestamp=time.time(),
+            role="warning",
+            content=f"Could not parse structured JSON from Hermes output: {stdout_str[:200]}"
+        ))
+        return {
+            "objective": user_message,
+            "steps": [],
+            "needs_clarification": True,
+            "clarification_prompt": "Could you please clarify your request?",
+            "confidence": 0.5,
+        }
+
+    def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
+        text = text.strip()
+        if "```" in text:
+            match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(1))
+                except Exception:
+                    pass
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except Exception:
+                pass
+        return None
+
+
+class MockSimulationHermesClient(HermesClientBackend):
+    """
+    [MOCK / SIMULATION ONLY - FOR ADAPTER UNIT TESTING ONLY]
+
+    This mock client is strictly used for testing error handling, timeouts, and network
+    disconnects in unit tests without invoking real model APIs.
+    IT MUST NEVER BE USED AS EVIDENCE OF REAL HERMES CAPABILITIES.
+    """
 
     def __init__(self, canned_responses: Optional[Dict[str, Any]] = None):
         self.canned_responses = canned_responses or {}
@@ -69,7 +309,7 @@ class MockHermesClient(HermesClientBackend):
         trace_collector.append(HermesTraceItem(
             timestamp=time.time(),
             role="system",
-            content=f"System prompt initialized with {len(available_tools)} tools."
+            content=f"[MOCK/SIMULATION] Mock Hermes initialized with {len(available_tools)} tools."
         ))
         trace_collector.append(HermesTraceItem(
             timestamp=time.time(),
@@ -77,12 +317,11 @@ class MockHermesClient(HermesClientBackend):
             content=user_message
         ))
 
-        # Test cancellation before delay
         if cancel_event.is_set():
             trace_collector.append(HermesTraceItem(
                 timestamp=time.time(),
                 role="thought",
-                content="Cancellation received prior to execution."
+                content="[MOCK/SIMULATION] Cancellation received prior to execution."
             ))
             return {"finish_reason": "cancelled", "objective": user_message, "steps": []}
 
@@ -95,7 +334,7 @@ class MockHermesClient(HermesClientBackend):
                     trace_collector.append(HermesTraceItem(
                         timestamp=time.time(),
                         role="thought",
-                        content="Cancellation signaled during reasoning delay."
+                        content="[MOCK/SIMULATION] Cancellation signaled during reasoning delay."
                     ))
                     return {"finish_reason": "cancelled", "objective": user_message, "steps": []}
                 await asyncio.sleep(0.1)
@@ -103,7 +342,6 @@ class MockHermesClient(HermesClientBackend):
         if self.should_fail:
             raise RuntimeError(self.failure_error)
 
-        # Return custom or rule-based response
         if user_message in self.canned_responses:
             res = self.canned_responses[user_message]
             trace_collector.append(HermesTraceItem(
@@ -113,12 +351,11 @@ class MockHermesClient(HermesClientBackend):
             ))
             return res
 
-        # Standard rule-based decomposition
         u_lower = user_message.lower().strip()
         trace_collector.append(HermesTraceItem(
             timestamp=time.time(),
             role="thought",
-            content=f"Decomposing intent for: {user_message}"
+            content=f"[MOCK/SIMULATION] Decomposing: {user_message}"
         ))
 
         if "chrome" in u_lower and ("open" in u_lower or "bring" in u_lower or "launch" in u_lower):
@@ -150,34 +387,12 @@ class MockHermesClient(HermesClientBackend):
                 ],
                 "confidence": 0.96,
             }
-        elif "dimmer" in u_lower or ("brightness" in u_lower and "decrease" in u_lower):
-            return {
-                "objective": "Decrease screen brightness",
-                "steps": [
-                    {
-                        "step_id": 1,
-                        "action": "set_brightness",
-                        "arguments": {"brightness": 30},
-                        "rationale": "Relative decrement based on context",
-                        "expected_evidence": "VALUE_CHECK",
-                    }
-                ],
-                "confidence": 0.94,
-            }
         elif "stop" in u_lower or "cancel" in u_lower:
             return {
                 "objective": "Cancel current task",
                 "steps": [],
                 "finish_reason": "cancelled",
                 "confidence": 1.0,
-            }
-        elif u_lower in ["open that", "close it", "launch", "please open"]:
-            return {
-                "objective": "Ambiguous request",
-                "needs_clarification": True,
-                "clarification_prompt": f"What specific entity would you like me to act upon?",
-                "steps": [],
-                "confidence": 0.5,
             }
 
         return {
@@ -187,6 +402,10 @@ class MockHermesClient(HermesClientBackend):
             "clarification_prompt": "Could you please specify the desired action?",
             "confidence": 0.4,
         }
+
+
+# Backwards compatibility alias for existing unit tests
+MockHermesClient = MockSimulationHermesClient
 
 
 class SeraHermesBridge:
@@ -199,7 +418,13 @@ class SeraHermesBridge:
         memory_contract: Optional[MemoryContract] = None,
         mode: HermesMode = HermesMode.CURRENT,
     ):
-        self.backend = backend or MockHermesClient()
+        if backend is not None:
+            self.backend = backend
+        elif OfficialHermesClient.is_available():
+            self.backend = OfficialHermesClient()
+        else:
+            self.backend = MockSimulationHermesClient()
+
         self.skills = skill_registry or SkillRegistry()
         self.memory = memory_contract or MemoryContract()
         self.mode = mode
@@ -213,7 +438,7 @@ class SeraHermesBridge:
         utterance: str,
         context: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
     ) -> AgentPlan:
         """Submits a user utterance to Hermes and returns a structured AgentPlan."""
         t_start = time.perf_counter()
@@ -248,16 +473,16 @@ class SeraHermesBridge:
         # 3. Tool schemas exposed to Hermes
         available_tools = [
             {"name": "open_application", "description": "Launch/focus an app"},
-            {"name": "close_application", "description": "Terminate application process"},
-            {"name": "close_window", "description": "Close window via WM_CLOSE"},
-            {"name": "focus_browser_tab", "description": "Switch browser tab"},
-            {"name": "close_browser_tab", "description": "Close browser tab"},
-            {"name": "set_brightness", "description": "Set screen brightness"},
-            {"name": "set_volume", "description": "Set system volume"},
-            {"name": "cancel_task", "description": "Halt execution"},
+            {"name": "close_application", "description": "Terminate an application (destructive)"},
+            {"name": "bring_window_forward", "description": "Focus existing window"},
+            {"name": "set_brightness", "description": "Set display brightness level"},
+            {"name": "set_volume", "description": "Set audio master volume"},
+            {"name": "browser_open_url", "description": "Navigate active browser tab"},
+            {"name": "browser_switch_tab", "description": "Switch to existing browser tab"},
+            {"name": "browser_close_tab", "description": "Close browser tab"},
+            {"name": "cancel_task", "description": "Halt current task"},
         ]
 
-        # 4. Invoke Hermes Backend with Cancellation and Timeout Safety
         try:
             raw_res = await asyncio.wait_for(
                 self.backend.execute_reasoning_loop(
@@ -271,33 +496,50 @@ class SeraHermesBridge:
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning(f"HERMES_BRIDGE: Timeout ({timeout}s) exceeded for task {tid}")
-            raw_res = {
-                "objective": utterance,
-                "finish_reason": "timeout",
-                "needs_clarification": True,
-                "clarification_prompt": "Reasoning timed out. What would you like me to do?",
-                "steps": [],
-                "confidence": 0.0,
-            }
-        except Exception as e:
-            logger.error(f"HERMES_BRIDGE: Error in reasoning loop for task {tid}: {e}")
-            raw_res = {
-                "objective": utterance,
-                "finish_reason": "error",
-                "needs_clarification": True,
-                "clarification_prompt": "Encountered an internal reasoning error. Please rephrase.",
-                "steps": [],
-                "confidence": 0.0,
-            }
+            latency_ms = (time.perf_counter() - t_start) * 1000.0
+            timeout_plan = AgentPlan(
+                task_id=tid,
+                objective=utterance,
+                steps=[],
+                confidence=0.0,
+                needs_clarification=True,
+                clarification_prompt=f"Hermes reasoning timed out after {timeout} seconds.",
+                finish_reason="timeout",
+                latency_ms=latency_ms,
+            )
+            self._plans[tid] = timeout_plan
+            return timeout_plan
+        except Exception as exc:
+            logger.error(f"HERMES_BRIDGE_ERROR: Hermes inference failed for '{utterance}': {exc}")
+            latency_ms = (time.perf_counter() - t_start) * 1000.0
+            error_plan = AgentPlan(
+                task_id=tid,
+                objective=utterance,
+                steps=[],
+                confidence=0.0,
+                needs_clarification=True,
+                clarification_prompt=f"Hermes encountered an error: {str(exc)}. Falling back to safe SERA behavior.",
+                finish_reason="error",
+                latency_ms=latency_ms,
+            )
+            self._plans[tid] = error_plan
+            return error_plan
 
-        # 5. Assemble Structured AgentPlan
         steps: List[AgentStep] = []
-        for s_idx, s_data in enumerate(raw_res.get("steps", []), start=1):
+        raw_steps = raw_res.get("steps", [])
+
+        for s_idx, s_data in enumerate(raw_steps, start=1):
             action = s_data.get("action", "")
             req_confirm = s_data.get("requires_confirmation", False)
-            risk = RiskLevel.DESTRUCTIVE if "close" in action or "terminate" in action else RiskLevel.BENIGN
-            
+
+            if "close" in action or "kill" in action or "delete" in action or "remove" in action:
+                req_confirm = True
+                risk = RiskLevel.DESTRUCTIVE
+            elif "set" in action or "write" in action:
+                risk = RiskLevel.BENIGN
+            else:
+                risk = RiskLevel.SAFE
+
             perm = PermissionRequirement(
                 action=action,
                 target=str(s_data.get("arguments", {}).get("application") or s_data.get("arguments", {}).get("hwnd") or ""),

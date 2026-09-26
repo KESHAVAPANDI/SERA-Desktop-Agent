@@ -19,9 +19,18 @@ from app.adapters.hermes.schema import (
 )
 from app.adapters.hermes.bridge import (
     SeraHermesBridge,
+    OfficialHermesClient,
+    MockSimulationHermesClient,
     MockHermesClient,
 )
 from app.core.command import CommandObject, CommandCategory, CommandComplexity
+
+
+def test_official_hermes_client_detection():
+    """Validates that the real official Hermes Agent runtime is installed and detected."""
+    assert OfficialHermesClient.is_available() is True
+    client = OfficialHermesClient()
+    assert "hermes.exe" in client.hermes_bin
 
 
 @pytest.mark.asyncio

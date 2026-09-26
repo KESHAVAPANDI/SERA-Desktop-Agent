@@ -1,25 +1,16 @@
 """
-SERA 2.0 / Phase 4A — Comprehensive Hermes vs Current SERA Shadow Benchmark Suite.
+SERA 2.0 / Phase 4A — Shadow Router Plumbing & Comparison Pipeline Test.
 
-Executes side-by-side benchmark evaluation across the 7 required task families:
-1. Simple Commands
-2. Natural Paraphrases
-3. Context / References
-4. Browser Taxonomy
-5. Settings Adjustments & Restoration
-6. Cancellations & Interruptions
-7. Multi-step Complex Tasks
-
-Collects structured metrics:
-- Understanding correctness
-- Target / entity correctness
-- Context reference correctness
-- Tool selection correctness
-- Clarification correctness
-- Unsafe guess count
-- Verification compatibility
-- Latency (ms)
-- Classification: PASS / PARTIAL / FAIL / UNSAFE / NEEDS_CLARIFICATION
+[MOCK / SIMULATION ADAPTER UNIT TEST - HARNESS PLUMBING ONLY]
+CRITICAL ARCHITECTURAL NOTICE:
+This test file exercises the Shadow Router comparison machinery, metrics collection,
+and classification rules using MockSimulationHermesClient. It runs deterministically
+and offline to prevent CI fragility and token expense.
+IT DOES NOT CONSTITUTE EMPIRICAL EVIDENCE OF REAL HERMES CAPABILITY.
+For empirical evidence of the real official Hermes Agent, refer to:
+- scripts/run_real_hermes_benchmark.py
+- reports/phase4a_real_hermes_empirical_benchmark.json
+- reports/phase4a_hermes_agent_harness_spike_report.md
 """
 
 import asyncio

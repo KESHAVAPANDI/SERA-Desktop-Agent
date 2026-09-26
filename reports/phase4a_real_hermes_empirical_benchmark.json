@@ -1,0 +1,93 @@
+[
+  {
+    "id": "SMP_01",
+    "family": "Simple Commands",
+    "utterance": "Bring Chrome forward.",
+    "sera_intent": "open_application",
+    "sera_latency_ms": 4.403999999340158,
+    "hermes_objective": "Bring Chrome browser forward",
+    "hermes_steps": 1,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 11606.103600002825,
+    "classification": "PARTIAL",
+    "telemetry": "[Official Hermes Telemetry: latency=11.60s, tokens=20017, cost=$0.002021, session=20260927_011119_24b996]"
+  },
+  {
+    "id": "SMP_02",
+    "family": "Simple Commands",
+    "utterance": "Close Notepad.",
+    "sera_intent": "close_application",
+    "sera_latency_ms": 0.11029999586753547,
+    "hermes_objective": "Close Notepad application",
+    "hermes_steps": 1,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 8359.451600001194,
+    "classification": "PASS",
+    "telemetry": "[Official Hermes Telemetry: latency=8.35s, tokens=20015, cost=$0.002020, session=20260927_011130_7764fa]"
+  },
+  {
+    "id": "PAR_01",
+    "family": "Natural Paraphrases",
+    "utterance": "Could you get my browser running?",
+    "sera_intent": "open_application",
+    "sera_latency_ms": 0.08990000060293823,
+    "hermes_objective": "Launch the user's preferred browser",
+    "hermes_steps": 1,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 7781.386800001201,
+    "classification": "PASS",
+    "telemetry": "[Official Hermes Telemetry: latency=7.77s, tokens=20025, cost=$0.002023, session=20260927_011139_95a663]"
+  },
+  {
+    "id": "CTX_01",
+    "family": "Context References (Ambiguous)",
+    "utterance": "Open that.",
+    "sera_intent": "clarification_needed",
+    "sera_latency_ms": 0.047900000936351717,
+    "hermes_objective": "Clarify ambiguous request",
+    "hermes_steps": 0,
+    "hermes_clarify": true,
+    "hermes_latency_ms": 7052.655200001027,
+    "classification": "PASS (Safe Clarification)",
+    "telemetry": "[Official Hermes Telemetry: latency=7.05s, tokens=19971, cost=$0.002007, session=20260927_011146_51012b]"
+  },
+  {
+    "id": "SET_01",
+    "family": "Settings Adjustments",
+    "utterance": "Make the screen dimmer.",
+    "sera_intent": "general_reasoning",
+    "sera_latency_ms": 0.425300000642892,
+    "hermes_objective": "Dim screen brightness",
+    "hermes_steps": 1,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 9745.213399997738,
+    "classification": "PASS",
+    "telemetry": "[Official Hermes Telemetry: latency=9.74s, tokens=20011, cost=$0.002019, session=20260927_011154_a09481]"
+  },
+  {
+    "id": "CNC_01",
+    "family": "Cancellation",
+    "utterance": "Stop what you're doing.",
+    "sera_intent": "cancel_current_task",
+    "sera_latency_ms": 0.04539999645203352,
+    "hermes_objective": "Cancel task",
+    "hermes_steps": 0,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 9777.420600003097,
+    "classification": "PASS",
+    "telemetry": "[Official Hermes Telemetry: latency=9.77s, tokens=19965, cost=$0.002004, session=20260927_011203_7a69ae]"
+  },
+  {
+    "id": "MLT_01",
+    "family": "Multi-Step Tasks",
+    "utterance": "Search YouTube for Python tutorials and open the first result.",
+    "sera_intent": "youtube_search",
+    "sera_latency_ms": 0.11069999891333282,
+    "hermes_objective": "Search YouTube for Python tutorials and open the first result",
+    "hermes_steps": 1,
+    "hermes_clarify": false,
+    "hermes_latency_ms": 9927.925500000129,
+    "classification": "PARTIAL",
+    "telemetry": "[Official Hermes Telemetry: latency=9.92s, tokens=20040, cost=$0.002026, session=20260927_011213_a7bcdf]"
+  }
+]
