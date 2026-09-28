@@ -53,12 +53,18 @@ def release_all_test_keys():
 class TestHotkeyAuthority(unittest.TestCase):
 
     def setUp(self):
+        try:
+            h_desk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if h_desk:
+                user32.SetThreadDesktop(h_desk)
+        except Exception:
+            pass
         release_all_test_keys()
-        time.sleep(0.05)
+        time.sleep(0.1)
 
     def tearDown(self):
         release_all_test_keys()
-        time.sleep(0.05)
+        time.sleep(0.1)
 
     def test_global_hotkey_manager_real_keypress_activation(self):
         """Proves that a real OS keypress (Ctrl+Alt+Space) triggers on_press and on_release."""

@@ -321,6 +321,20 @@ def main():
     print("  SERA 2.0 — MASTER SYSTEM LAUNCHER")
     print("  Creator / Author: Keshava Pandi A S <keshavapandi@gmail.com>")
     print("  Surface: Native Windows Transparent Presence + Command Center")
+    from app.adapters.hermes.schema import resolve_hermes_mode, HermesMode
+    from app.adapters.hermes.bridge import OfficialHermesClient
+
+    resolved_hermes = resolve_hermes_mode()
+    if resolved_hermes == HermesMode.HERMES_EXPERIMENTAL:
+        hermes_display = "HERMES_EXPERIMENTAL"
+    elif resolved_hermes == HermesMode.HERMES_SHADOW:
+        hermes_display = "HERMES_SHADOW"
+    else:
+        hermes_display = "CURRENT"
+
+    print(f"  Authority Architecture: {hermes_display}")
+    print(f"  Hermes Mode: {resolved_hermes.value.upper()}")
+    print(f"  Official Runtime Available: {OfficialHermesClient.is_available()}")
     print("=" * 60)
 
     # 1. Start Runtime Server (Sole Master Authority)

@@ -8,6 +8,7 @@ Conforms strictly to Phase 4A architectural specifications.
 
 from __future__ import annotations
 
+import os
 import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
@@ -19,6 +20,30 @@ class HermesMode(str, Enum):
     CURRENT = "current"                  # Current SERA semantic authority gate & Qwen
     HERMES_SHADOW = "hermes_shadow"      # Run current path for execution; run Hermes in shadow mode for telemetry
     HERMES_EXPERIMENTAL = "hermes_exp"   # Hermes plans; SERA verifies permissions, executes, and verifies
+
+
+def resolve_hermes_mode() -> HermesMode:
+    """Authoritative resolver for Hermes Authority Mode.
+
+    Reads from .env and os.environ, normalizes aliases,
+    and returns a canonical HermesMode enum value.
+    Guarantees consistent mode resolution across launcher, server, and pipeline.
+    """
+    try:
+        from dotenv import load_dotenv
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        env_file = os.path.join(project_root, ".env")
+        if os.path.exists(env_file):
+            load_dotenv(dotenv_path=env_file, override=False)
+    except Exception:
+        pass
+
+    raw = os.environ.get("SERA_HERMES_MODE", "current").strip().lower()
+    if raw in ("hermes_exp", "hermes_experimental", "experimental", "hermes", "hermes-exp"):
+        return HermesMode.HERMES_EXPERIMENTAL
+    elif raw in ("hermes_shadow", "shadow", "hermes-shadow"):
+        return HermesMode.HERMES_SHADOW
+    return HermesMode.CURRENT
 
 
 class RiskLevel(str, Enum):
@@ -68,6 +93,8 @@ class ExecutionHandoffStatus(str, Enum):
     INITIALIZED = "INITIALIZED"
     IN_PROGRESS = "IN_PROGRESS"
     PAUSED_APPROVAL = "PAUSED_APPROVAL"
+    WAITING_FOR_APPROVAL = "PAUSED_APPROVAL"
+    WAITING_FOR_CLARIFICATION = "WAITING_FOR_CLARIFICATION"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"

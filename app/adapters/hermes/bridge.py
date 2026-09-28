@@ -219,9 +219,9 @@ class OfficialHermesClient(HermesClientBackend):
                 pass
 
         self.last_usage_data = usage_data
-        total_tokens = usage_data.get("total_tokens", 0)
-        session_id = usage_data.get("session_id", "none")
-        cost = usage_data.get("estimated_cost_usd", 0.0)
+        total_tokens = int(usage_data.get("total_tokens") or 0)
+        session_id = usage_data.get("session_id", "none") or "none"
+        cost = float(usage_data.get("estimated_cost_usd") or 0.0)
 
         trace_collector.append(HermesTraceItem(
             timestamp=time.time(),
@@ -238,12 +238,16 @@ class OfficialHermesClient(HermesClientBackend):
             role="warning",
             content=f"Could not parse structured JSON from Hermes output: {stdout_str[:200]}"
         ))
+        is_quota = any(k in stdout_str.lower() for k in ("402", "credit", "billing", "limit exceeded", "quota"))
+        err_msg = "Provider quota or credit limit exceeded." if is_quota else "Could not parse plan from Hermes response."
         return {
             "objective": task_label,
             "steps": [],
-            "needs_clarification": True,
-            "clarification_prompt": "Could you please clarify your request?",
-            "confidence": 0.5,
+            "needs_clarification": False,
+            "clarification_prompt": err_msg,
+            "finish_reason": "error",
+            "error": err_msg,
+            "confidence": 0.0,
         }
 
     async def execute_reasoning_loop(
@@ -664,18 +668,8 @@ class SeraHermesBridge:
         )
 
     def _get_available_tools(self) -> List[Dict[str, Any]]:
-        return [
-            {"name": "youtube_search", "description": "Search YouTube for videos/topics and extract item-level results into session"},
-            {"name": "browser_open", "description": "Navigate to a URL or open a search result in the browser"},
-            {"name": "open_application", "description": "Launch or focus an application"},
-            {"name": "close_application", "description": "Terminate an application (destructive)"},
-            {"name": "bring_window_forward", "description": "Focus an existing window"},
-            {"name": "set_brightness", "description": "Set display brightness level"},
-            {"name": "set_volume", "description": "Set audio master volume"},
-            {"name": "browser_switch_tab", "description": "Switch to existing browser tab"},
-            {"name": "browser_close_tab", "description": "Close browser tab"},
-            {"name": "cancel_task", "description": "Halt current task"},
-        ]
+        from app.adapters.hermes.capabilities import get_hermes_tool_advertisements
+        return get_hermes_tool_advertisements()
 
     def _parse_steps(self, raw_steps: List[Dict[str, Any]], start_idx: int = 1) -> List[AgentStep]:
         steps: List[AgentStep] = []
@@ -683,7 +677,8 @@ class SeraHermesBridge:
             action = s_data.get("action", "")
             req_confirm = s_data.get("requires_confirmation", False)
 
-            if "close" in action or "kill" in action or "delete" in action or "remove" in action:
+            is_tab_op = "tab" in action.lower()
+            if not is_tab_op and ("close" in action or "kill" in action or "delete" in action or "remove" in action):
                 req_confirm = True
                 risk = RiskLevel.DESTRUCTIVE
             elif "set" in action or "write" in action:

@@ -328,7 +328,7 @@ def test_resolver_clarification_produces_zero_tools():
 @pytest.mark.asyncio
 async def test_pipeline_qwen_primary_bring_chrome_up():
     """Validates that 'Bring Chrome up.' uses Qwen primary authority even though legacy parser would fail."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     # Mock Qwen Semantic Interpreter to return open_application for "Bring Chrome up."
     mock_intent = CanonicalIntent(
@@ -361,7 +361,7 @@ async def test_pipeline_qwen_primary_bring_chrome_up():
 @pytest.mark.asyncio
 async def test_pipeline_legacy_disagreement_does_not_veto_qwen():
     """Confirms that legacy parser disagreement is NOT used as a veto for Qwen-eligible categories."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     mock_intent = CanonicalIntent(
         intent="open_application",
@@ -394,7 +394,7 @@ async def test_pipeline_legacy_disagreement_does_not_veto_qwen():
 @pytest.mark.asyncio
 async def test_pipeline_deterministic_fast_path_bypasses_qwen():
     """Confirms that exact numeric settings (e.g. brightness) execute immediately without Qwen latency."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     pipeline.semantic_interpreter.interpret_async = AsyncMock()
 
@@ -415,7 +415,7 @@ async def test_pipeline_deterministic_fast_path_bypasses_qwen():
 @pytest.mark.asyncio
 async def test_pipeline_clarification_returns_speech_immediately_without_tools():
     """'Launch' without target demands clarification with 0 tool executions."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     mock_intent = CanonicalIntent(
         intent="open_application",
@@ -440,7 +440,7 @@ async def test_pipeline_clarification_returns_speech_immediately_without_tools()
 @pytest.mark.asyncio
 async def test_pipeline_qwen_timeout_falls_back_to_legacy():
     """Qwen timeout safely triggers legacy fallback without crashing SERA."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     mock_intent = CanonicalIntent(
         intent="unknown",
@@ -468,7 +468,7 @@ async def test_pipeline_qwen_timeout_falls_back_to_legacy():
 @pytest.mark.asyncio
 async def test_pipeline_semantic_decision_stored_in_graph_state():
     """Verify that graph_state.semantic_decision is populated and preserved during execution."""
-    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus())
+    pipeline = CommandPipeline(tools={}, state=SERAState(), event_bus=EventBus(), hermes_mode="current")
 
     mock_intent = CanonicalIntent(
         intent="open_application",

@@ -378,6 +378,23 @@ class SERAUIServer:
                         save_res = self._save_architect_config(msg_data.get("config", {}))
                         await self._ws_send(writer, {"event": "ARCHITECT_CONFIG_SAVED", "data": save_res})
                         await self.broadcast_event("CONFIG_UPDATED", save_res.get("config", {}))
+                    elif action == "RESOLVE_APPROVAL":
+                        req_id = msg_data.get("request_id")
+                        decision = msg_data.get("decision", "approve")
+                        coord = getattr(self.runtime, "hermes_coordinator", None) if self.runtime else None
+                        if coord and req_id in coord.pending_approvals:
+                            res = await coord.resolve_approval(req_id, decision)
+                            await self._ws_send(writer, {"event": "APPROVAL_RESOLVED", "data": {
+                                "request_id": req_id,
+                                "decision": decision,
+                                "status": res.status.value,
+                                "response": res.response_text,
+                            }})
+                            await self.broadcast_event("APPROVAL_RESOLVED", {
+                                "request_id": req_id,
+                                "decision": decision,
+                                "status": res.status.value,
+                            })
                     elif action == "TEST_ARCHITECT_CONFIG":
                         test_res = self._test_architect_simulation(msg_data.get("config", {}))
                         await self._ws_send(writer, {"event": "ARCHITECT_TEST_RESULT", "data": test_res})
@@ -524,6 +541,46 @@ class SERAUIServer:
             if path == "/api/tasks/active" or path == "/api/task/active":
                 task_data = getattr(self.runtime, "active_task_info", None) if self.runtime else None
                 return "200 OK", resp_headers, json.dumps({"active_task": task_data}).encode("utf-8")
+
+            # 1c. Hermes Permission & Approval Endpoints
+            if path == "/api/approval/pending":
+                coord = getattr(self.runtime, "hermes_coordinator", None) if self.runtime else None
+                pending_list = []
+                if coord and hasattr(coord, "pending_approvals"):
+                    for req_id, actx in coord.pending_approvals.items():
+                        pending_list.append({
+                            "request_id": req_id,
+                            "action": actx.step.action,
+                            "target": str(actx.step.arguments.get("application") or actx.step.arguments.get("window_name") or actx.step.target_reference or ""),
+                            "risk_level": actx.permission.risk_level.value if hasattr(actx.permission, "risk_level") else "destructive",
+                            "status": actx.permission.status.value if hasattr(actx.permission, "status") else "pending_approval",
+                            "task_id": actx.task_id,
+                            "utterance": actx.utterance,
+                        })
+                return "200 OK", resp_headers, json.dumps({"pending_approvals": pending_list}).encode("utf-8")
+
+            if path == "/api/approval/resolve":
+                if method == "POST":
+                    req_id = body_json.get("request_id")
+                    decision = body_json.get("decision", "approve")
+                    coord = getattr(self.runtime, "hermes_coordinator", None) if self.runtime else None
+                    if not coord:
+                        return "400 Bad Request", resp_headers, json.dumps({"success": False, "error": "Hermes coordinator unavailable"}).encode("utf-8")
+                    if req_id not in coord.pending_approvals:
+                        return "404 Not Found", resp_headers, json.dumps({"success": False, "error": f"Request {req_id} not found"}).encode("utf-8")
+
+                    try:
+                        res = await coord.resolve_approval(req_id, decision)
+                        from app.adapters.hermes.schema import ExecutionHandoffStatus
+                        return "200 OK", resp_headers, json.dumps({
+                            "success": res.status == ExecutionHandoffStatus.COMPLETED,
+                            "task_id": res.task_id,
+                            "status": res.status.value,
+                            "response": res.response_text,
+                        }).encode("utf-8")
+                    except Exception as e:
+                        return "500 Internal Server Error", resp_headers, json.dumps({"success": False, "error": str(e)}).encode("utf-8")
+
 
             # 2. Workflow Dynamic Graph
             if path == "/api/workflow":
@@ -952,6 +1009,12 @@ class SERAUIServer:
 
     def _get_roles_summary(self) -> dict[str, Any]:
         """Returns structured role candidates from runtime router or configured defaults."""
+        from app.adapters.hermes.schema import resolve_hermes_mode, HermesMode
+        hermes_mode = resolve_hermes_mode()
+        is_hermes = (hermes_mode == HermesMode.HERMES_EXPERIMENTAL)
+        h_model = os.environ.get("HERMES_MODEL", "meta-llama/llama-3.3-70b-instruct")
+        h_prov = os.environ.get("HERMES_PROVIDER", "openrouter").capitalize()
+
         if self.runtime and hasattr(self.runtime, "router") and hasattr(self.runtime.router, "role_chains"):
             summary = {}
             for role_name, chain in self.runtime.router.role_chains.items():
@@ -965,6 +1028,19 @@ class SERAUIServer:
                         "fallback_rank": idx,
                         "health": "HEALTHY",
                     })
+                if is_hermes and role_name in ("reasoning", "desktop"):
+                    cands.insert(0, {
+                        "provider": f"Hermes ({h_prov})",
+                        "model": h_model,
+                        "latency_ms": 420,
+                        "is_primary": True,
+                        "fallback_rank": 0,
+                        "health": "HEALTHY",
+                    })
+                    for j in range(1, len(cands)):
+                        cands[j]["is_primary"] = False
+                        cands[j]["fallback_rank"] = j
+
                 summary[role_name] = {
                     "role": role_name,
                     "candidates": cands,
@@ -973,13 +1049,17 @@ class SERAUIServer:
             return summary
 
         # Standalone / Default topology
+        reasoning_cands = [
+            {"provider": f"Hermes ({h_prov})" if is_hermes else "Groq", "model": h_model if is_hermes else "openai/gpt-oss-120b", "latency_ms": 380, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+            {"provider": "Mistral", "model": "mistral-large-2411", "latency_ms": 520, "is_primary": False, "fallback_rank": 1, "health": "HEALTHY"},
+        ]
+        desktop_cands = [
+            {"provider": f"Hermes ({h_prov})" if is_hermes else "Mistral", "model": h_model if is_hermes else "codestral-2501", "latency_ms": 340, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
+        ]
         return {
             "reasoning": {
                 "role": "reasoning",
-                "candidates": [
-                    {"provider": "Groq", "model": "openai/gpt-oss-120b", "latency_ms": 380, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
-                    {"provider": "Mistral", "model": "mistral-large-2411", "latency_ms": 520, "is_primary": False, "fallback_rank": 1, "health": "HEALTHY"},
-                ],
+                "candidates": reasoning_cands,
                 "execution_mode": self.role_execution_modes.get("reasoning", "FALLBACK_ORDER"),
             },
             "fast": {
@@ -991,9 +1071,7 @@ class SERAUIServer:
             },
             "desktop": {
                 "role": "desktop",
-                "candidates": [
-                    {"provider": "Mistral", "model": "codestral-2501", "latency_ms": 340, "is_primary": True, "fallback_rank": 0, "health": "HEALTHY"},
-                ],
+                "candidates": desktop_cands,
                 "execution_mode": self.role_execution_modes.get("desktop", "PRIMARY_ONLY"),
             },
             "vision": {
@@ -1263,9 +1341,27 @@ class SERAUIServer:
             if isinstance(tinfo, dict):
                 task_info_dict = tinfo
 
+        from app.adapters.hermes.schema import resolve_hermes_mode, HermesMode
+        from app.adapters.hermes.bridge import OfficialHermesClient
+
+        resolved_hermes = resolve_hermes_mode()
+        is_hermes = (resolved_hermes == HermesMode.HERMES_EXPERIMENTAL)
+
+        engine_info = {
+            "name": "Hermes" if is_hermes else "SeraNative",
+            "version": "v0.21.5" if is_hermes else "2.0",
+            "provider": os.environ.get("HERMES_PROVIDER", "openrouter") if is_hermes else "groq",
+            "model": os.environ.get("HERMES_MODEL", "meta-llama/llama-3.3-70b-instruct") if is_hermes else "openai/gpt-oss-120b",
+            "is_experimental": is_hermes,
+            "official_available": OfficialHermesClient.is_available(),
+        }
+
         return {
             "status": state_str,
             "runtime_attached": self.runtime is not None,
+            "authority_architecture": "HERMES_EXPERIMENTAL" if is_hermes else ("HERMES_SHADOW" if resolved_hermes == HermesMode.HERMES_SHADOW else "CURRENT"),
+            "hermes_mode": resolved_hermes.value.upper(),
+            "engine": engine_info,
             "active_task": active_task_str,
             "active_task_info": task_info_dict,
             "live_history": self.live_history,

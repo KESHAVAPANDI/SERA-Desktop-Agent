@@ -50,6 +50,7 @@ class CommandPipeline:
         event_bus: EventBus | None = None,
         security_manager: SecurityManager | None = None,
         context_store: ContextStore | None = None,
+        hermes_mode: str | None = None,
     ):
         self.tools = tools
         self.router = router
@@ -81,8 +82,23 @@ class CommandPipeline:
         self.shadow_records: list[dict[str, Any]] = []
         self._active_shadow_task: asyncio.Task[Any] | None = None
 
-        # Hermes Agent Harness Spike Integration (Phase 4A / 4B)
-        self.hermes_mode: str = os.environ.get("SERA_HERMES_MODE", "current").lower()
+        # Hermes Agent Harness Integration (Phase 4A / 4B / 4B.1)
+        if hermes_mode is not None:
+            raw_hermes_mode = str(hermes_mode).strip().lower()
+        else:
+            try:
+                from app.adapters.hermes.schema import resolve_hermes_mode
+                raw_hermes_mode = resolve_hermes_mode().value
+            except Exception:
+                raw_hermes_mode = os.environ.get("SERA_HERMES_MODE", "current").strip().lower()
+
+        if raw_hermes_mode in ("hermes_exp", "hermes_experimental", "experimental", "hermes", "hermes-exp"):
+            self.hermes_mode: str = "hermes_exp"
+        elif raw_hermes_mode in ("hermes_shadow", "shadow", "hermes-shadow"):
+            self.hermes_mode: str = "hermes_shadow"
+        else:
+            self.hermes_mode: str = "current"
+
         self.hermes_bridge = None
         self.hermes_coordinator = None
         if self.hermes_mode in ("hermes_shadow", "hermes_exp"):
@@ -98,6 +114,14 @@ class CommandPipeline:
                     )
             except Exception as e:
                 logger.warning(f"Failed to initialize SeraHermesBridge/Coordinator: {e}")
+
+        try:
+            from app.adapters.hermes.bridge import OfficialHermesClient
+            has_official = OfficialHermesClient.is_available()
+        except Exception:
+            has_official = False
+        logger.info(f"[CommandPipeline] Active Hermes Authority Mode: {self.hermes_mode.upper()} (Official Runtime Available: {has_official})")
+        print(f"[CommandPipeline] Active Hermes Authority Mode: {self.hermes_mode.upper()} (Official Runtime Available: {has_official})")
         self.last_hermes_shadow: dict[str, Any] | None = None
         self.hermes_shadow_records: list[dict[str, Any]] = []
 
@@ -149,12 +173,14 @@ class CommandPipeline:
         }
 
         # -------------------------------------------------------------
-        # 2. SEMANTIC AUTHORITY EVALUATION (Phase 3A-E Pilot)
+        # 2. AUTHORITY ROUTING & EVALUATION
         # -------------------------------------------------------------
         is_fast_path = self.authority_gate.is_deterministic_fast_path(text)
 
         if is_fast_path:
-            # Deterministic Fast Path: bypass Qwen directly for exact scalar/system commands
+            # Deterministic Fast Path: bypass Qwen/Hermes directly for exact scalar/system commands
+            logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=DETERMINISTIC reason=\"scalar_fast_path\"")
+            print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=DETERMINISTIC reason=\"scalar_fast_path\"")
             cmd = self.parser.parse(text, task_id=task_id, context=ctx)
             fast_decision = SemanticAuthorityDecision(
                 source=SemanticAuthoritySource.DETERMINISTIC,
@@ -173,8 +199,38 @@ class CommandPipeline:
             if self._active_shadow_task and not self._active_shadow_task.done():
                 self._active_shadow_task.cancel()
             self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
+
+        elif self.hermes_mode == "hermes_exp":
+            # Primary Authority: HERMES_EXPERIMENTAL (Official Nous Research Hermes Runtime)
+            logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=HERMES_EXPERIMENTAL reason=\"hermes_mode={self.hermes_mode}\"")
+            print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=HERMES_EXPERIMENTAL reason=\"hermes_mode={self.hermes_mode}\"")
+            if self.hermes_coordinator:
+                try:
+                    return await self.hermes_coordinator.execute_task_for_pipeline(
+                        text=text,
+                        task_id=task_id,
+                        context=ctx,
+                        t_start=t_start,
+                        source=source,
+                        cancellation_event=self.active_cancellation_event,
+                    )
+                except Exception as e:
+                    logger.error(f"[CommandPipeline] Hermes Execution Coordinator failed: {e}. Preserving safety fallback.")
+                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+            elif self.hermes_bridge:
+                try:
+                    hermes_plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=task_id)
+                    cmd = self.hermes_bridge.convert_to_command_object(hermes_plan, ctx)
+                    logger.info(f"[CommandPipeline] Executing via Hermes Experimental Plan: intent='{cmd.intent}', tools={cmd.required_tools}")
+                except Exception as e:
+                    logger.error(f"[CommandPipeline] Hermes Experimental plan failed: {e}. Preserving safety-preserving fallback.")
+                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+            else:
+                logger.error("[CommandPipeline] HERMES_EXPERIMENTAL active but neither coordinator nor bridge initialized. Falling back.")
+                cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+
         else:
-            # Candidate for Qwen Semantic Interpretation
+            # Candidate for Qwen Semantic Interpretation (CURRENT or HERMES_SHADOW)
             compact_ctx = self.semantic_interpreter.extract_compact_context(extra_context=ctx)
             t_sem_start = time.perf_counter()
             sem_error = None
@@ -209,17 +265,20 @@ class CommandPipeline:
             )
 
             if decision.source == SemanticAuthoritySource.QWEN:
-                # Qwen Primary Authority: Resolve context to CommandObject
+                logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=CURRENT reason=\"qwen_accepted\"")
+                print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=CURRENT reason=\"qwen_accepted\"")
                 cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id, context_store=self.context_store)
                 logger.info(f"[CommandPipeline] Qwen Primary accepted: intent='{cmd.intent}' category='{cmd.category.value}' tools={cmd.required_tools}")
 
             elif decision.source == SemanticAuthoritySource.CLARIFICATION:
-                # Clarification Authority: Conversational CommandObject (0 tools)
+                logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=CURRENT reason=\"clarification_required\"")
+                print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=CURRENT reason=\"clarification_required\"")
                 cmd = self.context_resolver.resolve(decision, text, ctx, task_id=task_id, context_store=self.context_store)
                 logger.info(f"[CommandPipeline] Clarification required: '{cmd.raw_response}'")
 
             else:
-                # Legacy Fallback / Deterministic: Parse with legacy parser
+                logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=LEGACY_FALLBACK reason=\"{fb_desc}\"")
+                print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=LEGACY_FALLBACK reason=\"{fb_desc}\"")
                 cmd = self.parser.parse(text, task_id=task_id, context=ctx)
                 logger.info(f"[CommandPipeline] Legacy fallback: intent='{cmd.intent}' category='{cmd.category.value}'")
 
@@ -228,31 +287,11 @@ class CommandPipeline:
                 self._active_shadow_task.cancel()
             self._active_shadow_task = asyncio.create_task(self._record_semantic_shadow(text, ctx, cmd))
 
-        # Hermes Shadow / Experimental Mode Interception (Phase 4A / 4B)
-        if self.hermes_mode == "hermes_shadow" and self.hermes_bridge:
-            asyncio.create_task(self._record_hermes_shadow(text, ctx, task_id, cmd))
-        elif self.hermes_mode == "hermes_exp":
-            if not is_fast_path and self.hermes_coordinator:
-                try:
-                    return await self.hermes_coordinator.execute_task_for_pipeline(
-                        text=text,
-                        task_id=task_id,
-                        context=ctx,
-                        t_start=t_start,
-                        source=source,
-                        cancellation_event=self.active_cancellation_event,
-                    )
-                except Exception as e:
-                    logger.error(f"[CommandPipeline] Hermes Execution Coordinator failed: {e}. Preserving safety fallback.")
-                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
-            elif self.hermes_bridge:
-                try:
-                    hermes_plan = await self.hermes_bridge.submit_task(text, context=ctx, task_id=task_id)
-                    cmd = self.hermes_bridge.convert_to_command_object(hermes_plan, ctx)
-                    logger.info(f"[CommandPipeline] Executing via Hermes Experimental Plan: intent='{cmd.intent}', tools={cmd.required_tools}")
-                except Exception as e:
-                    logger.error(f"[CommandPipeline] Hermes Experimental plan failed: {e}. Preserving safety-preserving fallback.")
-                    cmd = self.parser.parse("cancel_task", task_id=task_id, context=ctx)
+            # Hermes Shadow Mode Interception (Phase 4A)
+            if self.hermes_mode == "hermes_shadow" and self.hermes_bridge:
+                logger.info(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=HERMES_SHADOW reason=\"hermes_shadow_active\"")
+                print(f"[AUTHORITY_ROUTING] transcript=\"{text}\" path=HERMES_SHADOW reason=\"hermes_shadow_active\"")
+                asyncio.create_task(self._record_hermes_shadow(text, ctx, task_id, cmd))
 
         # 3. Handle Special Case: Repeat Last Task (Replay verified semantic action per Section 9)
         if (cmd.intent in ("repeat_last_task", "repeat_action") or cmd.parameters.get("modifier") == "repeat") and not cmd.execution_plan:

@@ -210,9 +210,28 @@ class DesktopActionExecutor:
         )
 
     async def _focus_window(self, window_name: str) -> SemanticActionResult:
-        """Brings a window to the foreground."""
-        win = self.inspector.find_window_context(window_name)
-        if not win or not win.process_id:
+        """Brings a window to the foreground with bounded empirical verification."""
+        name_clean = window_name.strip()
+        name_lower = name_clean.lower()
+
+        # Check aliases
+        candidate_terms = [name_lower]
+        if any(b in name_lower for b in ("browser", "web")):
+            candidate_terms.extend(["chrome", "msedge", "edge", "firefox", "brave"])
+
+        all_windows = self.inspector.get_all_windows_summary()
+        found_hwnd = None
+        found_title = name_clean
+
+        for hwnd, app_name, title in all_windows:
+            title_l = title.lower()
+            app_l = app_name.lower()
+            if any(term in title_l or term in app_l for term in candidate_terms):
+                found_hwnd = hwnd
+                found_title = title or app_name
+                break
+
+        if not found_hwnd:
             return SemanticActionResult(
                 success=False,
                 action="focus_window",
@@ -224,35 +243,47 @@ class DesktopActionExecutor:
             )
 
         try:
-            found_hwnd = None
-            def enum_cb(hwnd, _):
-                nonlocal found_hwnd
-                if win32gui.IsWindowVisible(hwnd) and window_name.lower() in win32gui.GetWindowText(hwnd).lower():
-                    found_hwnd = hwnd
-            win32gui.EnumWindows(enum_cb, None)
-
-            if found_hwnd:
-                win32gui.ShowWindow(found_hwnd, win32con.SW_RESTORE)
-                win32gui.SetForegroundWindow(found_hwnd)
-                await asyncio.sleep(0.05)
-                return SemanticActionResult(
-                    success=True,
-                    action="focus_window",
-                    target=window_name,
-                    verified=True,
-                    verification_method="active_window_check",
-                    message=f"Brought '{win.window_title}' to foreground.",
-                )
+            # Win32 bring to foreground
+            win32gui.ShowWindow(found_hwnd, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(found_hwnd)
         except Exception as e:
-            logger.debug(f"[DesktopExecutor] Focus error: {e}")
+            logger.debug(f"[DesktopExecutor] Focus Win32 notice: {e}")
+
+        # Bounded empirical verification: verify foreground HWND within 1.0s
+        verified = False
+        observed_title = ""
+        for _ in range(15):
+            await asyncio.sleep(0.06)
+            try:
+                fg_hwnd = win32gui.GetForegroundWindow()
+                if fg_hwnd == found_hwnd:
+                    verified = True
+                    break
+                observed_title = win32gui.GetWindowText(fg_hwnd)
+                if any(term in observed_title.lower() for term in candidate_terms):
+                    verified = True
+                    break
+            except Exception:
+                pass
+
+        if verified:
+            return SemanticActionResult(
+                success=True,
+                action="focus_window",
+                target=window_name,
+                verified=True,
+                verification_method="active_window_check",
+                message=f"Brought '{found_title}' to foreground.",
+            )
 
         return SemanticActionResult(
-            success=True,
+            success=False,
             action="focus_window",
             target=window_name,
-            verified=True,
-            verification_method="best_effort",
-            message=f"Focused window '{window_name}'.",
+            verified=False,
+            verification_method="active_window_check",
+            message=f"Window '{window_name}' could not be verified in foreground within 1.0s. Observed: '{observed_title}'.",
+            reason="Window focus verification failed.",
         )
 
     async def _perform_native_action(self, action: str, control: NativeUIControl, value: str | None) -> bool:

@@ -102,10 +102,18 @@ class FocusWindowTool(Tool):
             "required": ["window_name"],
         }
 
-    async def execute(self, window_name: str, **kwargs) -> dict[str, Any]:
+    async def execute(self, window_name: str = "", **kwargs) -> dict[str, Any]:
+        target = (window_name or kwargs.get("name") or kwargs.get("application") or kwargs.get("target") or "").strip()
+        if not target:
+            return {"success": False, "verified": False, "error": "window_name cannot be empty."}
+
+        if hasattr(self.executor, "_focus_window"):
+            res = await self.executor._focus_window(target)
+            return res.model_dump()
+
         req = SemanticActionRequest(
             action="focus_window",
-            target={"name": window_name},
+            target={"name": target},
         )
         res = await self.executor.execute_action(req)
         return res.model_dump()
