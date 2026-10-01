@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SERA Core</title>
+  <title>Mochi — SERA Presence</title>
   <link rel="stylesheet" href="./src/ui/presence.css">
 </head>
 <body>
   <!-- Fixed Translucent Glass Box Container -->
-  <div id="glass-panel" class="glass-panel" data-state="IDLE" data-tone="cyan">
+  <div id="glass-panel" class="glass-panel state-idle" data-state="IDLE" data-tone="cyan" data-audio="idle" data-connection="CONNECTING">
     <!-- Header Bar (Only Draggable Region) -->
     <div class="top-bar">
       <div class="sera-brand">
         <span class="status-dot"></span>
-        <span>SERA <em>CORE</em></span>
-        <span class="presence-id">PRESENCE / 01</span>
+        <span>MOCHI <em>× SERA</em></span>
+        <span class="presence-id">PRESENCE</span>
         <span id="connection-status" class="connection-status" data-connection="CONNECTING">CONNECTING</span>
       </div>
       <div class="window-actions">
@@ -37,7 +37,7 @@
       <div class="state-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
       <canvas id="presence-canvas"></canvas>
       <div class="core-readout" aria-hidden="true">
-        <span class="readout-kicker">RUNTIME SIGNAL</span>
+        <span class="readout-kicker">MOCHI STATE</span>
         <span class="readout-index" data-state-index>01</span>
       </div>
       <div class="state-rail" aria-hidden="true">
@@ -75,11 +75,11 @@
             <div class="badge-wrapper">
               <span class="speaker-badge sera-badge">
                 <span class="sera-core-dot"></span>
-                SERA
+                MOCHI
               </span>
               <span id="sera-status-pill" class="status-pill responding-pill">PROCESSING</span>
             </div>
-            <span id="sera-caption-time" class="caption-timestamp">CORE</span>
+            <span id="sera-caption-time" class="caption-timestamp">SERA</span>
           </div>
           <div id="sera-caption-text" class="caption-text sera-text"></div>
         </div>
@@ -87,10 +87,16 @@
 
       <!-- Bottom Kinetic Status Bar -->
       <div class="bottom-bar">
-        <div id="approval-context" class="approval-context" hidden></div>
-        <div class="state-summary"><span class="summary-rule"></span><span id="kinetic-status" class="kinetic-status" data-state-label>STANDBY</span><span class="summary-rule"></span></div>
-        <div id="kinetic-substatus" class="kinetic-substatus" data-state-cue>Ambient perception</div>
-        <div class="task-context" data-task-context>READY FOR A SIGNAL</div>
+        <section id="approval-context" class="approval-context" aria-live="polite" aria-label="Approval needed" hidden>
+          <span class="approval-kicker">REVIEW NEEDED IN SERA</span>
+          <span id="approval-action" class="approval-action"></span>
+          <span id="approval-reason" class="approval-reason"></span>
+        </section>
+        <div class="state-summary"><span class="summary-rule"></span><span id="kinetic-status" class="kinetic-status" data-state-label>HERE WITH YOU</span><span class="summary-rule"></span></div>
+        <div id="kinetic-substatus" class="kinetic-substatus" data-state-cue>Ready when you are</div>
+        <div class="task-context" data-task-context>READY WHEN YOU ARE</div>
+        <progress id="task-progress" class="task-progress" data-task-progress max="1" aria-label="Task progress" hidden></progress>
+        <span id="tts-status" class="visually-hidden" role="status" aria-live="polite">Voice playback idle</span>
       </div>
     </div>
   </div>

@@ -31,6 +31,9 @@ class PresenceApp {
     this.connectionEl = document.getElementById("connection-status");
     this.detailsToggle = document.getElementById("details-toggle");
     this.approvalContext = document.getElementById("approval-context");
+    this.approvalAction = document.getElementById("approval-action");
+    this.approvalReason = document.getElementById("approval-reason");
+    this.ttsStatus = document.getElementById("tts-status");
     this.commandCenterBtn = document.getElementById("command-center-btn");
     this.minimizeBtn = document.getElementById("minimize-btn");
     this.closeBtn = document.getElementById("close-btn");
@@ -145,11 +148,18 @@ class PresenceApp {
   }
 
   projectModel(previous = null) {
-    const visualState = this.model.connection === "ONLINE" ? effectiveVisualState(this.model) : "OFFLINE";
+    const runtimeAvailable = this.model.connection === "ONLINE" && this.model.runtimeAttached !== false;
+    const visualState = runtimeAvailable ? effectiveVisualState(this.model) : "OFFLINE";
     const presentation = getPresentationState(visualState);
     const taskText = this.model.task?.text || "";
-    applyPresentationState(this.root, presentation, { task: taskText });
-    this.engine.setState(visualState, this.model.task?.type || "GENERAL", 0);
+    const taskProgress = this.model.task?.progress;
+    applyPresentationState(this.root, presentation, {
+      task: taskText,
+      progress: taskProgress,
+      audioActive: this.model.tts.active,
+    });
+    this.root?.setAttribute("aria-busy", String(ACTIVE_STATES.has(visualState)));
+    this.engine.setState(visualState, this.model.task?.type || "GENERAL", taskProgress ?? 0);
 
     const taskKey = `${this.model.task?.id || ""}:${this.model.task?.type || "GENERAL"}`;
     if (this.model.task && taskKey !== this.lastTaskVisualization) {
@@ -160,6 +170,7 @@ class PresenceApp {
     this.renderConnection();
     this.renderCaptions();
     this.renderApproval();
+    this.renderAudioStatus();
 
     const listening = this.model.connection === "ONLINE" && this.model.runtimeState === "LISTENING";
     if (!previous || previous.runtimeState !== this.model.runtimeState || previous.connection !== this.model.connection) {
@@ -178,14 +189,17 @@ class PresenceApp {
       RECONNECTING: "Runtime disconnected — reconnecting",
       OFFLINE: "Runtime offline",
     };
-    const label = labels[this.model.connection] || labels.OFFLINE;
+    const label = this.model.connection === "ONLINE" && this.model.runtimeAttached === false
+      ? "Connected — SERA runtime unavailable"
+      : (labels[this.model.connection] || labels.OFFLINE);
     if (this.connectionEl) {
       this.connectionEl.textContent = label;
       this.connectionEl.dataset.connection = this.model.connection;
     }
     this.root?.setAttribute("data-connection", this.model.connection);
-    if (this.model.connection !== "ONLINE") {
-      if (this.statusEl) this.statusEl.textContent = "RUNTIME OFFLINE";
+    this.root?.setAttribute("data-runtime-attached", String(this.model.runtimeAttached !== false));
+    if (this.model.connection !== "ONLINE" || this.model.runtimeAttached === false) {
+      if (this.statusEl) this.statusEl.textContent = "MOCHI IS OFFLINE";
       if (this.substatusEl) this.substatusEl.textContent = label;
     }
   }
@@ -198,6 +212,9 @@ class PresenceApp {
       } else if (this.model.runtimeState === "LISTENING") {
         this.userTextEl.textContent = "Listening…";
         this.userTextEl.className = "caption-text user-text partial";
+      } else {
+        this.userTextEl.textContent = "Hold Ctrl+Alt+Space to speak…";
+        this.userTextEl.className = "caption-text user-text placeholder-text";
       }
     }
     if (this.userStatusPill) {
@@ -217,7 +234,17 @@ class PresenceApp {
     if (!this.approvalContext) return;
     const approval = this.model.approval;
     this.approvalContext.hidden = !approval;
-    this.approvalContext.textContent = approval ? [approval.action, approval.reason].filter(Boolean).join(" — ") : "";
+    this.root?.setAttribute("data-approval", approval ? "pending" : "none");
+    if (this.approvalAction) this.approvalAction.textContent = approval?.action || "SERA is waiting for your review.";
+    if (this.approvalReason) {
+      this.approvalReason.textContent = approval?.reason || "Open SERA to review this request.";
+      this.approvalReason.hidden = !approval;
+    }
+  }
+
+  renderAudioStatus() {
+    if (!this.ttsStatus) return;
+    this.ttsStatus.textContent = this.model.tts.active ? "Mochi voice playback active" : "Voice playback idle";
   }
 
   renderFrame() {

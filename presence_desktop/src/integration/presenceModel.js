@@ -9,7 +9,9 @@ const RUNTIME_STATE_ALIASES = {
   TASK_FAILED: "FAILED",
   TASK_CANCELLED: "CANCELLED",
   CONFIRMING_ACTION: "WAITING_FOR_APPROVAL",
+  PAUSED_APPROVAL: "WAITING_FOR_APPROVAL",
   ERROR: "FAILED",
+  SHUTDOWN: "OFFLINE",
 };
 
 function text(value) {
@@ -36,6 +38,24 @@ export function createPresenceModel() {
     tts: { active: false, taskId: null },
     lastEvent: null,
   };
+}
+
+/** Return explicit runtime progress as a normalized 0..1 value, or null. */
+export function progressOf(payload) {
+  const candidate = payload?.task_progress ?? payload?.progress;
+  if (candidate === undefined || candidate === null || candidate === "") return null;
+  let value = candidate;
+  if (candidate && typeof candidate === "object") {
+    value = candidate.value ?? candidate.fraction ?? candidate.percent;
+    if (value === undefined && Number.isFinite(Number(candidate.current)) && Number(candidate.total) > 0) {
+      value = Number(candidate.current) / Number(candidate.total);
+    }
+  }
+  if (value === undefined || value === null || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const normalized = numeric > 1 && numeric <= 100 ? numeric / 100 : numeric;
+  return Math.max(0, Math.min(1, normalized));
 }
 
 function payloadOf(message) {
@@ -68,7 +88,7 @@ function taskFromSnapshot(snapshot) {
   const info = snapshot.active_task_info;
   if (!info || typeof info !== "object") {
     const label = text(snapshot.active_task);
-    return label ? { id: null, turnId: null, text: label, type: "GENERAL", status: "" } : null;
+    return label ? { id: null, turnId: null, text: label, type: "GENERAL", status: "", progress: progressOf(snapshot) } : null;
   }
   return {
     id: idOf(info, "task_id"),
@@ -76,6 +96,7 @@ function taskFromSnapshot(snapshot) {
     text: text(info.user_input) || text(snapshot.active_task),
     type: explicitTaskType(info),
     status: text(info.status).toUpperCase(),
+    progress: progressOf(info) ?? progressOf(snapshot),
   };
 }
 
@@ -106,6 +127,10 @@ export function reducePresenceMessage(current, message) {
   if ((event === "PARTIAL_TRANSCRIPTION" || event === "TRANSCRIPTION_COMPLETED") && isStaleTurn(model, payload)) return model;
 
   const next = { ...model, lastEvent: event };
+  const explicitProgress = progressOf(payload);
+  if (explicitProgress !== null && next.task && !isStaleTask(model, payload)) {
+    next.task = { ...next.task, progress: explicitProgress };
+  }
   switch (event) {
     case "RUNTIME_STATE_CHANGED":
       next.runtimeState = normalizeRuntimeState(payload.status ?? payload.state);
@@ -143,6 +168,7 @@ export function reducePresenceMessage(current, message) {
         text: text(payload.user_input) || text(payload.task),
         type: explicitTaskType(payload),
         status: "STARTED",
+        progress: progressOf(payload),
       };
       next.turnId = next.task.turnId || next.turnId;
       // TASK_STARTED does not assert a planning state. Await runtime state.

@@ -6,7 +6,7 @@ const DEFAULT_HEIGHT = 250;
 const MAX_DELTA = 0.05;
 
 /**
- * Public facade for Sera's Cognitive Fold presence visualization.
+ * Public facade for Sera's Mochi soft-body presence visualization.
  * Runtime messages are the sole authority for operational state.
  */
 export class PresenceEngine {
@@ -21,7 +21,11 @@ export class PresenceEngine {
     this.motionQuery = typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)")
       : null;
-    this.behavior = new PresenceBehaviorEngine({ reducedMotion: this.motionQuery?.matches });
+    const lowPower = typeof navigator !== "undefined" && (
+      (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
+      || (navigator.deviceMemory && navigator.deviceMemory <= 4)
+    );
+    this.behavior = new PresenceBehaviorEngine({ reducedMotion: this.motionQuery?.matches, lowPower });
     this.onMotionPreference = (event) => this.behavior?.setReducedMotion(event.matches);
     this.motionQuery?.addEventListener?.("change", this.onMotionPreference);
 
