@@ -26,7 +26,7 @@ let mainWindow = null;
 let tray = null;
 
 const WINDOW_WIDTH = 380;
-const WINDOW_HEIGHT = 500;
+const WINDOW_HEIGHT = 560;
 const COMMAND_CENTER_URL = "http://127.0.0.1:8765";
 
 function calculateDefaultPosition() {
@@ -55,7 +55,9 @@ function createWindow() {
     frame: false,
     alwaysOnTop: true,
     hasShadow: false,
-    resizable: false,
+    minWidth: 320,
+    minHeight: 400,
+    resizable: true,
     skipTaskbar: false,
     backgroundColor: "#00000000",
     title: "SERA Presence",
@@ -99,6 +101,7 @@ function createWindow() {
         try {
           await mainWindow.webContents.executeJavaScript(`
             if (window.seraApp) {
+              window.seraApp.setConnection("ONLINE");
               window.seraApp.handleBackendEvent({
                 event: "ACTIVATION_STARTED",
                 payload: { source: "HOTKEY_HOLD", mode: "HOLD_TO_TALK" }
@@ -121,6 +124,12 @@ function createWindow() {
           console.error("Execute JS failed:", e);
         }
         setTimeout(async () => {
+          await mainWindow.webContents.executeJavaScript(`
+            if (window.seraApp) {
+              window.seraApp.model = { ...window.seraApp.model, connection: "ONLINE" };
+              window.seraApp.projectModel();
+            }
+          `);
           const image = await mainWindow.capturePage();
           const fs = require("fs");
           const outDir = path.resolve("C:\\Users\\kesha\\.gemini\\antigravity-ide\\brain\\1b818245-2543-44ee-8c22-30fd93a658f6");
