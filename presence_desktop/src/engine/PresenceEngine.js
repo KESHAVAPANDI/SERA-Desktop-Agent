@@ -1,12 +1,10 @@
-import { PresenceBehaviorEngine } from "./PresenceBehaviorEngine.js";
-import { CognitiveFoldCanvasRenderer, CognitiveFoldRenderer } from "./CognitiveFoldRenderer.js";
+import { Live2DRenderer } from "../live2d/Live2DRenderer.js";
 
 const DEFAULT_WIDTH = 356;
 const DEFAULT_HEIGHT = 250;
-const MAX_DELTA = 0.05;
 
 /**
- * Public facade for Sera's Mochi soft-body presence visualization.
+ * Public facade for SERA's persistent Live2D character presence.
  * Runtime messages are the sole authority for operational state.
  */
 export class PresenceEngine {
@@ -17,28 +15,14 @@ export class PresenceEngine {
     this.taskType = "GENERAL";
     this.taskProgress = 0;
     this.disposed = false;
-    this.lastTime = typeof performance !== "undefined" ? performance.now() : Date.now();
-    this.motionQuery = typeof window !== "undefined" && window.matchMedia
-      ? window.matchMedia("(prefers-reduced-motion: reduce)")
-      : null;
-    const lowPower = typeof navigator !== "undefined" && (
-      (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
-      || (navigator.deviceMemory && navigator.deviceMemory <= 4)
-    );
-    this.behavior = new PresenceBehaviorEngine({ reducedMotion: this.motionQuery?.matches, lowPower });
-    this.onMotionPreference = (event) => this.behavior?.setReducedMotion(event.matches);
-    this.motionQuery?.addEventListener?.("change", this.onMotionPreference);
 
     const { width, height } = this.measure();
-    try {
-      this.renderer = new CognitiveFoldRenderer(canvas, width, height, this.pixelRatio());
-      this.rendererType = "webgl";
-    } catch (error) {
-      console.warn("[PresenceEngine] WebGL unavailable; using Canvas 2D.", error);
-      this.renderer = new CognitiveFoldCanvasRenderer(canvas, width, height, this.pixelRatio());
-      this.rendererType = "canvas2d";
-    }
+    this.renderer = new Live2DRenderer(canvas, width, height, this.pixelRatio());
     this.setupResize();
+  }
+
+  get controller() {
+    return this.renderer?.controller;
   }
 
   measure() {
@@ -56,7 +40,7 @@ export class PresenceEngine {
     this.onResize = () => {
       if (this.disposed) return;
       const { width, height } = this.measure();
-      this.renderer.resize(width, height, this.pixelRatio());
+      this.renderer?.resize(width, height, this.pixelRatio());
     };
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(this.onResize);
@@ -71,25 +55,24 @@ export class PresenceEngine {
     this.state = state;
     this.taskType = taskType || "GENERAL";
     this.taskProgress = Math.max(0, Math.min(1, Number(progress) || 0));
-    this.behavior.setState(state, this.taskType, this.taskProgress);
+    this.renderer?.setState(state, this.taskType, this.taskProgress);
   }
 
   setTaskVisualization(taskType, objective = "") {
     if (this.disposed) return;
-    this.behavior.setTaskVisualization(taskType, objective);
+    this.renderer?.setTaskVisualization(taskType, objective);
   }
 
   triggerEvent(eventType, payload = {}) {
     if (this.disposed) return;
-    this.behavior.triggerEvent(eventType, payload);
+    this.renderer?.triggerEvent(eventType, payload);
   }
 
   setAudioData(bands) {
     if (this.disposed) return;
-    this.behavior.setAudioData(bands);
+    this.renderer?.setAudioData(bands);
   }
 
-  // Kept for compatibility with older audio callers.
   setAudioAmplitude(amplitude) {
     const value = Math.max(0, Math.min(1, Number(amplitude) || 0));
     this.setAudioData({ rawAmp: value, bass: value * 0.9, mid: value, treble: value * 0.7 });
@@ -97,10 +80,7 @@ export class PresenceEngine {
 
   update() {
     if (this.disposed) return;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const delta = Math.min(MAX_DELTA, Math.max(0, (now - this.lastTime) / 1000));
-    this.lastTime = now;
-    this.renderer.render(this.behavior.update(delta));
+    this.renderer?.update();
   }
 
   dispose() {
@@ -110,9 +90,7 @@ export class PresenceEngine {
     if (!this.resizeObserver && typeof window !== "undefined") {
       window.removeEventListener("resize", this.onResize);
     }
-    this.motionQuery?.removeEventListener?.("change", this.onMotionPreference);
     this.renderer?.dispose();
     this.renderer = null;
-    this.behavior = null;
   }
 }

@@ -10,6 +10,8 @@
   "author": "Keshava Pandi A S <keshavapandi@gmail.com>",
   "license": "MIT",
   "dependencies": {
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^6.5.10",
     "three": "^0.160.0"
   },
   "devDependencies": {

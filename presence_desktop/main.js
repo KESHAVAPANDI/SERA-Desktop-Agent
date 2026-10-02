@@ -21,6 +21,7 @@ app.commandLine.appendSwitch("disable-background-timer-throttling");
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.commandLine.appendSwitch("enable-transparent-visuals");
+app.commandLine.appendSwitch("allow-file-access-from-files");
 
 let mainWindow = null;
 let tray = null;

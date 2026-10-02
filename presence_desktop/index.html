@@ -8,7 +8,7 @@
 </head>
 <body>
   <!-- Fixed Translucent Glass Box Container -->
-  <div id="glass-panel" class="glass-panel state-idle" data-state="IDLE" data-tone="cyan" data-audio="idle" data-connection="CONNECTING">
+  <div id="glass-panel" class="glass-panel state-idle" data-state="IDLE" data-tone="cyan" data-face="present" data-pose="grounded" data-attention="ambient" data-audio="idle" data-progress="none" data-approval="none" data-connection="CONNECTING">
     <!-- Header Bar (Only Draggable Region) -->
     <div class="top-bar">
       <div class="sera-brand">
@@ -100,6 +100,11 @@
       </div>
     </div>
   </div>
+
+  <!-- Live2D Cubism 4 & PixiJS Runtimes -->
+  <script src="./assets/live2d/runtime/live2dcubismcore.min.js"></script>
+  <script src="./node_modules/pixi.js/dist/browser/pixi.min.js"></script>
+  <script src="./node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
 
   <!-- Entry Script -->
   <script type="module" src="./src/App.js"></script>

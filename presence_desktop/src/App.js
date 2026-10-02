@@ -5,6 +5,7 @@ import { RenderScheduler } from "./integration/RenderScheduler.js";
 import { RuntimeSocket } from "./integration/RuntimeSocket.js";
 import {
   createPresenceModel,
+  effectivePresentationState,
   effectiveVisualState,
   reducePresenceMessage,
   withConnection,
@@ -150,16 +151,20 @@ class PresenceApp {
   projectModel(previous = null) {
     const runtimeAvailable = this.model.connection === "ONLINE" && this.model.runtimeAttached !== false;
     const visualState = runtimeAvailable ? effectiveVisualState(this.model) : "OFFLINE";
-    const presentation = getPresentationState(visualState);
+    const presentationState = runtimeAvailable ? effectivePresentationState(this.model) : "OFFLINE";
+    const presentation = getPresentationState(presentationState);
     const taskText = this.model.task?.text || "";
     const taskProgress = this.model.task?.progress;
     applyPresentationState(this.root, presentation, {
       task: taskText,
       progress: taskProgress,
       audioActive: this.model.tts.active,
+      listening: this.model.runtimeState === "LISTENING",
+      approvalPending: Boolean(this.model.approval),
     });
     this.root?.setAttribute("aria-busy", String(ACTIVE_STATES.has(visualState)));
     this.engine.setState(visualState, this.model.task?.type || "GENERAL", taskProgress ?? 0);
+    this.engine.controller?.colorSystem?.applyToDOM(this.root);
 
     const taskKey = `${this.model.task?.id || ""}:${this.model.task?.type || "GENERAL"}`;
     if (this.model.task && taskKey !== this.lastTaskVisualization) {
@@ -234,7 +239,6 @@ class PresenceApp {
     if (!this.approvalContext) return;
     const approval = this.model.approval;
     this.approvalContext.hidden = !approval;
-    this.root?.setAttribute("data-approval", approval ? "pending" : "none");
     if (this.approvalAction) this.approvalAction.textContent = approval?.action || "SERA is waiting for your review.";
     if (this.approvalReason) {
       this.approvalReason.textContent = approval?.reason || "Open SERA to review this request.";

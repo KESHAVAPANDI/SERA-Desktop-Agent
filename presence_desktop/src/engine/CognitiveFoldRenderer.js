@@ -1,148 +1,198 @@
 import * as THREE from "../../node_modules/three/build/three.module.js";
 
-const BODY_SEGMENTS = 72;
-const MEMBRANE_SEGMENTS = 52;
-const TRACE_SEGMENTS = 18;
-const MAX_MEMBRANES = 6;
-const MAX_NODES = 8;
-const MAX_TRACES = 5;
 const DPR_CAP = 1.5;
-
+const MAX_PARTICLES = 12;
+const MAX_TRACES = 4;
+const TRACE_SEGMENTS = 20;
+const MOUTH_SEGMENTS = 20;
 const hexCss = (value) => `#${Math.round(value).toString(16).padStart(6, "0")}`;
 
-function makeDiscGeometry() {
+function makeDynamicLine(segments) {
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array((BODY_SEGMENTS + 1) * 3), 3));
-  const indices = [];
-  for (let index = 0; index < BODY_SEGMENTS; index += 1) indices.push(0, index + 1, ((index + 1) % BODY_SEGMENTS) + 1);
-  geometry.setIndex(indices);
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array((segments + 1) * 3), 3));
   return geometry;
 }
 
-function makeLineGeometry(segments, loop = false) {
-  const count = segments + (loop ? 0 : 1);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-  return geometry;
+function makeEarGeometry() {
+  // A softly curved, unmistakably pointed elf ear. Both ears share this geometry.
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.3);
+  shape.quadraticCurveTo(0.78, 0.58, 1.48, 0.02);
+  shape.quadraticCurveTo(0.78, -0.5, 0, -0.28);
+  shape.quadraticCurveTo(0.16, 0, 0, 0.3);
+  return new THREE.ShapeGeometry(shape, 16);
 }
 
-/** Sample the single asymmetric body. Every secondary element is derived from this boundary. */
-function bodyPoint(angle, behavior, inset = 1) {
-  const motion = behavior.motionScale;
-  const phase = behavior.phase;
-  const lobe = Math.sin(angle * behavior.lobes + 0.65 + phase * 0.7) * behavior.lobeDepth * (1.18 - behavior.tension * 0.24);
-  const asymmetric = behavior.asymmetry * (
-    Math.sin(angle - 0.42) * 0.52 + Math.sin(angle * 2 + 1.34) * 0.28 + Math.sin(angle * 3 - 0.8) * 0.12
-  );
-  const living = Math.sin(angle * 3.2 - phase * 2.4) * behavior.wobble * (1.2 - behavior.tension * 0.3) * motion;
-  const audio = Math.sin(angle * 4 - behavior.time * 3.4) * behavior.voice * 0.13;
-  const anomaly = Math.sin(angle * 9.7 + behavior.time * 5) * behavior.impulses.anomaly * 0.035;
-  const breath = 1 + Math.sin(behavior.time * (0.8 + behavior.speed) + 0.4) * behavior.pulse * motion;
-  const radius = 2.05 * behavior.scale * inset * breath * (1 + lobe + asymmetric + living + audio + anomaly);
-  const sine = Math.sin(angle);
-  const weightedBottom = -behavior.lowerWeight * Math.max(0, -sine) ** 2;
-  let x = Math.cos(angle) * radius * behavior.stretch;
-  const y = sine * radius * behavior.squash + weightedBottom;
-  x += behavior.lean * (y + 0.25) + behavior.task.direction * 0.05 * behavior.attention;
-  x += behavior.impulses.projection * Math.max(0, Math.cos(angle)) * 0.1;
-  x -= behavior.impulses.return * 0.035;
-  return { x, y };
+function setLinePoint(line, index, x, y, z = 0) {
+  line.geometry.attributes.position.setXYZ(index, x, y, z);
 }
 
-function updateDisc(mesh, behavior, inset, z) {
-  const positions = mesh.geometry.attributes.position;
-  positions.setXYZ(0, behavior.lean * -0.08, -behavior.lowerWeight * 0.18, z);
-  for (let index = 0; index < BODY_SEGMENTS; index += 1) {
-    const point = bodyPoint((index / BODY_SEGMENTS) * Math.PI * 2, behavior, inset);
-    positions.setXYZ(index + 1, point.x, point.y, z);
-  }
-  positions.needsUpdate = true;
-}
-
-function nodePoint(index, behavior) {
-  const golden = 2.399963229728653;
-  const orderedAngle = behavior.task.direction * 0.38 + (index / Math.max(1, behavior.nodes - 1) - 0.5) * 1.25;
-  const orbitAngle = index * golden + behavior.phase * (0.9 + index * 0.04);
-  const angle = orbitAngle * (1 - behavior.organization) + orderedAngle * behavior.organization;
-  const radialLane = 0.22 + ((index * 0.37) % 0.66);
-  const radius = behavior.nodeSpread * radialLane * 1.6 * (1 - behavior.nodeFocus * 0.44);
-  const progressPull = (behavior.progress - 0.5) * behavior.organization * 0.34;
-  return {
-    x: Math.cos(angle) * radius * behavior.stretch + behavior.lean * 0.15 + progressPull,
-    y: Math.sin(angle) * radius * behavior.squash - behavior.lowerWeight * 0.08,
-  };
-}
-
+/**
+ * WebGL renderer for one persistent SERA character. Geometry and materials are
+ * allocated once; state updates only pose, tint and continuous facial motion.
+ */
 export class CognitiveFoldRenderer {
   constructor(canvas, width, height, dpr) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    this.camera = new THREE.OrthographicCamera(-4, 4, 3, -3, -20, 20);
+    this.camera = new THREE.OrthographicCamera(-4, 4, 3.2, -3.2, -20, 20);
     this.camera.position.z = 8;
-    this.group = new THREE.Group();
-    this.group.rotation.z = -0.025;
-    this.scene.add(this.group);
-    this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, powerPreference: "low-power", premultipliedAlpha: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "low-power", premultipliedAlpha: true });
     this.renderer.setClearColor(0x000000, 0);
-    this.shells = [];
-    this.membranes = [];
-    this.nodes = [];
-    this.traces = [];
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
+    this.geometries = new Set();
+    this.materials = new Set();
     this.lastFrame = -Infinity;
     this.build();
     this.resize(width, height, dpr);
   }
 
+  rememberGeometry(geometry) {
+    this.geometries.add(geometry);
+    return geometry;
+  }
+
+  rememberMaterial(material) {
+    this.materials.add(material);
+    return material;
+  }
+
   build() {
-    // Three coincident, inset translucent skins produce gel depth without post-processing.
-    [1, 0.91, 0.72].forEach((inset, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color: index === 0 ? 0x79b7aa : (index === 1 ? 0xe7f2ed : 0x285f5b),
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        blending: THREE.NormalBlending,
-      });
-      const mesh = new THREE.Mesh(makeDiscGeometry(), material);
-      mesh.userData.inset = inset;
-      mesh.renderOrder = index;
-      this.shells.push(mesh);
-      this.group.add(mesh);
+    this.scene.add(new THREE.HemisphereLight(0xe9fbff, 0x6f5a91, 2.15));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.position.set(-3, 4, 6);
+    this.scene.add(keyLight);
+
+    const bodyGeometry = this.rememberGeometry(new THREE.SphereGeometry(1, 40, 28));
+    const bodyMaterial = this.rememberMaterial(new THREE.MeshPhysicalMaterial({
+      color: 0xbdeff1,
+      emissive: 0x435778,
+      emissiveIntensity: 0.28,
+      roughness: 0.34,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.92,
+      clearcoat: 0.75,
+      clearcoatRoughness: 0.28,
+      depthWrite: false,
+    }));
+    this.bodyRoot = new THREE.Group();
+    this.root.add(this.bodyRoot);
+
+    // Overlapping head and lower body read as one rounded floating creature.
+    this.body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    this.body.scale.set(1.12, 1.28, 0.76);
+    this.body.position.y = -0.25;
+    this.body.renderOrder = 2;
+    this.bodyRoot.add(this.body);
+    this.head = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    this.head.scale.set(1.08, 0.91, 0.72);
+    this.head.position.set(0, 0.58, 0.08);
+    this.head.renderOrder = 3;
+    this.bodyRoot.add(this.head);
+
+    const glowMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0xc8b8ef, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.innerGlow = new THREE.Mesh(bodyGeometry, glowMaterial);
+    this.innerGlow.scale.set(0.76, 0.92, 0.58);
+    this.innerGlow.position.set(0, -0.04, 0.42);
+    this.innerGlow.renderOrder = 4;
+    this.bodyRoot.add(this.innerGlow);
+
+    const earGeometry = this.rememberGeometry(makeEarGeometry());
+    const earMaterial = this.rememberMaterial(new THREE.MeshPhysicalMaterial({ color: 0xc8b8ef, emissive: 0x554a79, emissiveIntensity: 0.18, roughness: 0.4, clearcoat: 0.6, side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.ears = [-1, 1].map((side) => {
+      const ear = new THREE.Mesh(earGeometry, earMaterial);
+      ear.scale.x = side;
+      ear.position.set(side * 0.82, 0.55, -0.06);
+      ear.renderOrder = 1;
+      this.bodyRoot.add(ear);
+      return ear;
     });
 
-    for (let index = 0; index < MAX_MEMBRANES; index += 1) {
-      const material = new THREE.LineBasicMaterial({ color: 0xe7f2ed, transparent: true, opacity: 0.2, depthWrite: false });
-      const line = new THREE.LineLoop(makeLineGeometry(MEMBRANE_SEGMENTS, true), material);
-      line.renderOrder = 5 + index;
-      this.membranes.push(line);
-      this.group.add(line);
-    }
+    const eyeWhiteGeometry = this.rememberGeometry(new THREE.SphereGeometry(0.31, 24, 18));
+    const irisGeometry = this.rememberGeometry(new THREE.CircleGeometry(0.2, 24));
+    const pupilGeometry = this.rememberGeometry(new THREE.CircleGeometry(0.1, 20));
+    const highlightGeometry = this.rememberGeometry(new THREE.CircleGeometry(0.035, 14));
+    const eyeWhiteMaterial = this.rememberMaterial(new THREE.MeshStandardMaterial({ color: 0xf5fbff, roughness: 0.24, transparent: true, opacity: 0.96, depthWrite: false }));
+    const irisMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0x5dbbc6, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
+    const pupilMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0x172a43, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
+    const highlightMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }));
+    this.eyes = [-1, 1].map((side) => {
+      const group = new THREE.Group();
+      group.position.set(side * 0.4, 0.59, 0.75);
+      const white = new THREE.Mesh(eyeWhiteGeometry, eyeWhiteMaterial);
+      white.scale.set(0.94, 1.18, 0.3);
+      group.add(white);
+      const iris = new THREE.Mesh(irisGeometry, irisMaterial);
+      // Keep the layered facial planes in front of the rounded eye whites.
+      // The camera looks down +Z, so these offsets are intentionally generous
+      // to avoid depth-buffer/floating-point overlap hiding the iris.
+      iris.position.z = 0.31;
+      iris.renderOrder = 10;
+      const pupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+      pupil.position.z = 0.34;
+      pupil.renderOrder = 11;
+      const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
+      highlight.position.set(-0.035, 0.055, 0.38);
+      highlight.renderOrder = 12;
+      group.add(iris, pupil, highlight);
+      group.renderOrder = 7;
+      this.bodyRoot.add(group);
+      return { group, iris, pupil, highlight };
+    });
 
-    for (let index = 0; index < MAX_NODES; index += 1) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3), 3));
-      const material = new THREE.PointsMaterial({ color: 0xe7f2ed, size: 0.07, transparent: true, opacity: 0.75, depthWrite: false, sizeAttenuation: true });
-      const point = new THREE.Points(geometry, material);
-      point.renderOrder = 20;
-      this.nodes.push(point);
-      this.group.add(point);
-    }
+    const cheekGeometry = this.rememberGeometry(new THREE.CircleGeometry(0.13, 20));
+    const cheekMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0xe9a8cf, transparent: true, opacity: 0.16, depthWrite: false }));
+    this.cheeks = [-1, 1].map((side) => {
+      const cheek = new THREE.Mesh(cheekGeometry, cheekMaterial);
+      cheek.position.set(side * 0.62, 0.18, 0.83);
+      cheek.scale.y = 0.48;
+      this.bodyRoot.add(cheek);
+      return cheek;
+    });
 
-    for (let index = 0; index < MAX_TRACES; index += 1) {
-      const material = new THREE.LineBasicMaterial({ color: 0x79b7aa, transparent: true, opacity: 0.25, depthWrite: false });
-      const line = new THREE.Line(makeLineGeometry(TRACE_SEGMENTS), material);
-      line.renderOrder = 4;
-      this.traces.push(line);
-      this.group.add(line);
-    }
+    const faceMaterial = this.rememberMaterial(new THREE.LineBasicMaterial({ color: 0x294b67, transparent: true, opacity: 0.78, depthWrite: false }));
+    this.mouth = new THREE.Line(makeDynamicLine(MOUTH_SEGMENTS), faceMaterial);
+    this.rememberGeometry(this.mouth.geometry);
+    this.mouth.renderOrder = 8;
+    this.bodyRoot.add(this.mouth);
+    const noseMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0x7598aa, transparent: true, opacity: 0.45, depthWrite: false }));
+    this.nose = new THREE.Mesh(this.rememberGeometry(new THREE.CircleGeometry(0.035, 12)), noseMaterial);
+    this.nose.position.set(0, 0.29, 0.87);
+    this.nose.scale.y = 0.58;
+    this.bodyRoot.add(this.nose);
+
+    const antennaMaterial = this.rememberMaterial(new THREE.LineBasicMaterial({ color: 0xbdeff1, transparent: true, opacity: 0.72, depthWrite: false }));
+    this.antenna = new THREE.Line(makeDynamicLine(12), antennaMaterial);
+    this.rememberGeometry(this.antenna.geometry);
+    this.antenna.renderOrder = 1;
+    this.root.add(this.antenna);
+    const tipGeometry = this.rememberGeometry(new THREE.SphereGeometry(0.09, 18, 12));
+    const tipMaterial = this.rememberMaterial(new THREE.MeshBasicMaterial({ color: 0xbdeff1, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.antennaTip = new THREE.Mesh(tipGeometry, tipMaterial);
+    this.root.add(this.antennaTip);
+
+    const particleGeometry = this.rememberGeometry(new THREE.BufferGeometry());
+    particleGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES * 3), 3));
+    const particleMaterial = this.rememberMaterial(new THREE.PointsMaterial({ color: 0xbdeff1, size: 0.065, transparent: true, opacity: 0.52, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
+    this.particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.root.add(this.particles);
+
+    this.traces = Array.from({ length: MAX_TRACES }, (_, index) => {
+      const material = this.rememberMaterial(new THREE.LineBasicMaterial({ color: index % 2 ? 0xc8b8ef : 0xbdeff1, transparent: true, opacity: 0.15, depthWrite: false }));
+      const line = new THREE.Line(this.rememberGeometry(makeDynamicLine(TRACE_SEGMENTS)), material);
+      this.root.add(line);
+      return line;
+    });
   }
 
   resize(width, height, dpr) {
     const safeWidth = Math.max(1, width);
     const safeHeight = Math.max(1, height);
     const aspect = safeWidth / safeHeight;
-    const vertical = 3.05;
+    const vertical = 3.15;
     this.camera.left = -vertical * aspect;
     this.camera.right = vertical * aspect;
     this.camera.top = vertical;
@@ -152,84 +202,124 @@ export class CognitiveFoldRenderer {
     this.renderer.setSize(safeWidth, safeHeight, false);
   }
 
-  render(behavior) {
-    const interval = behavior.motionScale < 0.5 || behavior.lowPower ? 1 / 20 : 1 / 30;
-    if (behavior.time - this.lastFrame < interval) return;
-    this.lastFrame = behavior.time;
-    const accent = new THREE.Color(behavior.accent);
-    const secondary = new THREE.Color(behavior.secondary);
-    const core = new THREE.Color(behavior.core);
+  updateMouth(behavior) {
+    const openness = Math.min(0.32, behavior.mouthOpen + behavior.voice * 0.3 + behavior.audio.mid * 0.07);
+    const width = 0.25 + Math.abs(behavior.smile) * 0.1 + behavior.voice * 0.06;
+    for (let index = 0; index <= MOUTH_SEGMENTS; index += 1) {
+      const t = index / MOUTH_SEGMENTS;
+      const x = (t - 0.5) * width * 2;
+      const edge = Math.abs(t - 0.5) * 2;
+      const smileCurve = (edge * edge - 0.5) * behavior.smile * -0.16;
+      const openCurve = Math.sin(t * Math.PI) * openness;
+      setLinePoint(this.mouth, index, x, -0.02 + smileCurve - openCurve * 0.48, 0.9);
+    }
+    this.mouth.geometry.attributes.position.needsUpdate = true;
+  }
 
-    this.shells.forEach((mesh, index) => {
-      updateDisc(mesh, behavior, mesh.userData.inset, index * 0.015);
-      mesh.material.color.copy(index === 0 ? accent : (index === 1 ? secondary : core));
-      const alpha = [0.28, 0.16, 0.17][index] * behavior.opacity;
-      mesh.material.opacity = alpha + behavior.impulses.flash * (index === 1 ? 0.14 : 0.04);
-    });
-
-    const membraneCount = Math.max(1, Math.min(MAX_MEMBRANES, Math.round(behavior.membranes)));
-    this.membranes.forEach((line, index) => {
-      line.visible = index < membraneCount;
-      if (!line.visible) return;
-      const positions = line.geometry.attributes.position;
-      const inset = 0.3 + (index / Math.max(1, membraneCount - 1)) * 0.5;
-      for (let step = 0; step < MEMBRANE_SEGMENTS; step += 1) {
-        const angle = (step / MEMBRANE_SEGMENTS) * Math.PI * 2;
-        const curl = Math.sin(angle * (2 + index % 3) + behavior.phase * 2 + index) * behavior.membraneCurl * 0.08;
-        const point = bodyPoint(angle + curl, behavior, inset + curl);
-        positions.setXYZ(step, point.x, point.y, 0.08 + index * 0.004);
-      }
-      positions.needsUpdate = true;
-      line.material.color.copy(index % 3 === 0 ? secondary : accent);
-      line.material.opacity = 0.07 + behavior.density * 0.16 + behavior.attention * (index === membraneCount - 1 ? 0.08 : 0);
-    });
-
-    const nodeCount = Math.max(0, Math.min(MAX_NODES, Math.round(behavior.nodes)));
-    this.nodes.forEach((node, index) => {
-      node.visible = index < nodeCount;
-      if (!node.visible) return;
-      const point = nodePoint(index, behavior);
-      node.geometry.attributes.position.setXYZ(0, point.x, point.y, 0.18);
-      node.geometry.attributes.position.needsUpdate = true;
-      node.material.color.copy(index % 3 === 0 ? secondary : core);
-      node.material.size = 0.045 + behavior.attention * 0.04 + (index === 0 ? behavior.audio.treble * 0.035 : 0);
-      node.material.opacity = 0.36 + behavior.density * 0.46;
-    });
+  updateAmbientMatter(behavior) {
+    const count = Math.max(0, Math.min(MAX_PARTICLES, Math.round(behavior.particles)));
+    this.particles.geometry.setDrawRange(0, count);
+    const positions = this.particles.geometry.attributes.position;
+    for (let index = 0; index < count; index += 1) {
+      const angle = index * 2.399963 + behavior.phase * (0.9 + index * 0.03);
+      const radius = 1.45 + (index % 3) * 0.2 + behavior.traceReach * 0.18;
+      positions.setXYZ(index, Math.cos(angle) * radius, -0.05 + Math.sin(angle) * radius * 0.84, -0.2);
+    }
+    positions.needsUpdate = true;
 
     const traceCount = Math.max(0, Math.min(MAX_TRACES, Math.round(behavior.traces)));
     this.traces.forEach((line, index) => {
       line.visible = index < traceCount;
       if (!line.visible) return;
-      const positions = line.geometry.attributes.position;
-      const anchor = -0.8 + index * 1.27 + behavior.phase * 0.6 * behavior.direction;
       for (let step = 0; step <= TRACE_SEGMENTS; step += 1) {
         const t = step / TRACE_SEGMENTS;
-        const angle = anchor + (t - 0.5) * behavior.traceArc;
-        const outside = 1.08 + Math.sin(t * Math.PI) * behavior.traceReach * 0.13;
-        const point = bodyPoint(angle, behavior, outside);
-        positions.setXYZ(step, point.x, point.y, -0.02);
+        const side = index % 2 ? 1 : -1;
+        const y = -1.05 + t * 2.25;
+        const x = side * (1.32 + Math.sin(t * Math.PI + index) * behavior.traceReach * 0.34);
+        setLinePoint(line, step, x, y, -0.3);
       }
-      positions.needsUpdate = true;
-      line.material.color.copy(index % 2 ? secondary : accent);
-      line.material.opacity = (0.09 + behavior.attention * 0.13) * Math.sin((index + 1) / (traceCount + 1) * Math.PI);
+      line.geometry.attributes.position.needsUpdate = true;
+      line.material.opacity = (0.08 + behavior.internalGlow * 0.13) * behavior.opacity;
+    });
+  }
+
+  render(behavior) {
+    const interval = behavior.motionScale < 0.5 || behavior.lowPower ? 1 / 20 : 1 / 30;
+    if (behavior.time - this.lastFrame < interval) return;
+    this.lastFrame = behavior.time;
+
+    const accent = new THREE.Color(behavior.accent);
+    const secondary = new THREE.Color(behavior.secondary);
+    const core = new THREE.Color(behavior.core);
+    const bob = Math.sin(behavior.time * (1.3 + behavior.speed)) * behavior.bounce * behavior.motionScale;
+    const audioLift = behavior.audio.bass * 0.055 * behavior.motionScale;
+    this.root.position.set(behavior.impulses.return * -0.06, bob + behavior.posture + audioLift - 0.12, 0);
+    this.root.rotation.z = behavior.lean * -0.22 + Math.sin(behavior.phase * 1.7) * 0.012 * behavior.motionScale;
+    this.bodyRoot.scale.set(
+      behavior.scale * behavior.squash * (1 + behavior.audio.bass * 0.025),
+      behavior.scale * behavior.stretch * (1 + behavior.breath * Math.sin(behavior.time * 1.4) * behavior.motionScale + behavior.voice * 0.035),
+      1,
+    );
+
+    this.body.material.color.copy(accent).lerp(secondary, 0.24);
+    this.body.material.emissive.copy(secondary).multiplyScalar(0.38);
+    this.body.material.emissiveIntensity = 0.18 + behavior.internalGlow * 0.46 + behavior.impulses.flash * 0.25;
+    this.body.material.opacity = behavior.opacity;
+    this.innerGlow.material.color.copy(secondary);
+    this.innerGlow.material.opacity = 0.05 + behavior.internalGlow * 0.18 + behavior.voice * 0.08;
+    const glowScale = 1 + behavior.audio.bass * 0.09;
+    this.innerGlow.scale.set(0.76 * glowScale, 0.92 * glowScale, 0.58 * glowScale);
+
+    this.ears[0].rotation.z = -behavior.earAngle;
+    this.ears[1].rotation.z = behavior.earAngle;
+    this.ears.forEach((ear, index) => {
+      ear.position.y = 0.55 + behavior.earLift + Math.sin(behavior.phase * 2 + index) * 0.025 * behavior.motionScale;
+      ear.material.color.copy(secondary).lerp(accent, 0.35);
+      ear.material.opacity = behavior.opacity * 0.92;
     });
 
-    this.group.position.x = behavior.impulses.return * -0.055;
-    this.group.scale.y = 1 + behavior.impulses.flash * 0.025;
+    const gazeX = (behavior.gazeX + behavior.task.direction * 0.05 * behavior.gazeFocus) * 0.11;
+    const gazeY = behavior.gazeY * 0.1;
+    this.eyes.forEach((eye, index) => {
+      eye.group.scale.y = Math.max(0.07, 1 - behavior.blink * 0.94);
+      eye.group.rotation.z = (index === 0 ? -1 : 1) * behavior.expression * 0.08;
+      eye.iris.position.set(gazeX, gazeY, 0.31);
+      eye.pupil.position.set(gazeX, gazeY, 0.34);
+      eye.highlight.position.set(gazeX - 0.035, gazeY + 0.055, 0.38);
+      eye.iris.material.color.copy(accent).lerp(core, 0.28);
+      eye.pupil.material.color.copy(core);
+    });
+    this.cheeks.forEach((cheek) => { cheek.material.opacity = (0.11 + Math.max(0, behavior.smile) * 0.13) * behavior.opacity; });
+    this.mouth.material.color.copy(core);
+    this.updateMouth(behavior);
+
+    const sway = Math.sin(behavior.time * (1.2 + behavior.speed) + behavior.task.direction) * behavior.antennaSway * behavior.motionScale;
+    for (let index = 0; index <= 12; index += 1) {
+      const t = index / 12;
+      setLinePoint(this.antenna, index, sway * t * t, 1.36 + t * 0.7, -0.08 + t * 0.08);
+    }
+    this.antenna.geometry.attributes.position.needsUpdate = true;
+    this.antenna.material.color.copy(accent);
+    this.antennaTip.position.set(sway, 2.06, 0.02);
+    this.antennaTip.material.color.copy(accent).lerp(secondary, 0.38);
+    this.antennaTip.material.opacity = 0.5 + behavior.antennaGlow * 0.42;
+    this.antennaTip.scale.setScalar(0.8 + behavior.antennaGlow * 0.42 + behavior.audio.treble * 0.25);
+
+    this.particles.material.color.copy(secondary);
+    this.particles.material.opacity = (0.18 + behavior.internalGlow * 0.42) * behavior.opacity;
+    this.updateAmbientMatter(behavior);
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
-    this.group.traverse((object) => {
-      object.geometry?.dispose();
-      object.material?.dispose();
-    });
+    this.geometries.forEach((geometry) => geometry.dispose());
+    this.materials.forEach((material) => material.dispose());
     this.renderer.dispose();
     this.renderer.forceContextLoss?.();
   }
 }
 
-/** Canvas fallback mirrors the same organism model with fixed-size buffers and no dependencies. */
+/** Canvas 2D fallback draws the same face, ears, antenna and stable silhouette. */
 export class CognitiveFoldCanvasRenderer {
   constructor(canvas, width, height, dpr) {
     this.canvas = canvas;
@@ -250,14 +340,20 @@ export class CognitiveFoldCanvasRenderer {
     this.context.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  traceBody(ctx, behavior, inset = 1) {
-    for (let index = 0; index <= BODY_SEGMENTS; index += 1) {
-      const point = bodyPoint((index % BODY_SEGMENTS) / BODY_SEGMENTS * Math.PI * 2, behavior, inset);
-      const x = this.width / 2 + point.x * this.unit;
-      const y = this.height / 2 - point.y * this.unit;
-      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
+  drawEar(ctx, side, behavior) {
+    ctx.save();
+    ctx.translate(side * 0.77, -0.45 - behavior.earLift);
+    ctx.rotate(side * (-0.05 - behavior.earAngle));
+    ctx.scale(side, 1);
+    ctx.beginPath();
+    ctx.moveTo(0, -0.28);
+    ctx.quadraticCurveTo(0.75, -0.55, 1.42, 0);
+    ctx.quadraticCurveTo(0.75, 0.48, 0, 0.27);
     ctx.closePath();
+    ctx.globalAlpha = behavior.opacity * 0.84;
+    ctx.fillStyle = hexCss(behavior.secondary);
+    ctx.fill();
+    ctx.restore();
   }
 
   render(behavior) {
@@ -266,56 +362,118 @@ export class CognitiveFoldCanvasRenderer {
     this.lastFrame = behavior.time;
     const ctx = this.context;
     ctx.clearRect(0, 0, this.width, this.height);
-    this.unit = Math.min(this.width / 7.1, this.height / 5.5);
+    const unit = Math.min(this.width / 7.2, this.height / 6.15);
+    const bob = Math.sin(behavior.time * (1.3 + behavior.speed)) * behavior.bounce * behavior.motionScale;
+    ctx.save();
+    ctx.translate(this.width / 2, this.height / 2 + unit * (0.12 - behavior.posture - bob));
+    ctx.scale(unit, unit);
+    ctx.rotate(behavior.lean * -0.22);
 
-    // Peripheral traces are outside the clipping region and intentionally sparse.
+    // Bounded cognition trails sit behind the body, never replacing its identity.
+    ctx.lineWidth = 0.018;
     const traceCount = Math.max(0, Math.min(MAX_TRACES, Math.round(behavior.traces)));
-    ctx.lineWidth = Math.max(0.75, this.unit * 0.012);
-    ctx.strokeStyle = hexCss(behavior.accent);
     for (let index = 0; index < traceCount; index += 1) {
+      const side = index % 2 ? 1 : -1;
       ctx.beginPath();
-      const anchor = -0.8 + index * 1.27 + behavior.phase * 0.6 * behavior.direction;
       for (let step = 0; step <= TRACE_SEGMENTS; step += 1) {
         const t = step / TRACE_SEGMENTS;
-        const point = bodyPoint(anchor + (t - 0.5) * behavior.traceArc, behavior, 1.08 + Math.sin(t * Math.PI) * behavior.traceReach * 0.13);
-        const x = this.width / 2 + point.x * this.unit;
-        const y = this.height / 2 - point.y * this.unit;
+        const x = side * (1.32 + Math.sin(t * Math.PI + index) * behavior.traceReach * 0.34);
+        const y = 1.05 - t * 2.25;
         if (step === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      ctx.globalAlpha = 0.08 + behavior.attention * 0.12;
+      ctx.globalAlpha = 0.08 + behavior.internalGlow * 0.12;
+      ctx.strokeStyle = index % 2 ? hexCss(behavior.secondary) : hexCss(behavior.accent);
       ctx.stroke();
     }
 
-    const gradient = ctx.createRadialGradient(this.width * 0.44, this.height * 0.4, this.unit * 0.08, this.width / 2, this.height / 2, this.unit * 2.4);
+    const sway = Math.sin(behavior.time * (1.2 + behavior.speed) + behavior.task.direction) * behavior.antennaSway * behavior.motionScale;
+    ctx.beginPath();
+    ctx.moveTo(0, -1.31);
+    ctx.quadraticCurveTo(sway * 0.25, -1.72, sway, -2.03);
+    ctx.globalAlpha = 0.72;
+    ctx.strokeStyle = hexCss(behavior.accent);
+    ctx.lineWidth = 0.025;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sway, -2.03, 0.075 + behavior.antennaGlow * 0.025 + behavior.audio.treble * 0.02, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.55 + behavior.antennaGlow * 0.35;
+    ctx.fillStyle = hexCss(behavior.secondary);
+    ctx.fill();
+
+    this.drawEar(ctx, -1, behavior);
+    this.drawEar(ctx, 1, behavior);
+    const sx = behavior.scale * behavior.squash * (1 + behavior.audio.bass * 0.025);
+    const sy = behavior.scale * behavior.stretch * (1 + behavior.voice * 0.035);
+    ctx.save();
+    ctx.scale(sx, sy);
+    const gradient = ctx.createRadialGradient(-0.38, -0.62, 0.05, 0, 0, 1.5);
     gradient.addColorStop(0, hexCss(behavior.secondary));
-    gradient.addColorStop(0.56, hexCss(behavior.accent));
+    gradient.addColorStop(0.52, hexCss(behavior.accent));
     gradient.addColorStop(1, hexCss(behavior.core));
     ctx.beginPath();
-    this.traceBody(ctx, behavior);
-    ctx.globalAlpha = behavior.opacity * 0.48 + behavior.impulses.flash * 0.08;
+    ctx.moveTo(0, -1.27);
+    ctx.bezierCurveTo(0.8, -1.27, 1.16, -0.72, 1.09, 0.1);
+    ctx.bezierCurveTo(1.02, 1.04, 0.58, 1.38, 0, 1.42);
+    ctx.bezierCurveTo(-0.58, 1.38, -1.02, 1.04, -1.09, 0.1);
+    ctx.bezierCurveTo(-1.16, -0.72, -0.8, -1.27, 0, -1.27);
+    ctx.closePath();
+    ctx.globalAlpha = behavior.opacity;
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    ctx.save();
     ctx.beginPath();
-    this.traceBody(ctx, behavior, 0.98);
-    ctx.clip();
-    const membraneCount = Math.max(1, Math.min(MAX_MEMBRANES, Math.round(behavior.membranes)));
-    ctx.lineWidth = Math.max(0.7, this.unit * 0.01);
-    for (let index = 0; index < membraneCount; index += 1) {
+    ctx.ellipse(0, 0.18, 0.72, 0.9, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.04 + behavior.internalGlow * 0.14;
+    ctx.fillStyle = hexCss(behavior.secondary);
+    ctx.fill();
+
+    const gazeX = (behavior.gazeX + behavior.task.direction * 0.05 * behavior.gazeFocus) * 0.1;
+    const gazeY = behavior.gazeY * 0.09;
+    const eyeHeight = Math.max(0.025, 0.31 * (1 - behavior.blink * 0.94));
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      this.traceBody(ctx, behavior, 0.3 + (index / Math.max(1, membraneCount - 1)) * 0.5);
-      ctx.globalAlpha = 0.09 + behavior.density * 0.14;
-      ctx.strokeStyle = index % 3 === 0 ? hexCss(behavior.secondary) : hexCss(behavior.accent);
-      ctx.stroke();
+      ctx.ellipse(side * 0.4, -0.52, 0.27, eyeHeight, 0, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.96;
+      ctx.fillStyle = "#f5fbff";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(side * 0.4 + gazeX, -0.52 + gazeY, 0.14, Math.max(0.02, eyeHeight * 0.62), 0, 0, Math.PI * 2);
+      ctx.fillStyle = hexCss(behavior.accent);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(side * 0.4 + gazeX, -0.52 + gazeY, Math.min(0.067, eyeHeight * 0.48), 0, Math.PI * 2);
+      ctx.fillStyle = hexCss(behavior.core);
+      ctx.fill();
     }
-    const nodeCount = Math.max(0, Math.min(MAX_NODES, Math.round(behavior.nodes)));
-    for (let index = 0; index < nodeCount; index += 1) {
-      const point = nodePoint(index, behavior);
+
+    ctx.beginPath();
+    ctx.ellipse(0, -0.22, 0.035, 0.02, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = hexCss(behavior.core);
+    ctx.fill();
+    const openness = Math.min(0.32, behavior.mouthOpen + behavior.voice * 0.3 + behavior.audio.mid * 0.07);
+    ctx.beginPath();
+    for (let index = 0; index <= MOUTH_SEGMENTS; index += 1) {
+      const t = index / MOUTH_SEGMENTS;
+      const edge = Math.abs(t - 0.5) * 2;
+      const x = (t - 0.5) * (0.5 + Math.abs(behavior.smile) * 0.2);
+      const y = 0.02 + (edge * edge - 0.5) * behavior.smile * -0.16 + Math.sin(t * Math.PI) * openness * 0.48;
+      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.globalAlpha = 0.76;
+    ctx.strokeStyle = hexCss(behavior.core);
+    ctx.lineWidth = 0.025;
+    ctx.stroke();
+    ctx.restore();
+
+    const particleCount = Math.max(0, Math.min(MAX_PARTICLES, Math.round(behavior.particles)));
+    for (let index = 0; index < particleCount; index += 1) {
+      const angle = index * 2.399963 + behavior.phase * (0.9 + index * 0.03);
+      const radius = 1.45 + (index % 3) * 0.2;
       ctx.beginPath();
-      ctx.arc(this.width / 2 + point.x * this.unit, this.height / 2 - point.y * this.unit, this.unit * (0.025 + behavior.attention * 0.012), 0, Math.PI * 2);
-      ctx.globalAlpha = 0.35 + behavior.density * 0.45;
-      ctx.fillStyle = index % 3 === 0 ? hexCss(behavior.secondary) : hexCss(behavior.core);
+      ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.84, 0.025, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.16 + behavior.internalGlow * 0.34;
+      ctx.fillStyle = hexCss(behavior.secondary);
       ctx.fill();
     }
     ctx.restore();

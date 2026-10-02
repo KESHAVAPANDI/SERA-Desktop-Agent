@@ -1,4 +1,5 @@
 const TERMINAL_EVENTS = new Set(["TASK_COMPLETED", "TASK_FAILED", "TASK_CANCELLED"]);
+const STREAM_EVENTS = new Set(["STREAM_START", "STREAM_TOKEN"]);
 
 const RUNTIME_STATE_ALIASES = {
   TASK_PLANNING: "PLANNING",
@@ -28,6 +29,7 @@ export function createPresenceModel() {
     connection: "CONNECTING",
     runtimeAttached: null,
     runtimeState: "IDLE",
+    presentationAlias: null,
     task: null,
     turnId: null,
     userCaption: "",
@@ -79,6 +81,15 @@ function isStaleTurn(model, payload) {
   return Boolean(incoming && model.turnId && incoming !== model.turnId);
 }
 
+function isStaleCorrelation(model, payload) {
+  return isStaleTask(model, payload) || isStaleTurn(model, payload);
+}
+
+function isStaleApproval(model, payload) {
+  const incoming = idOf(payload, "request_id") || idOf(payload, "action_id");
+  return Boolean(incoming && model.approval?.requestId && incoming !== model.approval.requestId);
+}
+
 function explicitTaskType(payload) {
   const value = payload?.task_type ?? payload?.taskType ?? payload?.category;
   return text(value).trim().toUpperCase() || "GENERAL";
@@ -113,6 +124,7 @@ export function reducePresenceMessage(current, message) {
       ...model,
       runtimeAttached: Boolean(payload.runtime_attached),
       runtimeState: normalizeRuntimeState(payload.status),
+      presentationAlias: null,
       task,
       turnId: task?.turnId || null,
       userCaption: task?.text || model.userCaption,
@@ -123,17 +135,19 @@ export function reducePresenceMessage(current, message) {
     };
   }
 
-  if (TERMINAL_EVENTS.has(event) && isStaleTask(model, payload)) return model;
+  if (TERMINAL_EVENTS.has(event) && isStaleCorrelation(model, payload)) return model;
   if ((event === "PARTIAL_TRANSCRIPTION" || event === "TRANSCRIPTION_COMPLETED") && isStaleTurn(model, payload)) return model;
 
   const next = { ...model, lastEvent: event };
   const explicitProgress = progressOf(payload);
-  if (explicitProgress !== null && next.task && !isStaleTask(model, payload)) {
+  if (explicitProgress !== null && next.task && !isStaleCorrelation(model, payload)) {
     next.task = { ...next.task, progress: explicitProgress };
   }
+  if (STREAM_EVENTS.has(event) && !isStaleCorrelation(model, payload)) next.presentationAlias = "TYPING";
   switch (event) {
     case "RUNTIME_STATE_CHANGED":
       next.runtimeState = normalizeRuntimeState(payload.status ?? payload.state);
+      next.presentationAlias = null;
       if (text(payload.task) && next.task) next.task = { ...next.task, text: payload.task };
       break;
     case "ACTIVATION_STARTED":
@@ -145,6 +159,7 @@ export function reducePresenceMessage(current, message) {
       next.responseCaption = "";
       next.responseStatus = "";
       next.approval = null;
+      next.presentationAlias = null;
       break;
     case "TRANSCRIPTION_STARTED":
       next.runtimeState = "TRANSCRIBING";
@@ -171,15 +186,26 @@ export function reducePresenceMessage(current, message) {
         progress: progressOf(payload),
       };
       next.turnId = next.task.turnId || next.turnId;
+      next.presentationAlias = null;
+      next.approval = null;
+      next.tts = { active: false, taskId: null };
       // TASK_STARTED does not assert a planning state. Await runtime state.
       break;
     }
     case "TOOL_STARTED":
-      if (!isStaleTask(model, payload)) next.runtimeState = "EXECUTING";
+      if (!isStaleCorrelation(model, payload)) {
+        next.runtimeState = "EXECUTING";
+        next.presentationAlias = "WORKING";
+      }
+      break;
+    case "TOOL_COMPLETED":
+    case "TOOL_FAILED":
+      if (!isStaleCorrelation(model, payload)) next.presentationAlias = null;
       break;
     case "SECURITY_CONFIRMATION_REQUIRED":
       if (!isStaleTask(model, payload)) {
         next.runtimeState = "WAITING_FOR_APPROVAL";
+        next.presentationAlias = null;
         next.approval = {
           action: text(payload.action) || text(payload.prompt),
           reason: text(payload.reason),
@@ -188,10 +214,14 @@ export function reducePresenceMessage(current, message) {
       }
       break;
     case "APPROVAL_RESOLVED":
-      next.approval = null;
+      if (!isStaleCorrelation(model, payload) && !isStaleApproval(model, payload)) next.approval = null;
+      break;
+    case "STREAM_COMPLETE":
+      if (!isStaleCorrelation(model, payload)) next.presentationAlias = null;
       break;
     case "AGENT_RESPONSE": {
       if (isStaleTask(model, payload)) break;
+      next.presentationAlias = null;
       const response = text(payload.content) || text(payload.text) || text(payload.response);
       if (response) next.responseCaption = response;
       next.responseStatus = text(payload.status).toUpperCase() || "RESPONSE";
@@ -199,7 +229,10 @@ export function reducePresenceMessage(current, message) {
     }
     case "TTS_STARTED":
     case "AUDIO_PLAYBACK_STARTED":
-      if (!isStaleTask(model, payload)) next.tts = { active: true, taskId: idOf(payload, "task_id") };
+      if (!isStaleCorrelation(model, payload)) {
+        next.presentationAlias = null;
+        next.tts = { active: true, taskId: idOf(payload, "task_id") };
+      }
       break;
     case "TTS_COMPLETED":
     case "TTS_INTERRUPTED":
@@ -208,6 +241,7 @@ export function reducePresenceMessage(current, message) {
       break;
     case "TASK_COMPLETED":
       next.runtimeState = "COMPLETED";
+      next.presentationAlias = null;
       next.task = next.task ? { ...next.task, status: "COMPLETED" } : next.task;
       next.tts = { active: false, taskId: null };
       if (!next.responseCaption && text(payload.result)) next.responseCaption = payload.result;
@@ -215,12 +249,14 @@ export function reducePresenceMessage(current, message) {
       break;
     case "TASK_FAILED":
       next.runtimeState = "FAILED";
+      next.presentationAlias = null;
       next.task = next.task ? { ...next.task, status: "FAILED" } : next.task;
       next.tts = { active: false, taskId: null };
       next.responseStatus = "FAILED";
       break;
     case "TASK_CANCELLED":
       next.runtimeState = "CANCELLED";
+      next.presentationAlias = null;
       next.task = next.task ? { ...next.task, status: "CANCELLED" } : next.task;
       next.tts = { active: false, taskId: null };
       next.responseStatus = "CANCELLED";
@@ -235,4 +271,9 @@ export function withConnection(model, connection) {
 
 export function effectiveVisualState(model) {
   return model?.tts?.active ? "SPEAKING" : normalizeRuntimeState(model?.runtimeState);
+}
+
+/** Presentation-only wording; never send these aliases to the runtime or engine. */
+export function effectivePresentationState(model) {
+  return model?.tts?.active ? "SPEAKING" : (model?.presentationAlias || effectiveVisualState(model));
 }

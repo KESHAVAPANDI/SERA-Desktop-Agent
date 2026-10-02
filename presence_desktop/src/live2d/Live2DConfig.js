@@ -1,0 +1,46 @@
+/**
+ * SERA 2.0 Live2D Presence Configuration
+ *
+ * Central configuration for Live2D character model loading, viewports,
+ * framing, and runtime flags. Allows easy swapping of the character model
+ * without modifying the rendering or state controller logic.
+ */
+
+export const LIVE2D_CONFIG = Object.freeze({
+  // Active character model settings
+  activeModelName: "mao",
+  modelPath: "./assets/live2d/models/mao/Mao.model3.json",
+  modelLabel: "Niziiro Mao (Cubism 4)",
+
+  // Viewport & Framing
+  // Target viewport dimensions inside SERA overlay
+  viewportWidth: 356,
+  viewportHeight: 250,
+
+  // Mao is a full-body model designed for VTubing. We scale and position
+  // it so that the upper body / expressive face is centered and prominent.
+  modelScale: 0.18,
+  modelOffsetX: 178,     // Centered horizontally in 356px viewport
+  modelOffsetY: 500,     // Perfectly frame face, eyes, and upper shoulders in viewport
+
+  // Animation & Life Layer
+  physics: true,
+  autoInteract: false,    // Controlled by SERA state rather than raw clicks
+  idleBreathing: true,
+  naturalBlinking: true,
+  microSaccades: true,
+
+  // Audio / Speech
+  lipSyncParam: "ParamA",
+  speechFallbackFrequency: 14, // Hz for clean audio-less speech oscillation
+  speechMinOpen: 0.08,
+  speechMaxOpen: 0.85,
+
+  // WebGL Renderer settings
+  webgl: {
+    antialias: true,
+    alpha: true,
+    preserveDrawingBuffer: true,
+    powerPreference: "default",
+  },
+});
