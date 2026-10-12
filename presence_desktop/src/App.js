@@ -50,7 +50,8 @@ class PresenceApp {
     this.socket = new RuntimeSocket("ws://127.0.0.1:8765", {
       onStatus: (status) => this.setConnection(status),
       onMessage: (message) => this.handleBackendMessage(message),
-      onError: (error) => console.warn("[PresenceApp] Runtime socket:", error),
+      onLog: (entry) => console.info(`[PresenceApp] Runtime socket ${entry.phase} (${entry.url}, connection ${entry.generation})`),
+      onError: (entry) => console.warn(`[PresenceApp] Runtime socket ${entry.phase} (${entry.url}, connection ${entry.generation ?? "n/a"})`, entry.error),
     });
     this.scheduler = new RenderScheduler(() => this.renderFrame(), {
       idleFps: 15,

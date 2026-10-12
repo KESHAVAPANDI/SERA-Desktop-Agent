@@ -19,9 +19,12 @@ export const LIVE2D_CONFIG = Object.freeze({
 
   // Mao is a full-body model designed for VTubing. We scale and position
   // it so that the upper body / expressive face is centered and prominent.
-  modelScale: 0.18,
+  // Mao's source canvas includes a tall hat and full-body pose. At the compact
+  // desktop Presence size, this keeps the face, hat silhouette, and shoulders
+  // inside the viewport instead of clipping the crown at the top edge.
+  modelScale: 0.13,
   modelOffsetX: 178,     // Centered horizontally in 356px viewport
-  modelOffsetY: 500,     // Perfectly frame face, eyes, and upper shoulders in viewport
+  modelOffsetY: 405,     // Face-led 2.5D framing with safe headroom
 
   // Animation & Life Layer
   physics: true,

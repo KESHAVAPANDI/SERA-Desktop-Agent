@@ -30,7 +30,7 @@ export class RuntimeSocket {
     try {
       socket = new this.WebSocketImpl(this.url);
     } catch (error) {
-      this.handlers.onError?.(error);
+      this.handlers.onError?.({ phase: "construct", url: this.url, attempt: this.attempt + 1, error });
       this._retry(generation);
       return;
     }
@@ -38,6 +38,7 @@ export class RuntimeSocket {
     socket.onopen = () => {
       if (this.closed || generation !== this.generation) return socket.close();
       this.attempt = 0;
+      this.handlers.onLog?.({ phase: "open", url: this.url, generation });
       this.handlers.onStatus?.("ONLINE");
     };
     socket.onmessage = (event) => {
@@ -45,12 +46,13 @@ export class RuntimeSocket {
       try {
         this.handlers.onMessage?.(JSON.parse(event.data));
       } catch (error) {
-        this.handlers.onError?.(error);
+        this.handlers.onError?.({ phase: "parse", url: this.url, generation, error });
       }
     };
-    socket.onerror = (error) => this.handlers.onError?.(error);
+    socket.onerror = (error) => this.handlers.onError?.({ phase: "socket", url: this.url, generation, error });
     socket.onclose = () => {
       if (generation !== this.generation) return;
+      this.handlers.onLog?.({ phase: "close", url: this.url, generation });
       this.socket = null;
       if (!this.closed) this._retry(generation);
     };

@@ -102,18 +102,23 @@ async function runVerification() {
   const sequenceA = [
     { state: "IDLE", wait: 800, name: "live2d_01_idle" },
     { state: "LISTENING", wait: 800, name: "live2d_02_listening" },
-    { state: "THINKING", wait: 800, name: "live2d_03_thinking" },
-    { state: "EXECUTING", wait: 800, name: "live2d_04_executing" },
-    { state: "VERIFYING", wait: 800, name: "live2d_05_verifying" },
-    { state: "SPEAKING", wait: 800, name: "live2d_06_speaking", audio: { rawAmp: 0.7, mid: 0.8 } },
-    { state: "IDLE", wait: 800, name: "live2d_07_idle_return" },
+    { state: "TRANSCRIBING", wait: 800, name: "live2d_03_transcribing" },
+    { state: "THINKING", wait: 800, name: "live2d_04_thinking" },
+    { state: "PLANNING", wait: 800, name: "live2d_05_planning" },
+    { state: "TYPING", wait: 800, name: "live2d_06_typing" },
+    { state: "WORKING", wait: 800, name: "live2d_07_working" },
+    { state: "EXECUTING", wait: 800, name: "live2d_08_executing" },
+    { state: "VERIFYING", wait: 800, name: "live2d_09_verifying" },
+    { state: "SPEAKING", wait: 800, name: "live2d_10_speaking", audio: { rawAmp: 0.7, mid: 0.8 } },
+    { state: "IDLE", wait: 800, name: "live2d_11_idle_return" },
   ];
 
   const sequenceB = [
-    { state: "WAITING_FOR_APPROVAL", wait: 800, name: "live2d_08_waiting_approval" },
-    { state: "COMPLETED", wait: 800, name: "live2d_09_completed" },
-    { state: "FAILED", wait: 800, name: "live2d_10_failed" },
-    { state: "CANCELLED", wait: 800, name: "live2d_11_cancelled" },
+    { state: "WAITING_FOR_APPROVAL", wait: 800, name: "live2d_12_waiting_approval" },
+    { state: "COMPLETED", wait: 800, name: "live2d_13_completed" },
+    { state: "FAILED", wait: 800, name: "live2d_14_failed" },
+    { state: "CANCELLED", wait: 800, name: "live2d_15_cancelled" },
+    { state: "OFFLINE", wait: 800, name: "live2d_16_offline" },
   ];
 
   const allSteps = [...sequenceA, ...sequenceB];
