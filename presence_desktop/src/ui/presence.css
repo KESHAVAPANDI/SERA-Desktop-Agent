@@ -489,3 +489,42 @@ body { padding-bottom: clamp(8px, 2vh, 18px); }
 .task-progress::-moz-progress-bar { background: var(--tone, var(--core-cyan)); }
 
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+
+/* ── SERA Presence box refinement ──────────────────────────────────────────
+   The character remains the hero. The lower rail is one compact interaction
+   surface, with approval context reserved below it only when genuinely needed.
+*/
+.glass-panel { width: min(92vw, 420px); min-height: 390px; max-height: min(680px, 94vh); }
+.sera-brand { gap: 8px; font-size: 11px; letter-spacing: .24em; color: rgba(235,246,255,.9); }
+.sera-brand .presence-id { margin-left: 2px; letter-spacing: .12em; color: rgba(148,163,184,.36); }
+.window-actions { gap: 7px; }
+.action-btn { min-width: 30px; height: 24px; padding: 0 8px; border-radius: 7px; font-size: 8px; letter-spacing: .08em; display: inline-flex; align-items: center; justify-content: center; }
+.action-btn#details-toggle { min-width: 38px; }
+.core-viewport { height: clamp(250px, 47vh, 350px); min-height: 250px; max-height: 350px; }
+.bottom-drawer { padding: 0 18px 16px; gap: 9px; background: linear-gradient(180deg, transparent, rgba(3,8,18,.36) 22%, rgba(3,8,18,.58)); }
+.conversation-container { gap: 7px; }
+.conversation-container.active { max-height: 168px; margin: 2px 0 2px; }
+.caption-card { padding: 9px 11px; border-radius: 13px; gap: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.24); }
+.caption-header { font-size: 8px; }
+.caption-text { font-size: 10.5px; line-height: 1.38; }
+.bottom-bar { gap: 5px; margin: 0; padding: 2px 4px 0; }
+.state-summary { width: 100%; min-height: 16px; justify-content: center; }
+.kinetic-status { font-size: 9px; letter-spacing: .22em; }
+.kinetic-substatus { font-size: 8.5px; letter-spacing: .06em; color: rgba(203,213,225,.56); }
+.interaction-row { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(125,211,252,.16); border-radius: 10px; background: rgba(8,18,32,.54); color: rgba(203,213,225,.58); }
+.interaction-dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--tone, var(--core-cyan)); box-shadow: 0 0 8px color-mix(in srgb, var(--tone, var(--core-cyan)) 68%, transparent); }
+.interaction-label { color: rgba(226,232,240,.8); font: 8px 'JetBrains Mono', monospace; letter-spacing: .1em; }
+.interaction-hint { margin-left: auto; color: rgba(148,163,184,.64); font: 8px 'JetBrains Mono', monospace; letter-spacing: .04em; white-space: nowrap; }
+kbd { padding: 2px 4px; border: 1px solid rgba(148,163,184,.24); border-radius: 4px; color: rgba(226,232,240,.75); font: inherit; background: rgba(148,163,184,.08); }
+.task-context { display: none; width: 100%; max-width: 100%; padding: 2px 6px 0; color: rgba(148,163,184,.48); }
+.glass-panel[data-progress="determinate"] .task-context, .glass-panel[data-state="EXECUTING"] .task-context, .glass-panel[data-state="VERIFYING"] .task-context, .glass-panel[data-state="WAITING_FOR_APPROVAL"] .task-context { display: block; }
+.glass-panel.state-waiting_for_approval .task-context { display: none !important; }
+.approval-context { width: 100%; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--core-amber) 34%, transparent); border-radius: 11px; background: rgba(73,52,15,.22); box-shadow: inset 0 1px rgba(255,255,255,.05); }
+.approval-kicker { font-size: 7px; letter-spacing: .14em; color: rgba(253,230,138,.7); }
+.approval-action { font-size: 10px; line-height: 1.3; }
+.approval-reason { font-size: 8.5px; line-height: 1.3; }
+.glass-panel[data-approval="pending"] .interaction-row { border-color: rgba(251,191,36,.28); }
+.glass-panel[data-approval="pending"] .interaction-dot { background: var(--core-amber); box-shadow: 0 0 9px rgba(251,191,36,.65); }
+.glass-panel.state-offline .interaction-row { opacity: .58; }
+.glass-panel.state-offline .interaction-label::after { content: ' · RUNTIME OFFLINE'; color: rgba(148,163,184,.58); }
+@media (max-height: 560px) { .glass-panel { min-height: 340px; } .core-viewport { height: 230px; min-height: 230px; } .conversation-container.active { max-height: 132px; } .interaction-row { min-height: 27px; } }

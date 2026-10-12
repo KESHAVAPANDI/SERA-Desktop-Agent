@@ -7,7 +7,7 @@
  */
 
 const STATE_DEFINITIONS = {
-  OFFLINE: { label: "MOCHI IS OFFLINE", cue: "Waiting for SERA to reconnect", tone: "muted", index: "00", energy: 0.08, face: "resting", pose: "settled", attention: "ambient" },
+  OFFLINE: { label: "SERA IS OFFLINE", cue: "Waiting for SERA to reconnect", tone: "muted", index: "00", energy: 0.08, face: "resting", pose: "settled", attention: "ambient" },
   IDLE: { label: "HERE WITH YOU", cue: "Ready when you are", tone: "cyan", index: "01", energy: 0.18, face: "present", pose: "grounded", attention: "ambient" },
   LISTENING: { label: "I'M LISTENING", cue: "Go ahead", tone: "blue", index: "02", energy: 0.62, face: "attentive", pose: "forward", attention: "user" },
   TRANSCRIBING: { label: "CATCHING THAT", cue: "Turning your voice into context", tone: "violet", index: "03", energy: 0.76, face: "focused", pose: "inward", attention: "speech" },

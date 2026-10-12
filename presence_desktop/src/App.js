@@ -205,7 +205,7 @@ class PresenceApp {
     this.root?.setAttribute("data-connection", this.model.connection);
     this.root?.setAttribute("data-runtime-attached", String(this.model.runtimeAttached !== false));
     if (this.model.connection !== "ONLINE" || this.model.runtimeAttached === false) {
-      if (this.statusEl) this.statusEl.textContent = "MOCHI IS OFFLINE";
+      if (this.statusEl) this.statusEl.textContent = "SERA IS OFFLINE";
       if (this.substatusEl) this.substatusEl.textContent = label;
     }
   }
