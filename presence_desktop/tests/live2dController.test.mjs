@@ -186,7 +186,7 @@ test("8. Speaking animation follows actual speaking lifecycle with audio modulat
   assert.ok(controller.params.mouthOpen < 0.01, "Mouth smoothly closes when speech ends");
 });
 
-test("9. Audio envelope silence smoothly uses natural speech cadence fallback", () => {
+test("9. Genuine audio silence keeps the mouth closed without fabricated cadence", () => {
   const controller = new Live2DController();
   const mockModel = createMockLive2DModel();
   controller.attachModel(mockModel);
@@ -196,10 +196,21 @@ test("9. Audio envelope silence smoothly uses natural speech cadence fallback", 
   controller.setAudioData({ rawAmp: 0, mid: 0 });
 
   controller.update(0.05);
-  assert.ok(controller.params.mouthOpen > 0.0, "Fallback cadence opens mouth even without telemetry");
+   assert.ok(controller.params.mouthOpen < 0.01, "Silent telemetry does not invent mouth motion");
 });
 
-test("10. Model-load failure is explicitly surfaced rather than silently hidden", () => {
+test("10. Horizontal controller motion remains centered and damped", () => {
+  const controller = new Live2DController();
+  const mockModel = createMockLive2DModel();
+  controller.attachModel(mockModel);
+  controller.setState("THINKING");
+  for (let i = 0; i < 120; i++) controller.update(0.016);
+  assert.ok(Math.abs(controller.params.angleY) < 3.0, "Head yaw stays within calm range");
+  assert.ok(Math.abs(controller.params.bodyAngleY) < 1.0, "Body yaw stays within calm range");
+  assert.ok(Math.abs(controller.params.gazeX) < 0.2, "Gaze drift stays subtle");
+});
+
+test("11. Model-load failure is explicitly surfaced rather than silently hidden", () => {
   const controller = new Live2DController();
   const loadErr = new Error("Failed to fetch texture_00.png 404");
 
@@ -210,7 +221,7 @@ test("10. Model-load failure is explicitly surfaced rather than silently hidden"
   assert.equal(controller.loadError.message, "Failed to fetch texture_00.png 404");
 });
 
-test("11. Continuous life layer runs across state transitions", () => {
+test("12. Continuous life layer runs across state transitions", () => {
   const life = new Live2DLifeLayer();
 
   const frame1 = life.update(0.016, { breathRate: 1.0 });

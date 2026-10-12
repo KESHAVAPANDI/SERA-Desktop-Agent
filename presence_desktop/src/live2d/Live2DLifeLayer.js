@@ -165,7 +165,9 @@ export class Live2DLifeLayer {
     // Organic multi-harmonic drifting (keeps head posture alive)
     const t = this.time;
     this.driftAngleX = Math.sin(t * 0.5) * 0.7 + Math.cos(t * 0.9) * 0.35;
-    this.driftAngleY = Math.cos(t * 0.4) * 0.5 + Math.sin(t * 0.75) * 0.25;
+    // Horizontal yaw is additionally damped by Live2DController; keep this
+    // source small so idle life never pulls the character off-center.
+    this.driftAngleY = Math.cos(t * 0.4) * 0.18 + Math.sin(t * 0.75) * 0.09;
     this.driftAngleZ = Math.sin(t * 0.3) * 0.45;
   }
 

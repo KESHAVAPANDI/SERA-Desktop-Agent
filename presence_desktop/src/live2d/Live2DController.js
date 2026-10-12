@@ -38,6 +38,7 @@ export class Live2DController {
 
     // Audio / Speech state
     this.audioLevel = 0.0;
+    this.hasAudioTelemetry = false;
     this.lastAudioTime = 0;
     this.speechTime = 0;
 
@@ -150,7 +151,13 @@ export class Live2DController {
     // Derive speech energy from mid-range voice frequencies and raw amplitude
     const raw = Number(bands.rawAmp) || 0;
     const mid = Number(bands.mid) || 0;
-    this.audioLevel = Math.max(0, Math.min(1, raw * 0.4 + mid * 0.6));
+    const incoming = Math.max(0, Math.min(1, raw * 0.4 + mid * 0.6));
+    // TTS_AUDIO_LEVELS is an authoritative playback envelope. Smooth the
+    // envelope here, but never synthesize mouth motion when it is silent or
+    // absent. This keeps queued/generated text from looking like speech.
+    const smoothing = incoming > this.audioLevel ? 0.62 : 0.2;
+    this.audioLevel += (incoming - this.audioLevel) * smoothing;
+    this.hasAudioTelemetry = true;
     this.lastAudioTime = Date.now();
   }
 
@@ -178,7 +185,11 @@ export class Live2DController {
 
     // Head Angles: State Target + Life Layer Organic Drift
     const targetAngleX = this.targetProfile.angleX + life.driftAngleX;
-    const targetAngleY = this.targetProfile.angleY + life.driftAngleY;
+    // ParamAngleY/ParamBodyAngleY and horizontal gaze are the dominant
+    // left-right motion sources. Keep their expressive intent, but damp the
+    // controller-generated amplitude to a calm ~35% of the previous range.
+    const horizontalMotion = 0.35;
+    const targetAngleY = this.targetProfile.angleY * horizontalMotion + life.driftAngleY * horizontalMotion;
     const targetAngleZ = this.targetProfile.angleZ + life.driftAngleZ;
     this.params.angleX += (targetAngleX - this.params.angleX) * dampFactor;
     this.params.angleY += (targetAngleY - this.params.angleY) * dampFactor;
@@ -186,14 +197,14 @@ export class Live2DController {
 
     // Body Angles: State Target + Torso Lean
     const targetBodyX = this.targetProfile.bodyAngleX;
-    const targetBodyY = this.targetProfile.bodyAngleY;
+    const targetBodyY = this.targetProfile.bodyAngleY * horizontalMotion;
     const targetBodyZ = this.targetProfile.bodyAngleZ;
     this.params.bodyAngleX += (targetBodyX - this.params.bodyAngleX) * dampFactor;
     this.params.bodyAngleY += (targetBodyY - this.params.bodyAngleY) * dampFactor;
     this.params.bodyAngleZ += (targetBodyZ - this.params.bodyAngleZ) * dampFactor;
 
     // Eye Gaze: State Target + Micro-Saccades
-    const targetGazeX = this.targetProfile.gazeX + life.saccadeX;
+    const targetGazeX = (this.targetProfile.gazeX + life.saccadeX) * horizontalMotion;
     const targetGazeY = this.targetProfile.gazeY + life.saccadeY;
     const gazeFactor = 1.0 - Math.exp(-dt * (this.targetProfile.gazeSpeed || 4.0));
     this.params.gazeX += (targetGazeX - this.params.gazeX) * gazeFactor;
@@ -211,16 +222,10 @@ export class Live2DController {
     let targetMouthOpen = 0.0;
     if (this.targetProfile.isSpeaking) {
       this.speechTime += dt;
-      const recentAudio = (Date.now() - this.lastAudioTime) < 300;
-      if (recentAudio && this.audioLevel > 0.02) {
-        // Real-time TTS envelope modulation
-        targetMouthOpen = Math.min(1.0, this.audioLevel * 1.6);
-      } else {
-        // Natural speech cadence fallback when audio envelope is silent
-        const wave = Math.sin(this.speechTime * this.config.speechFallbackFrequency);
-        const secondary = Math.sin(this.speechTime * (this.config.speechFallbackFrequency * 0.5));
-        targetMouthOpen = Math.max(0.0, (wave * 0.4 + secondary * 0.25 + 0.35) * this.targetProfile.mouthOpenGain);
-      }
+      const telemetryFresh = this.hasAudioTelemetry && (Date.now() - this.lastAudioTime) < 300;
+      // Amplitude-only lip sync: real playback data opens the mouth; genuine
+      // silence, stale telemetry, buffering, and errors settle it closed.
+      targetMouthOpen = telemetryFresh ? Math.min(1.0, this.audioLevel * 1.6) : 0.0;
     } else {
       this.speechTime = 0;
       targetMouthOpen = 0.0;
