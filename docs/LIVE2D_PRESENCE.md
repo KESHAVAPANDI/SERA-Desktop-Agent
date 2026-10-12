@@ -9,7 +9,7 @@ The SERA Desktop Presence character has been transitioned from an ephemeral Thre
 2. **Authoritative State Fidelity**: Character expressions, postures, and motions are driven directly by SERA Core's authoritative runtime states (`IDLE`, `LISTENING`, `THINKING`, `EXECUTING`, etc.), maintaining strict architectural separation between cognitive backend reasoning and presentation rendering.
 3. **Continuous Biological Life Layer**: Independent life micro-dynamics (sinusoidal breathing, stochastic human-like blinking with double-blinks, gaze micro-saccades, and organic head drift) operate continuously across all state transitions.
 4. **Data-Driven Semantic Color & Aura**: State transitions smoothly modulate the character's ambient tint, eye highlight effects, background WebGL aura, and surrounding desktop glass panel CSS tokens.
-5. **Real-Time Speech Envelope & Fallback**: Mouth opening is dynamically driven by SERA TTS speech frequency envelopes (`ParamA`) with a multi-harmonic sinusoidal fallback when audio packets are absent.
+5. **Real-Time Speech Envelope**: Mouth opening is dynamically driven by fresh SERA TTS speech frequency envelopes (`ParamA`); silent or stale packets close the mouth rather than fabricating speech.
 6. **Robust Visual Fallback**: If WebGL or Live2D assets fail to load, explicit visual diagnostic feedback is rendered immediately rather than failing silently.
 
 ---
@@ -159,15 +159,13 @@ The `Live2DColorSystem` ensures semantic feedback while preserving the character
 
 ---
 
-## 7. Speech Envelope & Cadence Fallback
+## 7. Speech Envelope & Telemetry Freshness
 
 In `SPEAKING` state:
 1. **TTS Ingestion**: `setAudioData(bands)` extracts energy from voice mid-range frequencies (`bands.mid`) and amplitude (`bands.rawAmp`):
    $$\text{targetMouthOpen} = \min(1.0, (\text{rawAmp} \cdot 0.4 + \text{mid} \cdot 0.6) \cdot 1.6)$$
    Applied directly to Cubism parameter `ParamA` / `ParamMouthOpenY`.
-2. **Audio-less Fallback**: If audio packets are absent (silent or text-only streaming), an organic 14 Hz multi-frequency sinusoidal oscillation is applied:
-   $$\text{targetMouthOpen} = \max(0.0, (\sin(14t) \cdot 0.4 + \sin(7t) \cdot 0.25 + 0.35) \cdot \text{mouthOpenGain})$$
-   This prevents mouth freezing during speech synthesis delays.
+2. **Telemetry absence**: If audio packets are absent or stale (silent, buffering, interrupted, or text-only streaming), the mouth target is held at zero. The current controller intentionally does not fabricate a timer-driven speech cadence.
 
 ---
 

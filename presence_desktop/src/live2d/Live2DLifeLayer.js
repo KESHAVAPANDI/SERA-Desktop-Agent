@@ -12,7 +12,21 @@
  */
 
 export class Live2DLifeLayer {
-  constructor() {
+  constructor(options = {}) {
+    this.random = typeof options === "function" ? options : (options.random || Math.random);
+    this.config = {
+      blinkIntervalMin: 2.5,
+      blinkIntervalMax: 4.5,
+      saccadeIntervalMin: 1.8,
+      saccadeIntervalMax: 4.2,
+      doubleBlinkProbability: 0.18,
+      variationIntervalMin: 6,
+      variationIntervalMax: 10,
+      variationMin: 0.88,
+      variationMax: 1.12,
+      ...(typeof options === "object" ? (options.config || {}) : {}),
+    };
+    this.disposed = false;
     this.time = 0;
 
     // Blinking state machine
@@ -34,20 +48,50 @@ export class Live2DLifeLayer {
     this.driftAngleX = 0;
     this.driftAngleY = 0;
     this.driftAngleZ = 0;
+
+    // Bounded idle variation changes slowly rather than introducing noisy
+    // per-frame randomness. It is deliberately kept within +/-12%.
+    this.variationTimer = 0;
+    this.nextVariationInterval = this.randomRange(this.config.variationIntervalMin, this.config.variationIntervalMax);
+    this.variation = 1;
+    this.targetVariation = 1;
+
+    // Reused output avoids a short-lived object on every render frame.
+    this.output = {
+      breathValue: 0,
+      torsoOffsetY: 0,
+      blinkRatio: 1,
+      saccadeX: 0,
+      saccadeY: 0,
+      driftAngleX: 0,
+      driftAngleY: 0,
+      driftAngleZ: 0,
+    };
+  }
+
+  randomRange(min, max) {
+    const sample = this.randomValue();
+    const normalized = Number.isFinite(sample) ? Math.max(0, Math.min(1, sample)) : 0.5;
+    return min + normalized * (max - min);
+  }
+
+  randomValue() {
+    const sample = Number(this.random());
+    return Number.isFinite(sample) ? Math.max(0, Math.min(1, sample)) : 0.5;
   }
 
   randomBlinkInterval() {
-    // Human average blink interval: 2.5 to 5.5 seconds
-    return 2.5 + Math.random() * 3.0;
+    return this.randomRange(this.config.blinkIntervalMin, this.config.blinkIntervalMax);
   }
 
   randomSaccadeInterval() {
-    // Micro-fixation shift interval: 1.8 to 4.2 seconds
-    return 1.8 + Math.random() * 2.4;
+    return this.randomRange(this.config.saccadeIntervalMin, this.config.saccadeIntervalMax);
   }
 
   update(delta, profile = {}) {
-    this.time += delta;
+    if (this.disposed) return this.output;
+    const dt = Math.min(0.1, Math.max(0, Number(delta) || 0));
+    this.time += dt;
 
     const breathRate = profile.breathRate || 1.0;
     const breathDepth = profile.breathDepth || 0.035;
@@ -61,24 +105,23 @@ export class Live2DLifeLayer {
     const torsoOffsetY = rawSine * breathDepth * 20.0;
 
     // 2. Realistic Blinking State Machine
-    this.updateBlinking(delta, blinkRateMultiplier);
+    this.updateBlinking(dt, blinkRateMultiplier);
 
     // 3. Eye Micro-Saccades
-    this.updateSaccades(delta);
+    this.updateSaccades(dt);
 
     // 4. Secondary Micro-Head Drift (Multi-frequency organic drift)
-    this.updateMicroDrift();
+    this.updateMicroDrift(dt);
 
-    return {
-      breathValue,
-      torsoOffsetY,
-      blinkRatio: this.blinkRatio,
-      saccadeX: this.saccadeX,
-      saccadeY: this.saccadeY,
-      driftAngleX: this.driftAngleX,
-      driftAngleY: this.driftAngleY,
-      driftAngleZ: this.driftAngleZ,
-    };
+    this.output.breathValue = breathValue;
+    this.output.torsoOffsetY = torsoOffsetY;
+    this.output.blinkRatio = this.blinkRatio;
+    this.output.saccadeX = this.saccadeX;
+    this.output.saccadeY = this.saccadeY;
+    this.output.driftAngleX = this.driftAngleX;
+    this.output.driftAngleY = this.driftAngleY;
+    this.output.driftAngleZ = this.driftAngleZ;
+    return this.output;
   }
 
   updateBlinking(delta, blinkRateMultiplier) {
@@ -99,7 +142,7 @@ export class Live2DLifeLayer {
         if (this.blinkTimer >= adjustedInterval) {
           this.blinkPhase = "CLOSING";
           this.blinkTimer = 0;
-          this.isDoubleBlink = Math.random() < 0.18; // 18% chance of double-blink
+          this.isDoubleBlink = this.randomValue() < this.config.doubleBlinkProbability;
         }
         this.blinkRatio = 1.0;
         break;
@@ -151,8 +194,8 @@ export class Live2DLifeLayer {
       this.saccadeTimer = 0;
       this.nextSaccadeInterval = this.randomSaccadeInterval();
       // Generate small random micro-saccade offset
-      this.targetSaccadeX = (Math.random() - 0.5) * 0.08;
-      this.targetSaccadeY = (Math.random() - 0.5) * 0.06;
+      this.targetSaccadeX = (this.randomValue() - 0.5) * 0.08;
+      this.targetSaccadeY = (this.randomValue() - 0.5) * 0.06;
     }
 
     // Smoothly ease toward saccade target
@@ -161,14 +204,24 @@ export class Live2DLifeLayer {
     this.saccadeY += (this.targetSaccadeY - this.saccadeY) * ease;
   }
 
-  updateMicroDrift() {
+  updateMicroDrift(delta = 0) {
+    this.variationTimer += delta;
+    if (this.variationTimer >= this.nextVariationInterval) {
+      this.variationTimer = 0;
+      this.nextVariationInterval = this.randomRange(this.config.variationIntervalMin, this.config.variationIntervalMax);
+      this.targetVariation = this.config.variationMin
+        + this.randomValue() * (this.config.variationMax - this.config.variationMin);
+    }
+    const variationEase = 1 - Math.exp(-delta * 0.8);
+    this.variation += (this.targetVariation - this.variation) * variationEase;
+
     // Organic multi-harmonic drifting (keeps head posture alive)
     const t = this.time;
-    this.driftAngleX = Math.sin(t * 0.5) * 0.7 + Math.cos(t * 0.9) * 0.35;
+    this.driftAngleX = (Math.sin(t * 0.5) * 0.7 + Math.cos(t * 0.9) * 0.35) * this.variation;
     // Horizontal yaw is additionally damped by Live2DController; keep this
     // source small so idle life never pulls the character off-center.
-    this.driftAngleY = Math.cos(t * 0.4) * 0.18 + Math.sin(t * 0.75) * 0.09;
-    this.driftAngleZ = Math.sin(t * 0.3) * 0.45;
+    this.driftAngleY = (Math.cos(t * 0.4) * 0.18 + Math.sin(t * 0.75) * 0.09) * this.variation;
+    this.driftAngleZ = Math.sin(t * 0.3) * 0.45 * this.variation;
   }
 
   reset() {
@@ -179,5 +232,17 @@ export class Live2DLifeLayer {
     this.saccadeTimer = 0;
     this.saccadeX = 0;
     this.saccadeY = 0;
+    this.nextBlinkInterval = this.randomBlinkInterval();
+    this.nextSaccadeInterval = this.randomSaccadeInterval();
+    this.variationTimer = 0;
+    this.nextVariationInterval = this.randomRange(this.config.variationIntervalMin, this.config.variationIntervalMax);
+    this.variation = 1;
+    this.targetVariation = 1;
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.reset();
   }
 }

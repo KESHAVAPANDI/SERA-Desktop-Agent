@@ -136,6 +136,7 @@ export class Live2DRenderer {
 
   triggerEvent(eventType, payload = {}) {
     if (this.disposed) return;
+    this.controller.triggerEvent(eventType, payload);
     if (eventType === "ACTIVATION_STARTED") {
       this.setState("LISTENING");
     }

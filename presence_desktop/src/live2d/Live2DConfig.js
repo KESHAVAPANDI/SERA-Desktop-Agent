@@ -35,9 +35,37 @@ export const LIVE2D_CONFIG = Object.freeze({
 
   // Audio / Speech
   lipSyncParam: "ParamA",
-  speechFallbackFrequency: 14, // Hz for clean audio-less speech oscillation
+  speechFallbackFrequency: 14, // Retained for config compatibility; no synthetic fallback is used.
   speechMinOpen: 0.08,
   speechMaxOpen: 0.85,
+
+  // Contextual behavior arbitration and continuity tuning.
+  behavior: Object.freeze({
+    horizontalMotion: 0.35,
+    motionPriority: 2,
+    speechFreshnessMs: 300,
+    taskVariantScale: 1.0,
+    reactionDurations: Object.freeze({
+      TOOL_COMPLETED: 0.75,
+      TOOL_FAILED: 0.9,
+      SECURITY_CONFIRMATION_REQUIRED: 1.2,
+      APPROVAL_RESOLVED: 0.65,
+      TASK_COMPLETED: 1.1,
+      TASK_FAILED: 1.1,
+      TASK_CANCELLED: 0.8,
+    }),
+    life: Object.freeze({
+      blinkIntervalMin: 2.5,
+      blinkIntervalMax: 4.5,
+      saccadeIntervalMin: 1.8,
+      saccadeIntervalMax: 4.2,
+      doubleBlinkProbability: 0.18,
+      variationIntervalMin: 6,
+      variationIntervalMax: 10,
+      variationMin: 0.88,
+      variationMax: 1.12,
+    }),
+  }),
 
   // WebGL Renderer settings
   webgl: {
